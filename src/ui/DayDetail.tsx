@@ -187,9 +187,6 @@ export function DayDetail() {
       <Text style={{ color: toneColor(c, k.tone), fontSize: 15, fontWeight: k.tone === 'mute' ? '400' : '700', marginTop: 6 }}>
         {k.text}
       </Text>
-      <Mute style={{ fontSize: 12, marginTop: 2 }}>
-        Out = your watch or Health app total for the whole day (resting burn + activity).
-      </Mute>
 
       <Field
         value={f.note}

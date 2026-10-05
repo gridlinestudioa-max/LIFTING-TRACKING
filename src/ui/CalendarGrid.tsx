@@ -68,7 +68,6 @@ export function CalendarGrid({ state, today, selected, year, month, onSelect, on
           )}
         </View>
       ))}
-      <Legend c={c} />
     </View>
   );
 }
@@ -155,27 +154,6 @@ const DayCell = memo(function DayCell({
   );
 });
 
-function Legend({ c }: { c: Palette }) {
-  const items: { label: string; color: string; round?: boolean }[] = [
-    ...(['push', 'pull', 'legs', 'tempo', 'easy', 'long'] as const).map((k) => ({ label: TYPES[k].label, color: c.types[k] })),
-    { label: 'Completed ✓', color: c.ok },
-    { label: 'Missed ✕', color: c.bad },
-    { label: 'Partial ◐', color: c.warn },
-    { label: 'Cal deficit', color: c.ok, round: true },
-    { label: 'Cal surplus', color: c.bad, round: true },
-  ];
-  return (
-    <View style={s.legend}>
-      {items.map((it) => (
-        <View key={it.label} style={{ flexDirection: 'row', alignItems: 'center' }}>
-          <View style={{ width: 10, height: 10, borderRadius: it.round ? 5 : 3, backgroundColor: it.color, marginRight: 4 }} />
-          <Text style={{ fontSize: 11, color: c.mute }}>{it.label}</Text>
-        </View>
-      ))}
-    </View>
-  );
-}
-
 const s = StyleSheet.create({
   mhead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 },
   nav: { borderWidth: 1, borderRadius: 8, width: 44, height: 40, alignItems: 'center', justifyContent: 'center' },
@@ -191,5 +169,4 @@ const s = StyleSheet.create({
   },
   meta: { fontSize: 10, textAlign: 'center' },
   kdot: { position: 'absolute', bottom: 4, right: 4, width: 7, height: 7, borderRadius: 3.5 },
-  legend: { flexDirection: 'row', flexWrap: 'wrap', columnGap: 12, rowGap: 8, marginTop: 10 },
 });
