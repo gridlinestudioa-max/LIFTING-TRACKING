@@ -21,6 +21,18 @@ export interface PlanDay {
   type: DayType;
   miles: number;
   race: boolean;
+  /** A rest day turned into this workout. */
+  swapped?: boolean;
+  /** The skipped day this workout makes up for. */
+  makeupFor?: string;
+}
+
+/** Planned miles for a day type in week index w. */
+export function milesFor(type: DayType, w: number): number {
+  if (type === 'easy') return easyMiles(w);
+  if (type === 'tempo') return tempoMiles(w);
+  if (type === 'long') return LONG[w];
+  return 0;
 }
 
 export function planFor(start: string, s: string): PlanDay | null {
@@ -28,11 +40,54 @@ export function planFor(start: string, s: string): PlanDay | null {
   if (diff < 0 || diff >= PLAN_DAYS) return null;
   const w = Math.floor(diff / 7);
   const type = DOW[diff % 7];
-  let miles = 0;
-  if (type === 'easy') miles = easyMiles(w);
-  if (type === 'tempo') miles = tempoMiles(w);
-  if (type === 'long') miles = LONG[w];
-  return { w, type, miles, race: w === LONG.length - 1 && type === 'long' };
+  return { w, type, miles: milesFor(type, w), race: w === LONG.length - 1 && type === 'long' };
+}
+
+/**
+ * A rest day's plan once a workout is swapped in. Making up a skipped day uses that
+ * day's workout (its week's weights and miles); otherwise the chosen type in this week.
+ */
+export function planWithSwap(state: TrackerState, base: PlanDay, swap?: DayType | '', makeupFor?: string): PlanDay {
+  if (base.type !== 'rest') return base;
+  if (makeupFor) {
+    const op = planFor(state.start, makeupFor);
+    if (op && op.type !== 'rest') return { ...op, race: false, swapped: true, makeupFor };
+  }
+  if (swap && swap !== 'rest') return { w: base.w, type: swap, miles: milesFor(swap, base.w), race: false, swapped: true };
+  return base;
+}
+
+/** The plan for a day including a submitted rest-day swap. */
+export function effectivePlan(state: TrackerState, s: string): PlanDay | null {
+  const p = planFor(state.start, s);
+  if (!p) return null;
+  const l = state.logs[s];
+  return l && l.submitted ? planWithSwap(state, p, l.swap, l.makeupFor) : p;
+}
+
+/** The rest day (submitted) that made up for skipped day s, if any. */
+export function madeUpBy(state: TrackerState, s: string): string | null {
+  for (const k of Object.keys(state.logs)) {
+    const l = state.logs[k];
+    if (l.submitted && l.makeupFor === s && planFor(state.start, k)?.type === 'rest') return k;
+  }
+  return null;
+}
+
+/** Skipped workouts within a week either side of rest day s that could be moved to it. */
+export function makeupCandidates(state: TrackerState, s: string): { s: string; plan: PlanDay }[] {
+  const out: { s: string; plan: PlanDay }[] = [];
+  for (let d = -7; d <= 7; d++) {
+    if (d === 0) continue;
+    const k = addDays(s, d);
+    const p = planFor(state.start, k);
+    const l = state.logs[k];
+    if (!p || p.type === 'rest' || !l || !l.submitted || !l.skipped) continue;
+    const by = madeUpBy(state, k);
+    if (by && by !== s) continue;
+    out.push({ s: k, plan: p });
+  }
+  return out;
 }
 
 export function raceDay(start: string): string {
@@ -58,7 +113,7 @@ export function liftsDone(group: LiftGroup, log: DayLog | undefined): number {
 
 /** 0 = nothing, 1 = partial, 2 = complete. Only submitted logs count. */
 export function level(state: TrackerState, s: string): 0 | 1 | 2 {
-  const p = planFor(state.start, s);
+  const p = effectivePlan(state, s);
   const l = state.logs[s];
   if (!p || !l || !l.submitted || l.skipped) return 0;
   const kind = TYPES[p.type].kind;
@@ -74,15 +129,16 @@ export function level(state: TrackerState, s: string): 0 | 1 | 2 {
   return 0;
 }
 
-export type DayStatus = 'done' | 'partial' | 'missed' | 'skipped' | 'open' | 'rest';
+/** 'moved' = skipped, and made up on a rest day. */
+export type DayStatus = 'done' | 'partial' | 'missed' | 'skipped' | 'moved' | 'open' | 'rest';
 
 /** Day status, or null if outside the plan. Calories never affect status. */
 export function status(state: TrackerState, s: string, today: string): DayStatus | null {
-  const p = planFor(state.start, s);
+  const p = effectivePlan(state, s);
   if (!p) return null;
   if (TYPES[p.type].kind === 'rest') return 'rest';
   const l = state.logs[s];
-  if (l && l.submitted && l.skipped) return 'skipped';
+  if (l && l.submitted && l.skipped) return madeUpBy(state, s) ? 'moved' : 'skipped';
   const lv = level(state, s);
   if (lv === 2) return 'done';
   if (s < today) return lv === 1 ? 'partial' : 'missed';

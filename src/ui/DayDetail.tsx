@@ -8,7 +8,10 @@ import {
   TYPES,
   fmt,
   formFromLog,
+  formPlan,
   kcalInfo,
+  madeUpBy,
+  makeupCandidates,
   normalizeTimeInput,
   num,
   paceText,
@@ -18,7 +21,9 @@ import {
   status,
   targetFor,
   type DayForm,
+  type DayType,
   type LiftGroup,
+  type PlanDay,
 } from '@/logic';
 
 import { Field, Label, Mute } from './components';
@@ -32,11 +37,13 @@ export function DayDetail() {
   const [err, setErr] = useState<{ s: string; msg: string } | null>(null);
   const error = err && err.s === s ? err.msg : null;
   const setError = (msg: string | null) => setErr(msg ? { s, msg } : null);
+  // Rest-day "do a workout instead" chooser, opened per day.
+  const [openFor, setOpenFor] = useState<string | null>(null);
 
-  const p = planFor(state.start, s);
+  const base = planFor(state.start, s);
   const dname = shortDayLabel(s);
 
-  if (!p) {
+  if (!base) {
     return (
       <View>
         <Text style={[st.title, { color: c.ink }]}>{dname}</Text>
@@ -45,15 +52,20 @@ export function DayDetail() {
     );
   }
 
-  const T = TYPES[p.type];
   const sub = state.logs[s];
   const draft = drafts[s];
-  const f: DayForm = draft ?? formFromLog(state, p, sub);
+  const f: DayForm = draft ?? formFromLog(state, base, sub);
+  // The plan being logged: a rest day may have a workout swapped in.
+  const p = formPlan(state, base, f);
+  const T = TYPES[p.type];
+  const isRest = base.type === 'rest';
   const edit = (patch: Partial<DayForm>) => {
     setError(null);
     setDraft(s, { ...f, ...patch });
   };
   const dayStatus = status(state, s, today);
+  const movedTo = dayStatus === 'moved' ? madeUpBy(state, s) : null;
+  const showLog = isRest ? !!p.swapped : !f.skipped;
 
   let msg = '', msgColor = c.mute, msgBold = false;
   if (error) { msg = error; msgColor = c.bad; msgBold = true; }
@@ -67,26 +79,39 @@ export function DayDetail() {
     <View>
       <View style={st.dtitle}>
         <Text style={[st.title, { color: c.ink, flexShrink: 1 }]}>
-          {dname} · Week {p.w + 1}
+          {dname} · Week {base.w + 1}
         </Text>
         <Text style={[st.chip, { backgroundColor: c.types[p.type] }]}>{p.race ? 'Race day' : T.label}</Text>
       </View>
-      <StatusBadge st={dayStatus} c={c} />
+      <StatusBadge st={dayStatus} movedTo={movedTo} c={c} />
 
-      {T.kind === 'lift' ? (
+      <PlanBox plan={base} head="Scheduled" c={c} />
+
+      {isRest ? (
+        <RestSwap
+          f={f}
+          open={openFor === s || !!f.swap || !!f.makeupFor}
+          onOpen={() => setOpenFor(s)}
+          candidates={makeupCandidates(state, s)}
+          edit={(patch) => {
+            if (!patch.swap && !patch.makeupFor) setOpenFor(null);
+            edit(patch);
+          }}
+          c={c}
+        />
+      ) : (
+        <SkipControl skipped={f.skipped} onToggle={() => edit({ skipped: !f.skipped })} c={c} />
+      )}
+
+      {p.swapped ? (
+        <PlanBox plan={p} head={p.makeupFor ? `Making up ${shortDayLabel(p.makeupFor)}` : 'Doing instead'} c={c} />
+      ) : null}
+
+      {showLog && T.kind === 'lift' ? (
         <>
-          <View style={[st.plan, { backgroundColor: c.bg, borderColor: c.line }]}>
-            <Text style={[st.planHead, { color: c.ink }]}>Scheduled: {T.label} day</Text>
-            {LIFTS[p.type as LiftGroup].map((e) => (
-              <Text key={e.id} style={{ color: c.ink, fontSize: 13 }}>
-                {e.name} {e.sets} @ {fmt(targetFor(state.base, e.id, p.w))} {e.unit}
-              </Text>
-            ))}
-          </View>
-          <SkipControl skipped={f.skipped} onToggle={() => edit({ skipped: !f.skipped })} c={c} />
-          {!f.skipped && <Label>Log what you lifted</Label>}
-          {!f.skipped && LIFTS[p.type as LiftGroup].map((e, i) => {
-            const rec = f.lifts[e.id] ?? { w: '', done: false };
+          <Label>Log what you lifted</Label>
+          {LIFTS[p.type as LiftGroup].map((e, i) => {
+            const rec = f.lifts[e.id] ?? { w: String(targetFor(state.base, e.id, p.w)), done: false };
             return (
               <View key={e.id} style={[st.ex, i > 0 && { borderTopWidth: 1, borderTopColor: c.line }]}>
                 <Checkbox
@@ -115,20 +140,12 @@ export function DayDetail() {
             );
           })}
         </>
-      ) : T.kind === 'run' ? (
+      ) : null}
+
+      {showLog && T.kind === 'run' ? (
         <>
-          <View style={[st.plan, { backgroundColor: c.bg, borderColor: c.line }]}>
-            <Text style={[st.planHead, { color: c.ink }]}>
-              Scheduled: {p.race ? 'Race, ' : `${T.label} run, `}
-              {fmt(p.miles)} mi
-            </Text>
-            <Text style={{ color: c.ink, fontSize: 13 }}>
-              {p.race ? RUN_TIPS.race : RUN_TIPS[p.type as 'long' | 'tempo' | 'easy']}
-            </Text>
-          </View>
-          <SkipControl skipped={f.skipped} onToggle={() => edit({ skipped: !f.skipped })} c={c} />
-          {!f.skipped && <Label>Log your run</Label>}
-          {!f.skipped && <View style={st.runrow}>
+          <Label>Log your run</Label>
+          <View style={st.runrow}>
             <LabeledField label="Miles" c={c}>
               <Field
                 value={f.miles}
@@ -154,14 +171,9 @@ export function DayDetail() {
               />
             </LabeledField>
             <Text style={[st.pace, { color: c.ink }]}>{paceText(parseFloat(f.miles), parseTime(f.time))}</Text>
-          </View>}
+          </View>
         </>
-      ) : (
-        <View style={[st.plan, { backgroundColor: c.bg, borderColor: c.line }]}>
-          <Text style={[st.planHead, { color: c.ink }]}>Scheduled: Rest day</Text>
-          <Text style={{ color: c.ink, fontSize: 13 }}>{REST_TEXT}</Text>
-        </View>
-      )}
+      ) : null}
 
       <Label>Calories</Label>
       <View style={st.runrow}>
@@ -211,12 +223,135 @@ export function DayDetail() {
   );
 }
 
-function StatusBadge({ st: status, c }: { st: string | null; c: Palette }) {
+/** The workout for a plan: lift list with target weights, run miles and tip, or rest. */
+function PlanBox({ plan, head, c }: { plan: PlanDay; head: string; c: Palette }) {
+  const { state } = useTracker();
+  const T = TYPES[plan.type];
+  let title: string;
+  let lines: string[];
+  if (T.kind === 'lift') {
+    title = `${head}: ${T.label} day`;
+    lines = LIFTS[plan.type as LiftGroup].map(
+      (e) => `${e.name} ${e.sets} @ ${fmt(targetFor(state.base, e.id, plan.w))} ${e.unit}`,
+    );
+  } else if (T.kind === 'run') {
+    title = `${head}: ${plan.race ? 'Race, ' : `${T.label} run, `}${fmt(plan.miles)} mi`;
+    lines = [plan.race ? RUN_TIPS.race : RUN_TIPS[plan.type as 'long' | 'tempo' | 'easy']];
+  } else {
+    title = `${head}: Rest day`;
+    lines = [REST_TEXT];
+  }
+  return (
+    <View style={[st.plan, { backgroundColor: c.bg, borderColor: c.line }]}>
+      <Text style={[st.planHead, { color: c.ink }]}>{title}</Text>
+      {lines.map((t) => (
+        <Text key={t} style={{ color: c.ink, fontSize: 13 }}>
+          {t}
+        </Text>
+      ))}
+    </View>
+  );
+}
+
+const SWAP_TYPES: DayType[] = ['push', 'pull', 'legs', 'tempo', 'easy', 'long'];
+
+/** Rest day: make up a skipped workout here, or do any workout instead of resting. */
+function RestSwap({
+  f,
+  open,
+  onOpen,
+  candidates,
+  edit,
+  c,
+}: {
+  f: DayForm;
+  open: boolean;
+  onOpen: () => void;
+  candidates: { s: string; plan: PlanDay }[];
+  edit: (patch: Partial<DayForm>) => void;
+  c: Palette;
+}) {
+  if (!open) {
+    return (
+      <View style={st.skiprow}>
+        <OptionButton label="Do a workout instead" selected={false} onPress={onOpen} c={c} />
+      </View>
+    );
+  }
+  const resting = !f.swap && !f.makeupFor;
+  return (
+    <View style={{ gap: 6, marginBottom: 2 }}>
+      {candidates.length ? (
+        <>
+          <Text style={[st.optHead, { color: c.mute }]}>Move a skipped workout here</Text>
+          <View style={st.optrow}>
+            {candidates.map((m) => (
+              <OptionButton
+                key={m.s}
+                label={`${shortDayLabel(m.s)} · ${TYPES[m.plan.type].label}${m.plan.miles ? ` ${fmt(m.plan.miles)} mi` : ''}`}
+                selected={f.makeupFor === m.s}
+                color={c.types[m.plan.type]}
+                onPress={() => edit({ makeupFor: m.s, swap: m.plan.type })}
+                c={c}
+              />
+            ))}
+          </View>
+        </>
+      ) : null}
+      <Text style={[st.optHead, { color: c.mute }]}>{candidates.length ? 'Or do' : 'Do'} a workout instead</Text>
+      <View style={st.optrow}>
+        {SWAP_TYPES.map((t) => (
+          <OptionButton
+            key={t}
+            label={TYPES[t].label}
+            selected={!f.makeupFor && f.swap === t}
+            color={c.types[t]}
+            onPress={() => edit({ swap: t, makeupFor: '' })}
+            c={c}
+          />
+        ))}
+        <OptionButton label="Rest" selected={resting} onPress={() => edit({ swap: '', makeupFor: '' })} c={c} />
+      </View>
+    </View>
+  );
+}
+
+function OptionButton({
+  label,
+  selected,
+  onPress,
+  color,
+  c,
+}: {
+  label: string;
+  selected: boolean;
+  onPress: () => void;
+  color?: string;
+  c: Palette;
+}) {
+  const fill = color ?? c.mute;
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityState={{ selected }}
+      hitSlop={4}
+      style={({ pressed }) => [
+        st.opt,
+        { borderColor: selected ? fill : c.line, backgroundColor: selected ? fill : c.bg, opacity: pressed ? 0.7 : 1 },
+      ]}>
+      <Text style={{ color: selected ? '#fff' : c.ink, fontWeight: '700', fontSize: 14 }}>{label}</Text>
+    </Pressable>
+  );
+}
+
+function StatusBadge({ st: status, movedTo, c }: { st: string | null; movedTo: string | null; c: Palette }) {
   const m =
     status === 'done' ? { t: '✓ Completed', fg: c.ok, bg: c.okbg }
     : status === 'missed' ? { t: '✕ Missed', fg: c.bad, bg: c.badbg }
     : status === 'partial' ? { t: '◐ Partial', fg: c.warn, bg: c.warnbg }
     : status === 'skipped' ? { t: '– Skipped', fg: c.mute, bg: c.line }
+    : status === 'moved' ? { t: `↪ Moved to ${movedTo ? shortDayLabel(movedTo) : 'a rest day'}`, fg: c.mute, bg: c.line }
     : null;
   if (!m) return null;
   return (
@@ -284,6 +419,9 @@ const st = StyleSheet.create({
   pace: { fontSize: 16, fontWeight: '700', paddingBottom: 9, minWidth: 80 },
   submitrow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 12 },
   skiprow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 2 },
+  optHead: { fontSize: 12, fontWeight: '700', marginTop: 2 },
+  optrow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  opt: { borderWidth: 1, borderRadius: 10, paddingVertical: 9, paddingHorizontal: 14, minHeight: 40, justifyContent: 'center' },
   skipbtn: { borderWidth: 1, borderRadius: 10, paddingVertical: 9, paddingHorizontal: 18, minHeight: 40, justifyContent: 'center' },
   submit: { borderRadius: 10, paddingVertical: 12, paddingHorizontal: 24 },
 });

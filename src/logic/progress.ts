@@ -1,7 +1,7 @@
 import { LONG, PLAN_DAYS, PLAN_WEEKS, TYPES } from './config';
 import { MONTHS, addDays, toD } from './dates';
 import { fmt } from './format';
-import { level, planFor, status } from './plan';
+import { effectivePlan, level, planFor, status } from './plan';
 import type { TrackerState } from './types';
 
 export interface ProgressStats {
@@ -21,9 +21,10 @@ export function progressStats(state: TrackerState, today: string): ProgressStats
   let planned = 0, done = 0, missedOrPartial = 0, skipped = 0;
   for (let i = 0; i < PLAN_DAYS; i++) {
     const s = addDays(state.start, i);
-    const p = planFor(state.start, s);
+    const p = effectivePlan(state, s);
     if (p && p.type !== 'rest' && s <= today) {
       const st = status(state, s, today);
+      if (st === 'moved') continue; // counted on the rest day it moved to
       if (st === 'done') done++;
       if (st === 'missed' || st === 'partial') missedOrPartial++;
       if (st === 'skipped') skipped++;
@@ -35,7 +36,7 @@ export function progressStats(state: TrackerState, today: string): ProgressStats
   let miles = 0, longest = 0, paceMiles = 0, paceSecs = 0, liftDone = 0;
   Object.keys(state.logs).forEach((k) => {
     const l = state.logs[k];
-    const p = planFor(state.start, k);
+    const p = effectivePlan(state, k);
     if (l.miles! > 0) {
       miles += l.miles!;
       if (l.miles! > longest) longest = l.miles!;
@@ -69,8 +70,14 @@ export function weeklyRunRows(state: TrackerState): { long: BarRow[]; week: BarR
       const lg = state.logs[ds];
       if (lg && lg.miles! > 0) aw += lg.miles!;
     }
-    const sun = state.logs[addDays(ws, 6)];
-    long.push({ label: `W${w + 1}`, planned: LONG[w], actual: sun && sun.miles! > 0 ? sun.miles! : 0 });
+    // The week's long run: Sunday, or a long run moved to a rest day.
+    let la = 0;
+    for (let d = 0; d < 7; d++) {
+      const ds = addDays(ws, d);
+      const lg = state.logs[ds];
+      if (lg && lg.miles! > 0 && effectivePlan(state, ds)?.type === 'long') la = Math.max(la, lg.miles!);
+    }
+    long.push({ label: `W${w + 1}`, planned: LONG[w], actual: la });
     week.push({ label: `W${w + 1}`, planned: pw, actual: aw });
   }
   return { long, week };

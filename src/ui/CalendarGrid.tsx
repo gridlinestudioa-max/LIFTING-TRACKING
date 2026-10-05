@@ -11,7 +11,7 @@ import {
   liftsDone,
   monthOffset,
   pad,
-  planFor,
+  effectivePlan,
   status,
   type LiftGroup,
   type TrackerState,
@@ -98,7 +98,7 @@ const DayCell = memo(function DayCell({
   onSelect: (s: string) => void;
 }) {
   const c = useColors();
-  const p = planFor(state.start, date);
+  const p = effectivePlan(state, date);
   const l = state.logs[date];
   const st = status(state, date, today);
   const isToday = date === today;
@@ -107,14 +107,15 @@ const DayCell = memo(function DayCell({
   if (st === 'done') { bg = c.okbg; border = c.ok; }
   if (st === 'missed') { bg = c.badbg; border = c.bad; }
   if (st === 'partial') { bg = c.warnbg; border = c.warn; }
-  const skipped = st === 'skipped';
+  const moved = st === 'moved';
+  const skipped = st === 'skipped' || moved;
 
   let meta: { text: string; ok: boolean } | null = null;
   let mark: { ch: string; color: string } | null = null;
   if (p) {
     const kind = TYPES[p.type].kind;
     if (skipped) {
-      meta = { text: 'Skipped', ok: false };
+      meta = { text: moved ? 'Moved' : 'Skipped', ok: false };
     } else if (kind === 'run') {
       meta = l && l.miles! > 0 ? { text: `${fmt(l.miles!)} mi`, ok: true } : { text: `${fmt(p.miles)} mi`, ok: false };
     } else if (kind === 'lift') {

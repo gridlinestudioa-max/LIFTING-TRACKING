@@ -5,6 +5,10 @@ import {
   addDays,
   byWeek,
   calorieSummary,
+  effectivePlan,
+  formPlan,
+  madeUpBy,
+  makeupCandidates,
   cumulative,
   dailyWindow,
   defaultState,
@@ -332,5 +336,82 @@ describe('skip', () => {
     expect(ps.skipped).toBe(1);
     expect(ps.missedOrPartial).toBe(2); // Tue, Wed
     expect(ps.planned).toBe(3);
+  });
+});
+
+describe('rest day workouts', () => {
+  const TODAY = '2026-10-20';
+  const st = defaultState();
+  const SAT = '2026-10-10'; // week 1 rest day
+  const sat = planFor(START, SAT)!;
+
+  it('pick any workout: uses this week\'s miles/weights and normal status rules', () => {
+    const f = { ...formFromLog(st, sat, undefined), swap: 'long' as const, miles: '7' };
+    expect(formPlan(st, sat, f)).toMatchObject({ type: 'long', miles: 7, w: 0, swapped: true });
+    const log = logFromForm(st, sat, f);
+    expect(log).toEqual({ swap: 'long', miles: 7 });
+    expect(submitError(sat, log)).toBeNull();
+    const s = stateWith({ [SAT]: { ...log, submitted: true } });
+    expect(effectivePlan(s, SAT)!.type).toBe('long');
+    expect(status(s, SAT, TODAY)).toBe('done');
+  });
+
+  it('a swapped run needs miles or calories like any run day', () => {
+    const f = { ...formFromLog(st, sat, undefined), swap: 'easy' as const };
+    expect(submitError(sat, logFromForm(st, sat, f))).toBe('Enter your miles or calories first.');
+  });
+
+  it('a lift swap logs that day\'s lifts at target weights', () => {
+    const f = { ...formFromLog(st, sat, undefined), swap: 'legs' as const };
+    const log = logFromForm(st, sat, f);
+    expect(log.swap).toBe('legs');
+    expect(Object.keys(log.lifts!)).toEqual(['lpress', 'rdl', 'lcurl', 'lext']);
+    expect(log.lifts!.lpress).toEqual({ w: 7, done: false });
+  });
+
+  it('moving a skipped workout links it and shows the skipped day as moved', () => {
+    const logs = { '2026-10-11': { submitted: true, skipped: true } }; // Sun long run skipped
+    const s0 = stateWith(logs);
+    expect(makeupCandidates(s0, SAT).map((m) => m.s)).toEqual(['2026-10-11']);
+    const f = { ...formFromLog(s0, sat, undefined), makeupFor: '2026-10-11', swap: 'long' as const, miles: '7' };
+    const log = logFromForm(s0, sat, f);
+    expect(log).toEqual({ swap: 'long', makeupFor: '2026-10-11', miles: 7 });
+    const s = stateWith({ ...logs, [SAT]: { ...log, submitted: true } });
+    expect(madeUpBy(s, '2026-10-11')).toBe(SAT);
+    expect(status(s, '2026-10-11', TODAY)).toBe('moved');
+    expect(status(s, SAT, TODAY)).toBe('done');
+    // the long run chart counts it for that week
+    expect(weeklyRunRows(s).long[0].actual).toBe(7);
+  });
+
+  it('a makeup uses the original day\'s week for weights and miles', () => {
+    const s0 = stateWith({ '2026-10-26': { submitted: true, skipped: true } }); // W4 Mon push
+    const restW3 = planFor(START, '2026-10-24')!; // W3 Sat
+    const p = formPlan(s0, restW3, { ...formFromLog(s0, restW3, undefined), makeupFor: '2026-10-26', swap: 'push' });
+    expect(p.w).toBe(3);
+    expect(targetFor(s0.base, 'ohp', p.w)).toBe(45);
+  });
+
+  it('progress: moved day is not counted; the rest-day workout is', () => {
+    const s = stateWith({
+      '2026-10-11': { submitted: true, skipped: true },
+      [SAT]: { submitted: true, swap: 'long', makeupFor: '2026-10-11', miles: 7 },
+    });
+    const ps = progressStats(s, '2026-10-11');
+    expect(ps.skipped).toBe(0);
+    // Mon-Fri missed (5) + Sat done; Sun moved -> not counted
+    expect(ps.done).toBe(1);
+    expect(ps.planned).toBe(6);
+  });
+
+  it('a skip already made up elsewhere is not offered again; going back to rest clears it', () => {
+    const s = stateWith({
+      '2026-10-11': { submitted: true, skipped: true },
+      '2026-10-17': { submitted: true, swap: 'long', makeupFor: '2026-10-11' },
+    });
+    expect(makeupCandidates(s, SAT)).toEqual([]);
+    expect(makeupCandidates(s, '2026-10-17').map((m) => m.s)).toEqual(['2026-10-11']);
+    const f = { ...formFromLog(s, sat, undefined), swap: '' as const, makeupFor: '', cin: '2000' };
+    expect(logFromForm(s, sat, f)).toEqual({ cin: 2000 });
   });
 });
