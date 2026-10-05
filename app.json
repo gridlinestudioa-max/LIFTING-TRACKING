@@ -22,7 +22,10 @@
       "predictiveBackGestureEnabled": false
     },
     "web": {
-      "favicon": "./assets/favicon.png"
+      "favicon": "./assets/favicon.png",
+      "output": "single",
+      "name": "Training Tracker",
+      "shortName": "Training"
     },
     "plugins": ["expo-router"],
     "experiments": {

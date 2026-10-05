@@ -37,6 +37,19 @@ npm start           # starts the Expo dev server and shows a QR code
 
 Expo Go must support this project's SDK version (Expo SDK 57). If Expo Go says the SDK isn't supported, update Expo Go from the store.
 
+## Use it as a website on your phone
+
+The web version is deployed on Vercel from this repo (`vercel.json` runs `npx expo export --platform web` and serves `dist/`).
+Every push to the default branch redeploys it.
+
+On your phone, open the site and add it to your Home Screen so it opens full-screen like an app:
+- **iPhone (Safari):** Share button → *Add to Home Screen*.
+- **Android (Chrome):** ⋮ menu → *Add to Home screen* (or *Install app*).
+
+Your data is saved in that browser on that phone only. Always open it the same way (the Home Screen icon), and don't clear website data for the site, or you'll lose your logs.
+
+To build the website locally: `npx expo export --platform web`, then serve `dist/`.
+
 ## Build an installable version
 
 Builds run in Expo's cloud with **EAS Build**, so you don't need Xcode or Android Studio. You need a free Expo account.

@@ -1,21 +1,16 @@
 import DateTimePicker, { DateTimePickerAndroid } from '@react-native-community/datetimepicker';
-import { useState } from 'react';
+import { createElement } from 'react';
 import { Platform, Pressable, Text, View } from 'react-native';
 
 import { raceDay, shortDayLabel, toD, toS } from '@/logic';
 
-import { Field, Mute } from './components';
-import { useColors } from './theme';
+import { Mute } from './components';
+import { useColors, useIsDark } from './theme';
 
 /** Plan start date. Any chosen date snaps back to that week's Monday (done in the store). */
 export function StartPicker({ start, onChange }: { start: string; onChange: (s: string) => void }) {
   const c = useColors();
-  const [text, setText] = useState(start);
-  const [prev, setPrev] = useState(start);
-  if (prev !== start) {
-    setPrev(start);
-    setText(start);
-  }
+  const isDark = useIsDark();
 
   let picker: React.ReactNode;
   if (Platform.OS === 'ios') {
@@ -44,15 +39,17 @@ export function StartPicker({ start, onChange }: { start: string; onChange: (s: 
       </Pressable>
     );
   } else {
-    picker = (
-      <Field
-        value={text}
-        onChangeText={setText}
-        placeholder="YYYY-MM-DD"
-        style={{ width: 130 }}
-        onEndEditing={() => (/^\d{4}-\d{2}-\d{2}$/.test(text) ? onChange(text) : setText(start))}
-      />
-    );
+    // Web: the browser's native date input (opens the phone's date wheel).
+    picker = createElement('input', {
+      type: 'date',
+      value: start,
+      'aria-label': 'Plan start date',
+      onChange: (e: { target: { value: string } }) => e.target.value && onChange(e.target.value),
+      style: {
+        font: 'inherit', fontSize: 16, color: c.ink, backgroundColor: c.bg, border: `1px solid ${c.line}`,
+        borderRadius: 8, padding: '7px 8px', colorScheme: isDark ? 'dark' : 'light',
+      },
+    });
   }
 
   return (

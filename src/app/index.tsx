@@ -29,12 +29,12 @@ export default function CalendarScreen() {
     <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: c.bg }}>
       <ScrollView
         ref={scroll}
-        contentContainerStyle={{ padding: 14, paddingBottom: 40 }}
+        contentContainerStyle={{ padding: 12, paddingBottom: 40 }}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
         automaticallyAdjustKeyboardInsets>
         <Header />
-        <Card>
+        <Card style={{ paddingHorizontal: 8 }}>
           <CalendarGrid
             state={state}
             today={today}
