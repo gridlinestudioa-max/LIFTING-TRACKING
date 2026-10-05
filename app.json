@@ -14,10 +14,8 @@
     "android": {
       "package": "com.trainingtracker.app",
       "adaptiveIcon": {
-        "backgroundColor": "#0f6e56",
-        "foregroundImage": "./assets/android-icon-foreground.png",
-        "backgroundImage": "./assets/android-icon-background.png",
-        "monochromeImage": "./assets/android-icon-monochrome.png"
+        "backgroundColor": "#BAA497",
+        "foregroundImage": "./assets/android-icon-foreground.png"
       },
       "predictiveBackGestureEnabled": false
     },
@@ -27,7 +25,9 @@
       "name": "Training Tracker",
       "shortName": "Training"
     },
-    "plugins": ["expo-router"],
+    "plugins": [
+      "expo-router"
+    ],
     "experiments": {
       "typedRoutes": true
     }
