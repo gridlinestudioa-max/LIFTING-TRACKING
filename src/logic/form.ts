@@ -11,6 +11,8 @@ export interface DayForm {
   cin: string;
   cout: string;
   note: string;
+  /** Workout skipped (lift/run days). Hides the workout fields; calories still allowed. */
+  skipped: boolean;
 }
 
 /** Build the editable form from a saved log (or empty), prefilling lift targets. */
@@ -31,6 +33,7 @@ export function formFromLog(state: TrackerState, plan: PlanDay, log: DayLog | un
     cin: l.cin != null ? String(l.cin) : '',
     cout: l.cout != null ? String(l.cout) : '',
     note: l.note ?? '',
+    skipped: !!l.skipped,
   };
 }
 
@@ -44,7 +47,9 @@ export function num(v: string): number | null {
 export function logFromForm(state: TrackerState, plan: PlanDay, f: DayForm): DayLog {
   const kind = TYPES[plan.type].kind;
   const out: DayLog = {};
-  if (kind === 'lift') {
+  if (kind !== 'rest' && f.skipped) {
+    out.skipped = true;
+  } else if (kind === 'lift') {
     out.lifts = {};
     LIFTS[plan.type as LiftGroup].forEach((e) => {
       const r = f.lifts[e.id] ?? { w: '', done: false };
@@ -72,6 +77,7 @@ export function logFromForm(state: TrackerState, plan: PlanDay, f: DayForm): Day
 export function submitError(plan: PlanDay, log: DayLog): string | null {
   const kind = TYPES[plan.type].kind;
   const hasK = log.cin != null || log.cout != null;
+  if (log.skipped) return null; // a skip can be saved on its own
   if (kind === 'run' && !(log.miles! > 0) && !hasK) return 'Enter your miles or calories first.';
   if (kind === 'rest' && !hasK) return 'Enter your calories first.';
   return null;

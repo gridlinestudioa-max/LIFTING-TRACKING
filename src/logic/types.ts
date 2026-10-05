@@ -6,6 +6,8 @@ export interface LiftEntry {
 /** One day's log. Only submitted logs are persisted. */
 export interface DayLog {
   submitted?: boolean;
+  /** Workout skipped on purpose. Calories and notes can still be logged. */
+  skipped?: boolean;
   lifts?: Record<string, LiftEntry>;
   miles?: number;
   secs?: number;

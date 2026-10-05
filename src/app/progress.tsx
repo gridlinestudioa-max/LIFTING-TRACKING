@@ -42,7 +42,11 @@ export default function ProgressScreen() {
 
         <StatGrid>
           <StatTile value={String(st.done)} sub={` / ${st.planned}`} label="Sessions completed" />
-          <StatTile value={String(st.missedOrPartial)} label="Missed or partial" />
+          <StatTile
+            value={String(st.missedOrPartial)}
+            sub={st.skipped ? ` · ${st.skipped} skipped` : undefined}
+            label="Missed or partial"
+          />
           <StatTile value={fmt(+st.miles.toFixed(1))} label="Total miles logged" />
           <StatTile value={st.longest ? fmt(st.longest) : '–'} label="Longest run (mi)" />
           <StatTile

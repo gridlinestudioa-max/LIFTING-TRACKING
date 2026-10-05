@@ -291,3 +291,46 @@ describe('normalize', () => {
     expect(normalize({ goal: 0 }).goal).toBeNull();
   });
 });
+
+describe('skip', () => {
+  const TODAY = '2026-10-20';
+  const st = defaultState();
+  it('a skipped day shows as skipped, not missed, on past and future days', () => {
+    const s = stateWith({
+      '2026-10-05': { submitted: true, skipped: true },
+      '2026-10-27': { submitted: true, skipped: true, cin: 2000, cout: 2400 },
+    });
+    expect(status(s, '2026-10-05', TODAY)).toBe('skipped');
+    expect(status(s, '2026-10-27', TODAY)).toBe('skipped');
+    expect(level(s, '2026-10-05')).toBe(0);
+  });
+  it('skip drops workout fields but keeps calories and notes', () => {
+    const p = planFor(START, '2026-10-06')!;
+    const f = { ...formFromLog(st, p, undefined), miles: '3', cin: '2100', cout: '2600', note: 'sick', skipped: true };
+    const log = logFromForm(st, p, f);
+    expect(log).toEqual({ skipped: true, cin: 2100, cout: 2600, note: 'sick' });
+    expect(calorieSummary(stateWith({ '2026-10-06': { ...log, submitted: true } })).total).toBe(500);
+  });
+  it('a skip can be submitted with nothing else', () => {
+    const p = planFor(START, '2026-10-06')!;
+    const log = logFromForm(st, p, { ...formFromLog(st, p, undefined), skipped: true });
+    expect(submitError(p, log)).toBeNull();
+  });
+  it('round-trips through the form and can be undone', () => {
+    const p = planFor(START, '2026-10-05')!;
+    const f = formFromLog(st, p, { submitted: true, skipped: true, cin: 2000 });
+    expect(f.skipped).toBe(true);
+    expect(logFromForm(st, p, { ...f, skipped: false }).skipped).toBeUndefined();
+  });
+  it('rest days ignore skip', () => {
+    const p = planFor(START, '2026-10-10')!;
+    expect(logFromForm(st, p, { ...formFromLog(st, p, undefined), skipped: true }).skipped).toBeUndefined();
+  });
+  it('progress counts skipped separately from missed', () => {
+    const s = stateWith({ '2026-10-05': { submitted: true, skipped: true } });
+    const ps = progressStats(s, '2026-10-08');
+    expect(ps.skipped).toBe(1);
+    expect(ps.missedOrPartial).toBe(2); // Tue, Wed
+    expect(ps.planned).toBe(3);
+  });
+});

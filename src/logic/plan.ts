@@ -60,7 +60,7 @@ export function liftsDone(group: LiftGroup, log: DayLog | undefined): number {
 export function level(state: TrackerState, s: string): 0 | 1 | 2 {
   const p = planFor(state.start, s);
   const l = state.logs[s];
-  if (!p || !l || !l.submitted) return 0;
+  if (!p || !l || !l.submitted || l.skipped) return 0;
   const kind = TYPES[p.type].kind;
   if (kind === 'run') {
     if (!(l.miles! > 0)) return 0;
@@ -74,13 +74,15 @@ export function level(state: TrackerState, s: string): 0 | 1 | 2 {
   return 0;
 }
 
-export type DayStatus = 'done' | 'partial' | 'missed' | 'open' | 'rest';
+export type DayStatus = 'done' | 'partial' | 'missed' | 'skipped' | 'open' | 'rest';
 
 /** Day status, or null if outside the plan. Calories never affect status. */
 export function status(state: TrackerState, s: string, today: string): DayStatus | null {
   const p = planFor(state.start, s);
   if (!p) return null;
   if (TYPES[p.type].kind === 'rest') return 'rest';
+  const l = state.logs[s];
+  if (l && l.submitted && l.skipped) return 'skipped';
   const lv = level(state, s);
   if (lv === 2) return 'done';
   if (s < today) return lv === 1 ? 'partial' : 'missed';

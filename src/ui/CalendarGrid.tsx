@@ -107,12 +107,15 @@ const DayCell = memo(function DayCell({
   if (st === 'done') { bg = c.okbg; border = c.ok; }
   if (st === 'missed') { bg = c.badbg; border = c.bad; }
   if (st === 'partial') { bg = c.warnbg; border = c.warn; }
+  const skipped = st === 'skipped';
 
   let meta: { text: string; ok: boolean } | null = null;
   let mark: { ch: string; color: string } | null = null;
   if (p) {
     const kind = TYPES[p.type].kind;
-    if (kind === 'run') {
+    if (skipped) {
+      meta = { text: 'Skipped', ok: false };
+    } else if (kind === 'run') {
       meta = l && l.miles! > 0 ? { text: `${fmt(l.miles!)} mi`, ok: true } : { text: `${fmt(p.miles)} mi`, ok: false };
     } else if (kind === 'lift') {
       const n = liftsDone(p.type as LiftGroup, l);
@@ -133,13 +136,14 @@ const DayCell = memo(function DayCell({
         style={[
           s.cell,
           { backgroundColor: bg, borderColor: selected ? c.accent : border, borderWidth: selected ? 2 : 1 },
+          skipped && !selected && { borderStyle: 'dashed', borderColor: c.mute },
         ]}>
         {mark ? <Text style={[s.mark, { color: mark.color }]}>{mark.ch}</Text> : null}
         <Text style={[s.dn, { color: isToday ? c.accent : c.mute, fontWeight: isToday ? '800' : '400' }]}>
           {Number(date.slice(8))}
         </Text>
         {p ? (
-          <Text numberOfLines={1} style={[s.tag, { backgroundColor: c.types[p.type] }]}>
+          <Text numberOfLines={1} style={[s.tag, { backgroundColor: c.types[p.type] }, skipped && { opacity: 0.45 }]}>
             {p.race ? 'RACE' : TYPES[p.type].label}
           </Text>
         ) : null}

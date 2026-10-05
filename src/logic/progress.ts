@@ -8,6 +8,7 @@ export interface ProgressStats {
   done: number;
   planned: number;
   missedOrPartial: number;
+  skipped: number;
   miles: number;
   longest: number;
   /** Total miles and seconds over runs that have a time (for average pace). */
@@ -17,7 +18,7 @@ export interface ProgressStats {
 }
 
 export function progressStats(state: TrackerState, today: string): ProgressStats {
-  let planned = 0, done = 0, missedOrPartial = 0;
+  let planned = 0, done = 0, missedOrPartial = 0, skipped = 0;
   for (let i = 0; i < PLAN_DAYS; i++) {
     const s = addDays(state.start, i);
     const p = planFor(state.start, s);
@@ -25,6 +26,7 @@ export function progressStats(state: TrackerState, today: string): ProgressStats
       const st = status(state, s, today);
       if (st === 'done') done++;
       if (st === 'missed' || st === 'partial') missedOrPartial++;
+      if (st === 'skipped') skipped++;
       // planned = non-rest days up to today that are past or done
       if (st !== 'open') planned++;
       else if (level(state, s) === 2) planned++;
@@ -44,7 +46,7 @@ export function progressStats(state: TrackerState, today: string): ProgressStats
     }
     if (p && TYPES[p.type].kind === 'lift' && level(state, k) === 2) liftDone++;
   });
-  return { done, planned, missedOrPartial, miles, longest, paceMiles, paceSecs, liftDone };
+  return { done, planned, missedOrPartial, skipped, miles, longest, paceMiles, paceSecs, liftDone };
 }
 
 export interface BarRow {

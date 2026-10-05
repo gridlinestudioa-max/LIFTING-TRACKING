@@ -83,8 +83,9 @@ export function DayDetail() {
               </Text>
             ))}
           </View>
-          <Label>Log what you lifted</Label>
-          {LIFTS[p.type as LiftGroup].map((e, i) => {
+          <SkipControl skipped={f.skipped} onToggle={() => edit({ skipped: !f.skipped })} c={c} />
+          {!f.skipped && <Label>Log what you lifted</Label>}
+          {!f.skipped && LIFTS[p.type as LiftGroup].map((e, i) => {
             const rec = f.lifts[e.id] ?? { w: '', done: false };
             return (
               <View key={e.id} style={[st.ex, i > 0 && { borderTopWidth: 1, borderTopColor: c.line }]}>
@@ -125,8 +126,9 @@ export function DayDetail() {
               {p.race ? RUN_TIPS.race : RUN_TIPS[p.type as 'long' | 'tempo' | 'easy']}
             </Text>
           </View>
-          <Label>Log your run</Label>
-          <View style={st.runrow}>
+          <SkipControl skipped={f.skipped} onToggle={() => edit({ skipped: !f.skipped })} c={c} />
+          {!f.skipped && <Label>Log your run</Label>}
+          {!f.skipped && <View style={st.runrow}>
             <LabeledField label="Miles" c={c}>
               <Field
                 value={f.miles}
@@ -152,7 +154,7 @@ export function DayDetail() {
               />
             </LabeledField>
             <Text style={[st.pace, { color: c.ink }]}>{paceText(parseFloat(f.miles), parseTime(f.time))}</Text>
-          </View>
+          </View>}
         </>
       ) : (
         <View style={[st.plan, { backgroundColor: c.bg, borderColor: c.line }]}>
@@ -214,11 +216,34 @@ function StatusBadge({ st: status, c }: { st: string | null; c: Palette }) {
     status === 'done' ? { t: '✓ Completed', fg: c.ok, bg: c.okbg }
     : status === 'missed' ? { t: '✕ Missed', fg: c.bad, bg: c.badbg }
     : status === 'partial' ? { t: '◐ Partial', fg: c.warn, bg: c.warnbg }
+    : status === 'skipped' ? { t: '– Skipped', fg: c.mute, bg: c.line }
     : null;
   if (!m) return null;
   return (
     <View style={{ flexDirection: 'row', marginBottom: 6 }}>
       <Text style={[st.badge, { color: m.fg, backgroundColor: m.bg }]}>{m.t}</Text>
+    </View>
+  );
+}
+
+/** "Skip this workout" toggle. When on, the workout fields hide; calories and notes stay. */
+function SkipControl({ skipped, onToggle, c }: { skipped: boolean; onToggle: () => void; c: Palette }) {
+  return (
+    <View style={st.skiprow}>
+      <Pressable
+        onPress={onToggle}
+        accessibilityRole="button"
+        accessibilityState={{ selected: skipped }}
+        hitSlop={6}
+        style={({ pressed }) => [
+          st.skipbtn,
+          { borderColor: skipped ? c.mute : c.line, backgroundColor: skipped ? c.line : c.bg, opacity: pressed ? 0.7 : 1 },
+        ]}>
+        <Text style={{ color: c.ink, fontWeight: '700', fontSize: 14 }}>{skipped ? 'Undo skip' : 'Skip'}</Text>
+      </Pressable>
+      {skipped ? (
+        <Text style={{ color: c.mute, fontSize: 13, flexShrink: 1 }}>Workout skipped. You can still log calories.</Text>
+      ) : null}
     </View>
   );
 }
@@ -258,5 +283,7 @@ const st = StyleSheet.create({
   runrow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'flex-end', gap: 14, marginTop: 6 },
   pace: { fontSize: 16, fontWeight: '700', paddingBottom: 9, minWidth: 80 },
   submitrow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 12 },
+  skiprow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 2 },
+  skipbtn: { borderWidth: 1, borderRadius: 10, paddingVertical: 9, paddingHorizontal: 18, minHeight: 40, justifyContent: 'center' },
   submit: { borderRadius: 10, paddingVertical: 12, paddingHorizontal: 24 },
 });
