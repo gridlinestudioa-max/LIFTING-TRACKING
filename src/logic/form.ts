@@ -13,13 +13,13 @@ export interface DayForm {
   note: string;
   /** Workout skipped (lift/run days). Hides the workout fields; calories still allowed. */
   skipped: boolean;
-  /** Rest day: workout type done instead ('' = resting). */
+  /** Workout type done instead of the scheduled one ('' = as scheduled). */
   swap: DayType | '';
   /** Rest day: skipped day being made up ('' = none). */
   makeupFor: string;
 }
 
-/** The plan the form is logging against (a rest day may have a workout swapped in). */
+/** The plan the form is logging against (any day may have a different workout swapped in). */
 export function formPlan(state: TrackerState, base: PlanDay, f: DayForm): PlanDay {
   return planWithSwap(state, base, f.swap, f.makeupFor);
 }

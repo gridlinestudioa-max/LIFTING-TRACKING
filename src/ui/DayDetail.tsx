@@ -37,7 +37,7 @@ export function DayDetail() {
   const [err, setErr] = useState<{ s: string; msg: string } | null>(null);
   const error = err && err.s === s ? err.msg : null;
   const setError = (msg: string | null) => setErr(msg ? { s, msg } : null);
-  // Rest-day "do a workout instead" chooser, opened per day.
+  // "Do a different workout" chooser, opened per day.
   const [openFor, setOpenFor] = useState<string | null>(null);
 
   const base = planFor(state.start, s);
@@ -65,7 +65,7 @@ export function DayDetail() {
   };
   const dayStatus = status(state, s, today);
   const movedTo = dayStatus === 'moved' ? madeUpBy(state, s) : null;
-  const showLog = isRest ? !!p.swapped : !f.skipped;
+  const showLog = isRest ? !!p.swapped : p.swapped || !f.skipped;
 
   let msg = '', msgColor = c.mute, msgBold = false;
   if (error) { msg = error; msgColor = c.bad; msgBold = true; }
@@ -87,21 +87,24 @@ export function DayDetail() {
 
       <PlanBox plan={base} head="Scheduled" c={c} />
 
-      {isRest ? (
-        <RestSwap
+      {!isRest && !p.swapped ? (
+        <SkipControl skipped={f.skipped} onToggle={() => edit({ skipped: !f.skipped })} c={c} />
+      ) : null}
+
+      {isRest || !f.skipped ? (
+        <WorkoutSwap
           f={f}
-          open={openFor === s || !!f.swap || !!f.makeupFor}
+          scheduled={base.type}
+          open={openFor === s || !!p.swapped}
           onOpen={() => setOpenFor(s)}
-          candidates={makeupCandidates(state, s)}
+          candidates={isRest ? makeupCandidates(state, s) : []}
           edit={(patch) => {
             if (!patch.swap && !patch.makeupFor) setOpenFor(null);
-            edit(patch);
+            edit({ ...patch, skipped: false });
           }}
           c={c}
         />
-      ) : (
-        <SkipControl skipped={f.skipped} onToggle={() => edit({ skipped: !f.skipped })} c={c} />
-      )}
+      ) : null}
 
       {p.swapped ? (
         <PlanBox plan={p} head={p.makeupFor ? `Making up ${shortDayLabel(p.makeupFor)}` : 'Doing instead'} c={c} />
@@ -255,9 +258,13 @@ function PlanBox({ plan, head, c }: { plan: PlanDay; head: string; c: Palette })
 
 const SWAP_TYPES: DayType[] = ['push', 'pull', 'legs', 'tempo', 'easy', 'long'];
 
-/** Rest day: make up a skipped workout here, or do any workout instead of resting. */
-function RestSwap({
+/**
+ * Do a different workout than scheduled. On a rest day this can also make up a
+ * skipped workout from the surrounding weeks.
+ */
+function WorkoutSwap({
   f,
+  scheduled,
   open,
   onOpen,
   candidates,
@@ -265,20 +272,22 @@ function RestSwap({
   c,
 }: {
   f: DayForm;
+  scheduled: DayType;
   open: boolean;
   onOpen: () => void;
   candidates: { s: string; plan: PlanDay }[];
   edit: (patch: Partial<DayForm>) => void;
   c: Palette;
 }) {
+  const isRest = scheduled === 'rest';
   if (!open) {
     return (
       <View style={st.skiprow}>
-        <OptionButton label="Do a workout instead" selected={false} onPress={onOpen} c={c} />
+        <OptionButton label={isRest ? 'Do a workout instead' : 'Did something else'} selected={false} onPress={onOpen} c={c} />
       </View>
     );
   }
-  const resting = !f.swap && !f.makeupFor;
+  const asScheduled = !f.makeupFor && (!f.swap || f.swap === scheduled);
   return (
     <View style={{ gap: 6, marginBottom: 2 }}>
       {candidates.length ? (
@@ -298,9 +307,11 @@ function RestSwap({
           </View>
         </>
       ) : null}
-      <Text style={[st.optHead, { color: c.mute }]}>{candidates.length ? 'Or do' : 'Do'} a workout instead</Text>
+      <Text style={[st.optHead, { color: c.mute }]}>
+        {isRest ? `${candidates.length ? 'Or do' : 'Do'} a workout instead` : 'What did you do instead?'}
+      </Text>
       <View style={st.optrow}>
-        {SWAP_TYPES.map((t) => (
+        {SWAP_TYPES.filter((t) => t !== scheduled).map((t) => (
           <OptionButton
             key={t}
             label={TYPES[t].label}
@@ -310,7 +321,12 @@ function RestSwap({
             c={c}
           />
         ))}
-        <OptionButton label="Rest" selected={resting} onPress={() => edit({ swap: '', makeupFor: '' })} c={c} />
+        <OptionButton
+          label={isRest ? 'Rest' : `${TYPES[scheduled].label} as planned`}
+          selected={asScheduled}
+          onPress={() => edit({ swap: '', makeupFor: '' })}
+          c={c}
+        />
       </View>
     </View>
   );

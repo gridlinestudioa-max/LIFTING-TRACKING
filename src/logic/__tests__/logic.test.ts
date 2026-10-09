@@ -415,3 +415,45 @@ describe('rest day workouts', () => {
     expect(logFromForm(s, sat, f)).toEqual({ cin: 2000 });
   });
 });
+
+describe('doing a different workout on a scheduled day', () => {
+  const TODAY = '2026-10-20';
+  const st = defaultState();
+  const THU = '2026-10-08'; // week 1 legs day
+  const thu = planFor(START, THU)!;
+
+  it('a run instead of legs logs the miles and counts as done', () => {
+    const f = { ...formFromLog(st, thu, undefined), swap: 'easy' as const, miles: '6' };
+    expect(formPlan(st, thu, f)).toMatchObject({ type: 'easy', miles: 3, w: 0, swapped: true });
+    const log = logFromForm(st, thu, f);
+    expect(log).toEqual({ swap: 'easy', miles: 6 });
+    expect(submitError(thu, log)).toBeNull();
+    const s = stateWith({ [THU]: { ...log, submitted: true } });
+    expect(effectivePlan(s, THU)!.type).toBe('easy');
+    expect(status(s, THU, TODAY)).toBe('done');
+    expect(progressStats(s, TODAY).miles).toBe(6);
+  });
+
+  it('a different lift group logs that group\'s lifts', () => {
+    const log = logFromForm(st, thu, { ...formFromLog(st, thu, undefined), swap: 'push' });
+    expect(log.swap).toBe('push');
+    expect(Object.keys(log.lifts!)).toEqual(['tri', 'bench', 'skull', 'peck', 'ohp']);
+  });
+
+  it('picking the scheduled type (or nothing) is not a swap', () => {
+    expect(formPlan(st, thu, { ...formFromLog(st, thu, undefined), swap: 'legs' }).swapped).toBeUndefined();
+    expect(logFromForm(st, thu, { ...formFromLog(st, thu, undefined), swap: 'legs' }).swap).toBeUndefined();
+  });
+
+  it('a swap wins over a stale skip flag', () => {
+    const log = logFromForm(st, thu, { ...formFromLog(st, thu, undefined), swap: 'easy', miles: '6', skipped: true });
+    expect(log).toEqual({ swap: 'easy', miles: 6 });
+  });
+
+  it('a workout day never makes up another day', () => {
+    const s0 = stateWith({ '2026-10-05': { submitted: true, skipped: true } });
+    const p = formPlan(s0, thu, { ...formFromLog(s0, thu, undefined), makeupFor: '2026-10-05', swap: 'push' });
+    expect(p.makeupFor).toBeUndefined();
+    expect(p.type).toBe('push');
+  });
+});

@@ -10,7 +10,7 @@ export interface DayLog {
   submitted?: boolean;
   /** Workout skipped on purpose. Calories and notes can still be logged. */
   skipped?: boolean;
-  /** Rest day only: the workout done instead of resting. */
+  /** The workout done instead of the scheduled one (or instead of resting). */
   swap?: DayType;
   /** Rest day only: the skipped day whose workout was moved here. */
   makeupFor?: string;

@@ -21,7 +21,7 @@ export interface PlanDay {
   type: DayType;
   miles: number;
   race: boolean;
-  /** A rest day turned into this workout. */
+  /** A different workout done instead of the scheduled one. */
   swapped?: boolean;
   /** The skipped day this workout makes up for. */
   makeupFor?: string;
@@ -44,20 +44,22 @@ export function planFor(start: string, s: string): PlanDay | null {
 }
 
 /**
- * A rest day's plan once a workout is swapped in. Making up a skipped day uses that
- * day's workout (its week's weights and miles); otherwise the chosen type in this week.
+ * A day's plan once a different workout is swapped in. On a rest day, making up a
+ * skipped day uses that day's workout (its week's weights and miles). Otherwise the
+ * chosen type in this week; on a workout day this replaces the scheduled workout.
  */
 export function planWithSwap(state: TrackerState, base: PlanDay, swap?: DayType | '', makeupFor?: string): PlanDay {
-  if (base.type !== 'rest') return base;
-  if (makeupFor) {
+  if (base.type === 'rest' && makeupFor) {
     const op = planFor(state.start, makeupFor);
     if (op && op.type !== 'rest') return { ...op, race: false, swapped: true, makeupFor };
   }
-  if (swap && swap !== 'rest') return { w: base.w, type: swap, miles: milesFor(swap, base.w), race: false, swapped: true };
+  if (swap && swap !== 'rest' && swap !== base.type) {
+    return { w: base.w, type: swap, miles: milesFor(swap, base.w), race: false, swapped: true };
+  }
   return base;
 }
 
-/** The plan for a day including a submitted rest-day swap. */
+/** The plan for a day including a submitted swap. */
 export function effectivePlan(state: TrackerState, s: string): PlanDay | null {
   const p = planFor(state.start, s);
   if (!p) return null;
