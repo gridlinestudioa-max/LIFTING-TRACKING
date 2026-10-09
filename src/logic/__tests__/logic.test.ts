@@ -372,7 +372,10 @@ describe('rest day workouts', () => {
   it('moving a skipped workout links it and shows the skipped day as moved', () => {
     const logs = { '2026-10-11': { submitted: true, skipped: true } }; // Sun long run skipped
     const s0 = stateWith(logs);
-    expect(makeupCandidates(s0, SAT).map((m) => m.s)).toEqual(['2026-10-11']);
+    // the skip, plus this week's other open workouts
+    expect(makeupCandidates(s0, SAT).map((m) => m.s)).toEqual([
+      '2026-10-05', '2026-10-06', '2026-10-07', '2026-10-08', '2026-10-09', '2026-10-11',
+    ]);
     const f = { ...formFromLog(s0, sat, undefined), makeupFor: '2026-10-11', swap: 'long' as const, miles: '7' };
     const log = logFromForm(s0, sat, f);
     expect(log).toEqual({ swap: 'long', makeupFor: '2026-10-11', miles: 7 });
@@ -409,8 +412,8 @@ describe('rest day workouts', () => {
       '2026-10-11': { submitted: true, skipped: true },
       '2026-10-17': { submitted: true, swap: 'long', makeupFor: '2026-10-11' },
     });
-    expect(makeupCandidates(s, SAT)).toEqual([]);
-    expect(makeupCandidates(s, '2026-10-17').map((m) => m.s)).toEqual(['2026-10-11']);
+    expect(makeupCandidates(s, SAT).map((m) => m.s)).not.toContain('2026-10-11');
+    expect(makeupCandidates(s, '2026-10-17').map((m) => m.s)).toContain('2026-10-11');
     const f = { ...formFromLog(s, sat, undefined), swap: '' as const, makeupFor: '', cin: '2000' };
     expect(logFromForm(s, sat, f)).toEqual({ cin: 2000 });
   });
@@ -450,10 +453,32 @@ describe('doing a different workout on a scheduled day', () => {
     expect(log).toEqual({ swap: 'easy', miles: 6 });
   });
 
-  it('a workout day never makes up another day', () => {
-    const s0 = stateWith({ '2026-10-05': { submitted: true, skipped: true } });
-    const p = formPlan(s0, thu, { ...formFromLog(s0, thu, undefined), makeupFor: '2026-10-05', swap: 'push' });
-    expect(p.makeupFor).toBeUndefined();
-    expect(p.type).toBe('push');
+  it("Sunday's long run done on Thursday: Sunday shows as moved", () => {
+    const SUN = '2026-10-11';
+    expect(makeupCandidates(st, THU).map((m) => m.s)).toContain(SUN);
+    const f = { ...formFromLog(st, thu, undefined), makeupFor: SUN, swap: 'long' as const, miles: '6' };
+    expect(formPlan(st, thu, f)).toMatchObject({ type: 'long', miles: 7, w: 0, swapped: true, makeupFor: SUN });
+    const log = logFromForm(st, thu, f);
+    expect(log).toEqual({ swap: 'long', makeupFor: SUN, miles: 6 });
+    const s = stateWith({ [THU]: { ...log, submitted: true } });
+    expect(madeUpBy(s, SUN)).toBe(THU);
+    expect(status(s, SUN, '2026-10-09')).toBe('moved');
+    expect(status(s, THU, TODAY)).toBe('partial'); // 6 of 7 mi
+    expect(weeklyRunRows(s).long[0].actual).toBe(6);
+    // Sunday can still take Thursday's legs (a straight swap)
+    expect(makeupCandidates(s, SUN).map((m) => m.s)).toContain(THU);
+    const s2 = stateWith({ [THU]: { ...log, submitted: true }, [SUN]: { submitted: true, swap: 'legs', makeupFor: THU } });
+    expect(status(s2, SUN, TODAY)).toBe('missed');
+    expect(status(s2, THU, TODAY)).toBe('partial');
+  });
+
+  it('only open workouts from the same week, or recent skips, are offered', () => {
+    const s = stateWith({
+      '2026-10-05': { submitted: true, lifts: { tri: { w: 35, done: true } } }, // Mon push partly done
+      '2026-10-13': { submitted: true, skipped: true }, // next Tue, skipped
+    });
+    expect(makeupCandidates(s, THU).map((m) => m.s)).toEqual([
+      '2026-10-06', '2026-10-07', '2026-10-09', '2026-10-11', '2026-10-13',
+    ]);
   });
 });

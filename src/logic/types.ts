@@ -12,7 +12,7 @@ export interface DayLog {
   skipped?: boolean;
   /** The workout done instead of the scheduled one (or instead of resting). */
   swap?: DayType;
-  /** Rest day only: the skipped day whose workout was moved here. */
+  /** The other day whose workout was moved here. */
   makeupFor?: string;
   lifts?: Record<string, LiftEntry>;
   miles?: number;

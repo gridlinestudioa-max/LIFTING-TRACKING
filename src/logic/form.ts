@@ -15,7 +15,7 @@ export interface DayForm {
   skipped: boolean;
   /** Workout type done instead of the scheduled one ('' = as scheduled). */
   swap: DayType | '';
-  /** Rest day: skipped day being made up ('' = none). */
+  /** Other day whose workout is being moved here ('' = none). */
   makeupFor: string;
 }
 

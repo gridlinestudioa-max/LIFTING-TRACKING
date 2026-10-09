@@ -65,7 +65,9 @@ export function DayDetail() {
   };
   const dayStatus = status(state, s, today);
   const movedTo = dayStatus === 'moved' ? madeUpBy(state, s) : null;
-  const showLog = isRest ? !!p.swapped : p.swapped || !f.skipped;
+  // Nothing scheduled to log here: a rest day, or a workout moved to another day.
+  const free = isRest || !!movedTo;
+  const showLog = free ? !!p.swapped : p.swapped || !f.skipped;
 
   let msg = '', msgColor = c.mute, msgBold = false;
   if (error) { msg = error; msgColor = c.bad; msgBold = true; }
@@ -87,17 +89,18 @@ export function DayDetail() {
 
       <PlanBox plan={base} head="Scheduled" c={c} />
 
-      {!isRest && !p.swapped ? (
+      {!free && !p.swapped ? (
         <SkipControl skipped={f.skipped} onToggle={() => edit({ skipped: !f.skipped })} c={c} />
       ) : null}
 
-      {isRest || !f.skipped ? (
+      {free || !f.skipped ? (
         <WorkoutSwap
           f={f}
           scheduled={base.type}
+          free={free}
           open={openFor === s || !!p.swapped}
           onOpen={() => setOpenFor(s)}
-          candidates={isRest ? makeupCandidates(state, s) : []}
+          candidates={makeupCandidates(state, s)}
           edit={(patch) => {
             if (!patch.swap && !patch.makeupFor) setOpenFor(null);
             edit({ ...patch, skipped: false });
@@ -107,7 +110,7 @@ export function DayDetail() {
       ) : null}
 
       {p.swapped ? (
-        <PlanBox plan={p} head={p.makeupFor ? `Making up ${shortDayLabel(p.makeupFor)}` : 'Doing instead'} c={c} />
+        <PlanBox plan={p} head={p.makeupFor ? `Moved from ${shortDayLabel(p.makeupFor)}` : 'Doing instead'} c={c} />
       ) : null}
 
       {showLog && T.kind === 'lift' ? (
@@ -259,12 +262,13 @@ function PlanBox({ plan, head, c }: { plan: PlanDay; head: string; c: Palette })
 const SWAP_TYPES: DayType[] = ['push', 'pull', 'legs', 'tempo', 'easy', 'long'];
 
 /**
- * Do a different workout than scheduled. On a rest day this can also make up a
- * skipped workout from the surrounding weeks.
+ * Do a different workout than scheduled: another day's workout moved here (same
+ * week, or a recent skip), or any workout type.
  */
 function WorkoutSwap({
   f,
   scheduled,
+  free,
   open,
   onOpen,
   candidates,
@@ -273,17 +277,18 @@ function WorkoutSwap({
 }: {
   f: DayForm;
   scheduled: DayType;
+  /** Nothing to do here as scheduled (rest day, or this day's workout moved away). */
+  free: boolean;
   open: boolean;
   onOpen: () => void;
   candidates: { s: string; plan: PlanDay }[];
   edit: (patch: Partial<DayForm>) => void;
   c: Palette;
 }) {
-  const isRest = scheduled === 'rest';
   if (!open) {
     return (
       <View style={st.skiprow}>
-        <OptionButton label={isRest ? 'Do a workout instead' : 'Did something else'} selected={false} onPress={onOpen} c={c} />
+        <OptionButton label={free ? 'Do a workout instead' : 'Did something else'} selected={false} onPress={onOpen} c={c} />
       </View>
     );
   }
@@ -292,7 +297,7 @@ function WorkoutSwap({
     <View style={{ gap: 6, marginBottom: 2 }}>
       {candidates.length ? (
         <>
-          <Text style={[st.optHead, { color: c.mute }]}>Move a skipped workout here</Text>
+          <Text style={[st.optHead, { color: c.mute }]}>{"Move another day's workout here"}</Text>
           <View style={st.optrow}>
             {candidates.map((m) => (
               <OptionButton
@@ -308,7 +313,9 @@ function WorkoutSwap({
         </>
       ) : null}
       <Text style={[st.optHead, { color: c.mute }]}>
-        {isRest ? `${candidates.length ? 'Or do' : 'Do'} a workout instead` : 'What did you do instead?'}
+        {free
+          ? `${candidates.length ? 'Or do' : 'Do'} a workout instead`
+          : candidates.length ? 'Or something else' : 'What did you do instead?'}
       </Text>
       <View style={st.optrow}>
         {SWAP_TYPES.filter((t) => t !== scheduled).map((t) => (
@@ -322,7 +329,7 @@ function WorkoutSwap({
           />
         ))}
         <OptionButton
-          label={isRest ? 'Rest' : `${TYPES[scheduled].label} as planned`}
+          label={scheduled === 'rest' ? 'Rest' : free ? 'Nothing' : `${TYPES[scheduled].label} as planned`}
           selected={asScheduled}
           onPress={() => edit({ swap: '', makeupFor: '' })}
           c={c}
@@ -367,7 +374,7 @@ function StatusBadge({ st: status, movedTo, c }: { st: string | null; movedTo: s
     : status === 'missed' ? { t: '✕ Missed', fg: c.bad, bg: c.badbg }
     : status === 'partial' ? { t: '◐ Partial', fg: c.warn, bg: c.warnbg }
     : status === 'skipped' ? { t: '– Skipped', fg: c.mute, bg: c.line }
-    : status === 'moved' ? { t: `↪ Moved to ${movedTo ? shortDayLabel(movedTo) : 'a rest day'}`, fg: c.mute, bg: c.line }
+    : status === 'moved' ? { t: `↪ Moved to ${movedTo ? shortDayLabel(movedTo) : 'another day'}`, fg: c.mute, bg: c.line }
     : null;
   if (!m) return null;
   return (
