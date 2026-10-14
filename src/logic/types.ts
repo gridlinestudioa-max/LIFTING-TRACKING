@@ -1,6 +1,7 @@
 import type { DayType } from './config';
 import type { DietSettings } from './diet';
 import type { Food, FoodEntry } from './nutrition';
+import type { Profile } from './profile';
 
 export interface LiftEntry {
   w: number;
@@ -37,6 +38,8 @@ export interface TrackerState {
   /** Food log by date. Saved as soon as it changes (no Submit step). */
   meals: Record<string, FoodEntry[]>;
   diet: DietSettings;
+  /** Body stats for suggested targets, or null until entered. */
+  profile: Profile | null;
   /**
    * Food log on: food logged on the Food tab counts as calories in, on top of any number typed on the day.
    * Off: the Food tab is hidden and calories in is only the typed number. Logged food is kept either way.

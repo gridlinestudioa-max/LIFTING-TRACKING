@@ -2,13 +2,24 @@ import { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import {
+  ACTIVITY,
   FAST_PRESETS,
   FOOD_TAGS,
+  GOALS,
   STYLES,
   STYLE_BY_ID,
+  activeDiet,
+  calorieTarget,
+  editOwnLimits,
+  fmt,
   fmtClock,
+  fmtInt,
+  heightText,
   isAdjusted,
   parseClock,
+  suggestTargets,
+  tdee,
+  usesSuggestions,
   windowText,
   withStyle,
   type Limits,
@@ -17,13 +28,16 @@ import {
 import { CommitNumberField, Field, Mute } from '../components';
 import { useTracker } from '../store';
 import { fonts, space, useColors } from '../theme';
-import { Pill, Sheet } from './kit';
+import { Button, LinkButton, Notice, Pill, Sheet } from './kit';
+import { ProfileForm } from './ProfileForm';
 
 /** Pick and adjust the diet. Changes save as they're made. */
 export function DietSheet({ visible, onClose }: { visible: boolean; onClose: () => void }) {
   const c = useColors();
-  const { state, setDiet } = useTracker();
+  const { state, setDiet, setProfile } = useTracker();
   const d = state.diet;
+  const profile = state.profile;
+  const [editingProfile, setEditingProfile] = useState(false);
   const f = d.fasting;
   const preset = f ? FAST_PRESETS.find((p) => p.eatHours === f.eatHours) : undefined;
   // "Custom" stays selected while typing hours, even if they happen to match a preset.
@@ -45,6 +59,45 @@ export function DietSheet({ visible, onClose }: { visible: boolean; onClose: () 
         Pick an eating window, a food style, or both (for example 16:8 fasting with keto). The Food tab checks everything you log
         against these rules.
       </Mute>
+
+      <Heading>About you</Heading>
+      {profile && !editingProfile ? (
+        <View style={{ gap: 4 }}>
+          <Text style={{ color: c.ink, fontSize: 15, fontWeight: '600' }}>
+            {[
+              profile.sex === 'male' ? 'Male' : 'Female',
+              `${profile.age} years`,
+              heightText(profile.heightIn),
+              `${fmt(profile.weightLb)} lb`,
+            ].join(' · ')}
+          </Text>
+          <Mute>
+            {ACTIVITY.find((a) => a.id === profile.activity)!.label} activity · {GOALS.find((g) => g.id === profile.goal)!.label}
+          </Mute>
+          <Mute>
+            {`You burn about ${fmtInt(Math.round(tdee(profile) / 10) * 10)} kcal a day. Suggested intake: ${fmtInt(calorieTarget(profile))} kcal.`}
+          </Mute>
+          <View style={{ flexDirection: 'row', marginTop: space.xs }}>
+            <LinkButton label="Edit your stats" onPress={() => setEditingProfile(true)} />
+          </View>
+        </View>
+      ) : (
+        <>
+          {!profile ? (
+            <Mute style={{ marginBottom: space.md }}>
+              Add your body stats and the app suggests healthy daily calories, protein, carbs, sugar and fat for your diet.
+            </Mute>
+          ) : null}
+          <ProfileForm
+            initial={profile}
+            onSave={(p) => {
+              setProfile(p);
+              setEditingProfile(false);
+            }}
+            onCancel={profile ? () => setEditingProfile(false) : undefined}
+          />
+        </>
+      )}
 
       <Heading>Fasting</Heading>
       <View style={st.wrap}>
@@ -121,21 +174,43 @@ export function DietSheet({ visible, onClose }: { visible: boolean; onClose: () 
       </View>
       <Mute style={{ marginTop: space.md }}>
         {STYLE_BY_ID[d.style].blurb}
-        {isAdjusted(d) ? ' You’ve adjusted the limits below.' : ''}
+        {!profile && isAdjusted(d) ? ' You’ve adjusted the limits below.' : ''}
       </Mute>
 
-      <Heading>Daily limits</Heading>
-      <Mute>Leave a box empty to turn that rule off.</Mute>
-      <LimitRow label="Calories, at most" unit="kcal" value={d.limits.kcalMax} onCommit={(v) => setLimit('kcalMax', v)} />
-      <LimitRow label="Net carbs, at most" unit="g" note="Carbs minus fiber" value={d.limits.netCarbsMax} onCommit={(v) => setLimit('netCarbsMax', v)} />
-      <LimitRow label="Sugar, at most" unit="g" value={d.limits.sugarMax} onCommit={(v) => setLimit('sugarMax', v)} />
-      <LimitRow label="Protein, at least" unit="g" value={d.limits.proteinMin} onCommit={(v) => setLimit('proteinMin', v)} />
-      <LimitRow
-        label="Calories from fat, at most"
-        unit="%"
-        value={d.limits.fatPctMax}
-        onCommit={(v) => setLimit('fatPctMax', v != null && v > 100 ? 100 : v)}
-      />
+      <Heading>Daily targets</Heading>
+      {usesSuggestions(d, profile) ? (
+        <SuggestedTargets
+          onEdit={() => setDiet(editOwnLimits(d, profile))}
+        />
+      ) : (
+        <>
+          {profile ? (
+            <Notice tone="mute" style={{ marginBottom: space.sm }}>
+              <Text style={{ color: c.ink, fontSize: 14 }}>You’re using your own numbers. Suggested values are shown under each one.</Text>
+              <View style={{ flexDirection: 'row', marginTop: 4 }}>
+                <LinkButton label="Use the suggested numbers" onPress={() => setDiet({ ...d, auto: true })} />
+              </View>
+            </Notice>
+          ) : (
+            <Mute>Leave a box empty to turn that rule off. Add your stats above for suggested numbers.</Mute>
+          )}
+          {LIMIT_ROWS.map((r) => {
+            const sug = profile ? suggestTargets(profile, d.style).limits[r.key] : undefined;
+            return (
+              <LimitRow
+                key={r.key}
+                label={r.label}
+                unit={r.unit}
+                note={[r.note, profile ? (sug != null ? `Suggested: ${fmtInt(sug)}${r.unit === '%' ? '%' : ` ${r.unit}`}` : 'Suggested: off') : null]
+                  .filter(Boolean)
+                  .join(' · ')}
+                value={d.limits[r.key]}
+                onCommit={(v) => setLimit(r.key, r.key === 'fatPctMax' && v != null && v > 100 ? 100 : v)}
+              />
+            );
+          })}
+        </>
+      )}
 
       <Heading>Foods to avoid</Heading>
       <View style={st.wrap}>
@@ -151,6 +226,50 @@ export function DietSheet({ visible, onClose }: { visible: boolean; onClose: () 
         ))}
       </View>
     </Sheet>
+  );
+}
+
+const LIMIT_ROWS: { key: keyof Limits; label: string; unit: string; note?: string }[] = [
+  { key: 'kcalMax', label: 'Calories, at most', unit: 'kcal' },
+  { key: 'proteinMin', label: 'Protein, at least', unit: 'g' },
+  { key: 'netCarbsMax', label: 'Net carbs, at most', unit: 'g', note: 'Carbs minus fiber' },
+  { key: 'sugarMax', label: 'Sugar, at most', unit: 'g' },
+  { key: 'fatPctMax', label: 'Calories from fat, at most', unit: '%' },
+];
+
+/** The targets suggested from the profile and food style, with where each number comes from. */
+function SuggestedTargets({ onEdit }: { onEdit: () => void }) {
+  const c = useColors();
+  const { state } = useTracker();
+  const t = suggestTargets(state.profile!, state.diet.style);
+  const active = activeDiet(state.diet, state.profile).limits;
+  return (
+    <View>
+      <Mute>Suggested for you and your {STYLE_BY_ID[state.diet.style].name.toLowerCase()} diet. These are what the Food tab checks.</Mute>
+      {LIMIT_ROWS.map((r) => {
+        const v = active[r.key];
+        return (
+          <View key={r.key} style={[st.limit, { borderTopColor: c.line }]}>
+            <View style={{ flex: 1 }}>
+              <Text style={{ color: c.ink, fontSize: 15, fontWeight: '600' }}>{r.label}</Text>
+              <Mute style={{ fontSize: 13 }}>{v != null ? t.why[r.key] : 'Not used on this diet.'}</Mute>
+            </View>
+            <Text style={{ color: v != null ? c.ink : c.mute, fontSize: 17, fontWeight: '700', fontVariant: ['tabular-nums'] }}>
+              {v != null ? `${fmtInt(v)}${r.unit === '%' ? '%' : ` ${r.unit}`}` : 'Off'}
+            </Text>
+          </View>
+        );
+      })}
+      <Notice tone="mute" style={{ marginTop: space.md }}>
+        <Text style={{ color: c.ink, fontSize: 15, fontWeight: '600' }}>Want to use different numbers?</Text>
+        <Mute style={{ fontSize: 13 }}>You can change any of these. You can always switch back to the suggestions.</Mute>
+        <Button label="Edit these numbers" onPress={onEdit} style={{ marginTop: space.sm, minHeight: 44 }} />
+      </Notice>
+      <Mute style={{ marginTop: space.sm, fontSize: 12.5, lineHeight: 18 }}>
+        General guidance for healthy adults, not medical advice. If you’re pregnant, have a medical condition, or are under a
+        doctor’s care, check with them first.
+      </Mute>
+    </View>
   );
 }
 

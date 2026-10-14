@@ -14,6 +14,7 @@ import {
   todayString,
   type DayForm,
   type DietSettings,
+  type Profile,
   type Food,
   type FoodEntry,
   type TrackerState,
@@ -43,6 +44,8 @@ interface Tracker {
   deleteFood: (id: string) => void;
   setDiet: (d: DietSettings) => void;
   setFoodLog: (on: boolean) => void;
+  /** Save body stats. Suggested targets become the standard unless you already set your own numbers. */
+  setProfile: (p: Profile) => void;
 }
 
 const Ctx = createContext<Tracker | null>(null);
@@ -151,15 +154,24 @@ export function TrackerProvider({ children }: { children: ReactNode }) {
   const deleteFood = useCallback((id: string) => update((st) => ({ ...st, foods: st.foods.filter((x) => x.id !== id) })), [update]);
   const setDiet = useCallback((d: DietSettings) => update((st) => ({ ...st, diet: d })), [update]);
   const setFoodLog = useCallback((on: boolean) => update((st) => ({ ...st, foodLog: on })), [update]);
+  const setProfile = useCallback(
+    (p: Profile) =>
+      update((st) => {
+        // No numbers of your own yet: start from the suggestions.
+        const own = Object.values(st.diet.limits).some((v) => v != null) && !st.diet.auto;
+        return { ...st, profile: p, diet: own ? st.diet : { ...st.diet, auto: true } };
+      }),
+    [update],
+  );
 
   const value = useMemo(
     () => ({
       loaded, state, today, selected, select, drafts, setDraft, flash, submit, setBase, setGoal, setStart,
-      saveEntry, removeEntry, saveFood, deleteFood, setDiet, setFoodLog,
+      saveEntry, removeEntry, saveFood, deleteFood, setDiet, setFoodLog, setProfile,
     }),
     [
       loaded, state, today, selected, select, drafts, setDraft, flash, submit, setBase, setGoal, setStart,
-      saveEntry, removeEntry, saveFood, deleteFood, setDiet, setFoodLog,
+      saveEntry, removeEntry, saveFood, deleteFood, setDiet, setFoodLog, setProfile,
     ],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

@@ -1,6 +1,7 @@
 import { ALL_EXERCISES, START_DEFAULT } from './config';
 import { mondayOf } from './dates';
 import { DEFAULT_DIET, normalizeDiet } from './diet';
+import { normalizeProfile } from './profile';
 import type { Food, FoodEntry, FoodTag, Nutrients, Portion } from './nutrition';
 import { TAG_LABEL } from './nutrition';
 import type { DayLog, TrackerState } from './types';
@@ -10,7 +11,7 @@ export function defaultState(): TrackerState {
   ALL_EXERCISES.forEach((e) => {
     base[e.id] = e.w;
   });
-  return { start: START_DEFAULT, base, goal: null, logs: {}, foods: [], meals: {}, diet: { ...DEFAULT_DIET, limits: {}, exclude: [] }, foodLog: true };
+  return { start: START_DEFAULT, base, goal: null, logs: {}, foods: [], meals: {}, diet: { ...DEFAULT_DIET, limits: {}, exclude: [] }, foodLog: true, profile: null };
 }
 
 /** Accepts anything (parsed JSON) and returns a valid state, migrating old fields. */
@@ -87,6 +88,7 @@ export function normalize(s: unknown): TrackerState {
   }
   d.diet = normalizeDiet(src.diet);
   d.foodLog = src.foodLog !== false;
+  d.profile = normalizeProfile(src.profile);
   return d;
 }
 

@@ -12,3 +12,4 @@ export * from './nutrition';
 export * from './usda';
 export * from './openfoodfacts';
 export * from './diet';
+export * from './profile';
