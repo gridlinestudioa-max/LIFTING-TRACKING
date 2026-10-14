@@ -1,10 +1,14 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import {
   FOOD_TAGS,
   GRAMS,
+  MEALS,
   SOURCE_LABEL,
+  bumpTally,
+  mealAt,
+  mealOf,
   activeDiet,
   OffError,
   entryFromFood,
@@ -29,6 +33,7 @@ import {
   type Food,
   type FoodEntry,
   type FoodTag,
+  type MealSlot,
   type Nutrients,
   type Portion,
   type Totals,
@@ -79,6 +84,7 @@ export function AddFoodSheet({
   isToday,
   now,
   editing,
+  meal: mealProp,
   onClose,
 }: {
   visible: boolean;
@@ -88,13 +94,19 @@ export function AddFoodSheet({
   now: number;
   /** Entry being edited, or null to add a new one. */
   editing: FoodEntry | null;
+  /** The meal it was opened from. Otherwise the meal follows the time eaten until one is picked. */
+  meal?: MealSlot;
   onClose: () => void;
 }) {
-  const { state, saveEntry, removeEntry, saveFood, deleteFood } = useTracker();
+  const { state, saveEntry, removeEntry, setEntries, saveFood, deleteFood } = useTracker();
   const usda = useUsdaFoods();
   const diet = activeDiet(state.diet, state.profile);
   // Saved foods (yours, and branded foods you've logged) first, then USDA.
-  const all = useMemo(() => [...state.foods, ...(usda.foods ?? [])], [state.foods, usda.foods]);
+  // A USDA food kept on the device (for the tally) is listed once.
+  const all = useMemo(() => {
+    const mine = new Set(state.foods.map((f) => f.id));
+    return [...state.foods, ...(usda.foods ?? []).filter((f) => !mine.has(f.id))];
+  }, [state.foods, usda.foods]);
   const dayEntries = state.meals[day] ?? [];
   const others = editing ? dayEntries.filter((e) => e.id !== editing.id) : dayEntries;
   const extra = state.days[day]?.cin ?? 0;
@@ -109,6 +121,7 @@ export function AddFoodSheet({
   const [time, setTime] = useState(fmtClock(defaultAt));
   // Food being created or edited in the form (null = new).
   const [formFood, setFormFood] = useState<Food | null>(null);
+  const [mealSet, setMeal] = useState<MealSlot | null>(editing ? mealOf(editing) : (mealProp ?? null));
 
   // Editing an entry from a USDA food: once the list has loaded, switch to the real food so the
   // measure can be changed. (Adjusting state during render, once.)
@@ -125,6 +138,8 @@ export function AddFoodSheet({
 
   const at = parseClock(time);
   const timeOk = at != null;
+  const meal = mealSet ?? mealAt(at ?? defaultAt);
+  const when = <WhenRows meal={meal} setMeal={setMeal} time={time} setTime={setTime} isToday={isToday} now={now} />;
 
   const add = (e: FoodEntry) => {
     saveEntry(day, e);
@@ -146,7 +161,7 @@ export function AddFoodSheet({
   const title =
     mode === 'search' ? 'Add food' : mode === 'quick' ? 'Quick add' : mode === 'food' ? (formFood ? 'Edit food' : 'New food') : editing ? 'Edit entry' : 'Add food';
 
-  const entryFor = (q: number, id?: string) => entryFromFood(food!, q, at!, id, portion ?? undefined);
+  const entryFor = (q: number, id?: string) => ({ ...entryFromFood(food!, q, at!, id, portion ?? undefined), meal });
 
   return (
     <Sheet visible={visible} title={title} onClose={onClose} left={back}>
@@ -177,10 +192,8 @@ export function AddFoodSheet({
           }}
           qty={qty}
           setQty={setQty}
-          time={time}
-          setTime={setTime}
-          isToday={isToday}
-          now={now}
+          when={when}
+          timeOk={timeOk}
           totals={(q) => entryTotals(entryFor(q, 'preview'))}
           preview={(q) => (timeOk ? previewEntry(diet, others, entryFor(q, 'preview'), isToday ? now : null, extra) : null)}
           submitLabel={editing ? 'Save' : 'Add to log'}
@@ -193,6 +206,19 @@ export function AddFoodSheet({
             if (food.src === 'off') saveFood(food);
             add(e);
           }}
+          onTally={
+            editing
+              ? undefined
+              : (q) => {
+                  if (!timeOk) return;
+                  const f: Food = { ...food, tally: true };
+                  if (portion && portion !== GRAMS) f.tallyPortion = portion;
+                  else delete f.tallyPortion;
+                  saveFood(f);
+                  setEntries(day, (list) => bumpTally(list, f, Math.max(1, Math.round(q)), at!));
+                  onClose();
+                }
+          }
           onRemove={
             editing
               ? () => {
@@ -214,12 +240,9 @@ export function AddFoodSheet({
 
       {mode === 'quick' ? (
         <QuickView
-          time={time}
-          setTime={setTime}
-          isToday={isToday}
-          now={now}
+          when={when}
           preview={(name, n) => (timeOk ? previewEntry(diet, others, quickEntry(name, n, at!), isToday ? now : null, extra) : null)}
-          onSubmit={(name, n) => timeOk && add(quickEntry(name, n, at!))}
+          onSubmit={(name, n) => timeOk && add({ ...quickEntry(name, n, at!), meal })}
         />
       ) : null}
 
@@ -254,7 +277,7 @@ export function AddFoodSheet({
 /** The food an entry came from, or one rebuilt from the entry (quick adds, deleted foods). */
 function foodForEntry(e: FoodEntry, all: Food[]): Food {
   const f = e.foodId ? all.find((x) => x.id === e.foodId) : undefined;
-  return f ?? { id: e.foodId ?? e.id, name: e.name, serving: e.serving, n: e.n, tags: e.tags };
+  return f ?? { id: e.foodId ?? e.id, name: e.name, serving: e.serving, n: e.n, tags: e.tags, ...(e.note ? { note: e.note } : {}) };
 }
 
 // ---------- Search ----------
@@ -272,10 +295,11 @@ function FoodRow({ f, first, onPress }: { f: Food; first: boolean; onPress: () =
     <Pressable
       onPress={onPress}
       accessibilityRole="button"
-      accessibilityLabel={`${f.name}${f.brand ? `, ${f.brand}` : ''}, ${f.serving}, ${fmtInt(f.n.kcal)} calories`}
+      accessibilityLabel={`${f.name}${f.note ? `, ${f.note}` : ''}${f.brand ? `, ${f.brand}` : ''}, ${f.serving}, ${fmtInt(f.n.kcal)} calories`}
       style={({ pressed }) => [st.result, { borderTopColor: c.line, opacity: pressed ? 0.6 : 1 }, first ? { borderTopWidth: 0 } : null]}>
       <View style={{ flex: 1 }}>
         <Text style={{ color: c.ink, fontSize: 16, fontWeight: '600' }}>{f.name}</Text>
+        {f.note ? <Text style={{ color: c.ink, fontSize: 13.5 }}>{f.note}</Text> : null}
         <Text style={{ color: c.mute, fontSize: 13 }}>{meta}</Text>
       </View>
       <Text style={{ color: c.ink, fontSize: 16, fontWeight: '700', ...tabular }}>
@@ -422,6 +446,32 @@ function SearchView({
 }
 
 // ---------- Amount ----------
+
+/** Which meal, and the time eaten. */
+function WhenRows({
+  meal,
+  setMeal,
+  ...time
+}: {
+  meal: MealSlot;
+  setMeal: (m: MealSlot) => void;
+  time: string;
+  setTime: (t: string) => void;
+  isToday: boolean;
+  now: number;
+}) {
+  const c = useColors();
+  return (
+    <View style={{ gap: space.md }}>
+      <View style={{ gap: 6 }}>
+        <Text style={st.lbl(c.mute)}>Meal</Text>
+        <Select label="Meal" value={meal} options={MEALS.map((m) => ({ value: m.id, label: m.id === 'snack' ? 'Snack' : m.label }))} onChange={setMeal} />
+      </View>
+      <TimeRow {...time} />
+    </View>
+  );
+}
+
 function TimeRow({ time, setTime, isToday, now }: { time: string; setTime: (t: string) => void; isToday: boolean; now: number }) {
   const c = useColors();
   const ok = parseClock(time) != null;
@@ -454,14 +504,13 @@ function AmountView({
   setPortion,
   qty,
   setQty,
-  time,
-  setTime,
-  isToday,
-  now,
+  when,
+  timeOk,
   totals,
   preview,
   submitLabel,
   onSubmit,
+  onTally,
   onRemove,
   onEditFood,
 }: {
@@ -471,14 +520,15 @@ function AmountView({
   setPortion: (p: Portion) => void;
   qty: string;
   setQty: (q: string) => void;
-  time: string;
-  setTime: (t: string) => void;
-  isToday: boolean;
-  now: number;
+  /** Meal and time fields. */
+  when: ReactNode;
+  timeOk: boolean;
   totals: (q: number) => Totals;
   preview: (q: number) => ReturnType<typeof previewEntry>;
   submitLabel: string;
   onSubmit: (q: number) => void;
+  /** Put the food on the Tally list and count this many. */
+  onTally?: (q: number) => void;
   onRemove?: () => void;
   onEditFood?: () => void;
 }) {
@@ -500,6 +550,7 @@ function AmountView({
   return (
     <View>
       <Text style={[st.name, { color: c.ink }]}>{food.name}</Text>
+      {food.note ? <Text style={{ color: c.ink, fontSize: 15, marginTop: 2 }}>{food.note}</Text> : null}
       <Mute>{[food.brand, source].filter(Boolean).join(' · ') || ' '}</Mute>
       {onEditFood ? (
         <View style={{ marginTop: space.sm, flexDirection: 'row' }}>
@@ -537,9 +588,7 @@ function AmountView({
           </View>
         </View>
       </View>
-      <View style={{ marginTop: space.md }}>
-        <TimeRow time={time} setTime={setTime} isToday={isToday} now={now} />
-      </View>
+      <View style={{ marginTop: space.md }}>{when}</View>
 
       <NutritionSummary t={t} />
 
@@ -553,7 +602,13 @@ function AmountView({
         </Notice>
       ) : null}
 
-      <Button label={submitLabel} primary onPress={() => onSubmit(q)} style={{ marginTop: space.xl, opacity: qOk && parseClock(time) != null ? 1 : 0.4 }} />
+      <Button label={submitLabel} primary onPress={() => onSubmit(q)} style={{ marginTop: space.xl, opacity: qOk && timeOk ? 1 : 0.4 }} />
+      {onTally && !byWeight ? (
+        <View style={{ marginTop: space.md, gap: 6 }}>
+          <Button label="Add to Tally list" onPress={() => qOk && onTally(q)} style={{ opacity: qOk && timeOk ? 1 : 0.4 }} />
+          <Mute style={{ fontSize: 13 }}>For things you have a few of through the day, like mints or coffees. Count them with + and − on the Food tab.</Mute>
+        </View>
+      ) : null}
       {onRemove ? <Button label="Remove from log" danger onPress={onRemove} style={{ marginTop: space.md }} /> : null}
     </View>
   );
@@ -594,17 +649,11 @@ export function NutritionSummary({ t }: { t: Totals }) {
 const grams = (v: string) => (v.trim() === '' ? 0 : Number(v));
 
 function QuickView({
-  time,
-  setTime,
-  isToday,
-  now,
+  when,
   preview,
   onSubmit,
 }: {
-  time: string;
-  setTime: (t: string) => void;
-  isToday: boolean;
-  now: number;
+  when: ReactNode;
   preview: (name: string, n: Nutrients) => ReturnType<typeof previewEntry>;
   onSubmit: (name: string, n: Nutrients) => void;
 }) {
@@ -634,9 +683,7 @@ function QuickView({
         <NumField label="Carbs" value={cb} onChange={setCb} unit="g" />
         <NumField label="Fat" value={f} onChange={setF} unit="g" />
       </View>
-      <View style={{ marginTop: space.md }}>
-        <TimeRow time={time} setTime={setTime} isToday={isToday} now={now} />
-      </View>
+      <View style={{ marginTop: space.md }}>{when}</View>
       {pv ? (
         <Notice tone={pv.tone} style={{ marginTop: space.lg }}>
           {pv.lines.map((l, i) => (
@@ -691,6 +738,7 @@ function FoodForm({
   const c = useColors();
   const str = (v: number | undefined) => (v != null ? fmt(v) : '');
   const [name, setName] = useState(initial?.name ?? initialName);
+  const [note, setNote] = useState(initial?.note ?? '');
   const [brand, setBrand] = useState(initial?.brand ?? '');
   const [serving, setServing] = useState(initial?.serving ?? '');
   const [kcal, setKcal] = useState(str(initial?.n.kcal));
@@ -715,6 +763,17 @@ function FoodForm({
       <View style={{ marginTop: space.md, gap: 6 }}>
         <Text style={st.lbl(c.mute)}>Name</Text>
         <Field value={name} onChangeText={setName} placeholder="e.g. Protein bar, chocolate" accessibilityLabel="Food name" />
+      </View>
+      <View style={{ marginTop: space.md, gap: 6 }}>
+        <Text style={st.lbl(c.mute)}>Details (optional)</Text>
+        <Field
+          value={note}
+          onChangeText={setNote}
+          placeholder="e.g. Homemade, with olive oil"
+          maxLength={120}
+          accessibilityLabel="Details"
+        />
+        <Mute style={{ fontSize: 13 }}>Shown under the name, so foods with the same name are easy to tell apart.</Mute>
       </View>
       <View style={[st.row, { marginTop: space.md }]}>
         <View style={{ flex: 1, gap: 6 }}>
@@ -763,6 +822,8 @@ function FoodForm({
           if (e) return setErr(e);
           const food: Food = { id: initial?.id ?? newId('f'), ...draft, tags, custom: true };
           if (brand.trim()) food.brand = brand.trim();
+          if (note.trim()) food.note = note.trim();
+          if (initial?.tally) food.tally = true;
           onSave(food);
         }}
       />

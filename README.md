@@ -2,7 +2,7 @@
 
 A phone app (and website) for tracking **food**, **cardio** and **lifting**. People sign in, set up a profile, and pick which of the three they use; each is a tab.
 
-- **Food:** a food log with about 12,900 built-in USDA foods plus branded foods from Open Food Facts, calories in and out, diets (fasting, keto, vegan, ...) and suggested daily targets from body stats.
+- **Food:** a food log with about 12,900 built-in USDA foods plus branded foods from Open Food Facts, grouped into breakfast, lunch, dinner and snacks. A meal can be copied from an earlier day, all of it or only some items. Foods you create can have details, so two can share a name. A Tally list counts things like mints through the day with + and −. Also: calories in (filled in from the log) and out, diets (fasting, keto, vegan, ...) and suggested daily targets from body stats.
 - **Cardio:** log any run, walk, ride, swim or row. Optional plans put workouts on a calendar and track whether each was done: running (maintenance, 5K, 10K, half marathon, marathon), biking (maintenance, 10, 25, 50, 100 miles), swimming (maintenance, 200, 400, 800, 1500 m) and triathlon (sprint, standard, half and full Ironman).
 - **Lifting:** plans for 3 to 7 days a week (push/pull/legs, upper/lower, full body, body part split, or custom), built from a library of 700+ exercises, or an unplanned workout any day. Each exercise has sets × a rep range; the app raises the weight when you hit the top of the range on every set (double progression).
 

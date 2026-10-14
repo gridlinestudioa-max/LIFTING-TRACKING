@@ -1,5 +1,7 @@
 // Foods, the food log, and nutrition totals. Pure logic, no React.
 
+import { addDays } from './dates';
+
 /** Food groups a diet can rule out. Kept on each food so diets like vegan or paleo can read them. */
 export type FoodTag = 'meat' | 'fish' | 'dairy' | 'egg' | 'grain' | 'legume' | 'sugar' | 'alcohol';
 
@@ -60,6 +62,12 @@ export interface Food {
   per100?: Nutrients;
   /** Household measures with weights; the first is the default serving. */
   portions?: Portion[];
+  /** The user's own words about it, so two foods can share a name ("homemade, with olive oil"). */
+  note?: string;
+  /** Kept on the Tally list, counted with + and − through the day. */
+  tally?: boolean;
+  /** What one tap of the tally adds, for foods with weights. Otherwise one serving. */
+  tallyPortion?: Portion;
 }
 
 /**
@@ -79,6 +87,106 @@ export interface FoodEntry {
   tags: FoodTag[];
   /** Minutes after midnight, local time. */
   at: number;
+  /** Which meal it was part of. Older entries without one are placed by time (`mealOf`). */
+  meal?: MealSlot;
+  /** The food's details, copied when logged. */
+  note?: string;
+  /** Counted on the Tally list rather than shown under a meal. One per food per day. */
+  tally?: boolean;
+}
+
+// ---------- Meals ----------
+
+export type MealSlot = 'breakfast' | 'lunch' | 'dinner' | 'snack';
+
+export const MEALS: { id: MealSlot; label: string }[] = [
+  { id: 'breakfast', label: 'Breakfast' },
+  { id: 'lunch', label: 'Lunch' },
+  { id: 'dinner', label: 'Dinner' },
+  { id: 'snack', label: 'Snacks' },
+];
+
+export const MEAL_LABEL: Record<MealSlot, string> = { breakfast: 'Breakfast', lunch: 'Lunch', dinner: 'Dinner', snack: 'Snack' };
+
+export function isMealSlot(v: unknown): v is MealSlot {
+  return v === 'breakfast' || v === 'lunch' || v === 'dinner' || v === 'snack';
+}
+
+/** The usual meal for a time of day: breakfast before 11, lunch to 3, snack to 5, dinner to 9:30, then snack. */
+export function mealAt(min: number): MealSlot {
+  if (min >= 4 * 60 && min < 11 * 60) return 'breakfast';
+  if (min >= 11 * 60 && min < 15 * 60) return 'lunch';
+  if (min >= 17 * 60 && min < 21.5 * 60) return 'dinner';
+  return 'snack';
+}
+
+export function mealOf(e: Pick<FoodEntry, 'meal' | 'at'>): MealSlot {
+  return e.meal ?? mealAt(e.at);
+}
+
+/** A day's entries for one meal, by time. Tally entries are left out; they have their own list. */
+export function mealEntries(entries: readonly FoodEntry[], meal: MealSlot): FoodEntry[] {
+  return byTime(entries.filter((e) => !e.tally && mealOf(e) === meal));
+}
+
+/** Days before `day` (newest first, up to `back` days) that have something logged for this meal. */
+export function daysWithMeal(meals: Record<string, FoodEntry[]>, day: string, meal: MealSlot, back = 30): string[] {
+  const out: string[] = [];
+  for (let i = 1; i <= back; i++) {
+    const d = addDays(day, -i);
+    if (mealEntries(meals[d] ?? [], meal).length) out.push(d);
+  }
+  return out;
+}
+
+/** Copies of entries for another day: new ids, the same meal and time. */
+export function copyEntries(entries: readonly FoodEntry[], meal: MealSlot): FoodEntry[] {
+  return entries.map((e) => {
+    const { tally: _t, ...rest } = e;
+    return { ...rest, id: newId('e'), meal };
+  });
+}
+
+// ---------- Tally ----------
+
+/** What one tap of a food's tally adds: its tally measure, or one serving. */
+export function tallyUnit(food: Food): { serving: string; n: Nutrients } {
+  const p = food.tallyPortion && food.per100 ? food.tallyPortion : null;
+  return p ? { serving: portionText(p), n: scaleNutrients(food.per100!, p.g / 100) } : { serving: food.serving, n: { ...food.n } };
+}
+
+/** The day's tally entry for a food, if it has one. */
+export function tallyEntry(entries: readonly FoodEntry[], foodId: string): FoodEntry | undefined {
+  return entries.find((e) => e.tally && e.foodId === foodId);
+}
+
+/**
+ * The day's entries with a food's tally changed by `delta` (whole counts). The entry's time moves to
+ * `at`, the latest tap, so fasting windows see it. At 0 the entry is removed.
+ */
+export function bumpTally(entries: readonly FoodEntry[], food: Food, delta: number, at: number): FoodEntry[] {
+  const cur = tallyEntry(entries, food.id);
+  const qty = Math.max(0, (cur?.qty ?? 0) + delta);
+  if (!cur) {
+    if (qty <= 0) return [...entries];
+    const u = tallyUnit(food);
+    const e: FoodEntry = {
+      id: newId('e'),
+      foodId: food.id,
+      name: food.brand ? `${food.name} (${food.brand})` : food.name,
+      serving: u.serving,
+      qty,
+      n: u.n,
+      tags: [...food.tags],
+      at,
+      meal: 'snack',
+      tally: true,
+    };
+    if (food.note) e.note = food.note;
+    return [...entries, e];
+  }
+  if (qty <= 0) return entries.filter((e) => e !== cur);
+  return entries.map((e) => (e === cur ? { ...e, qty, at: delta > 0 ? at : e.at } : e));
 }
 
 export interface Totals {
@@ -151,6 +259,7 @@ export function entryFromFood(food: Food, qty: number, at: number, id = newId('e
     n: p ? scaleNutrients(food.per100!, p.g / 100) : { ...food.n },
     tags: [...food.tags],
     at,
+    ...(food.note ? { note: food.note } : {}),
   };
 }
 
@@ -271,7 +380,7 @@ const index = new WeakMap<Food, Indexed>();
 function indexed(f: Food): Indexed {
   let x = index.get(f);
   if (!x) {
-    x = { name: norm(f.name), words: tokenize(`${f.name} ${f.brand ?? ''}`) };
+    x = { name: norm(f.name), words: tokenize(`${f.name} ${f.brand ?? ''} ${f.note ?? ''}`) };
     index.set(f, x);
   }
   return x;
