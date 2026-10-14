@@ -43,6 +43,7 @@ import { Card, Field, Label, Mute } from '../components';
 import { MultiSelect, Select } from '../Select';
 import { useTracker } from '../store';
 import { fonts, space, tabular, toneColor, useColors } from '../theme';
+import { BarcodeScanner } from './BarcodeScanner';
 import { Button, LinkButton, Notice, Pill, Sheet } from './kit';
 
 type Mode = 'search' | 'amount' | 'quick' | 'food';
@@ -342,6 +343,28 @@ function SearchView({
   const barcode = isBarcode(q);
   const [off, setOff] = useState<OffState>({ status: 'idle' });
   const [retry, setRetry] = useState(0);
+  const [scanning, setScanning] = useState(false);
+  const [looking, setLooking] = useState<string | null>(null);
+
+  // A scanned code opens its food straight away: a product you've logged, one already looked up, or a fresh lookup.
+  const onScanned = (code: string) => {
+    setScanning(false);
+    const known = all.find((f) => f.id === `o${code}`) ?? offCache.get(code)?.[0];
+    if (known) return onPick(known);
+    setLooking(code);
+    const opts = { fetch: (u: string, i?: RequestInit) => fetch(u, i), headers: OFF_HEADERS };
+    offByBarcode(code, opts)
+      .then((f) => {
+        offCache.set(code, [f]);
+        setLooking(null);
+        onPick(f);
+      })
+      .catch(() => {
+        // Not found or offline: show the number in the search box with the usual message and options.
+        setLooking(null);
+        setQuery(code);
+      });
+  };
   const cached = offCache.get(key);
 
   // Search Open Food Facts once typing pauses. It allows about 10 searches a minute, so wait, and reuse results.
@@ -393,9 +416,18 @@ function SearchView({
         clearButtonMode="while-editing"
       />
       <View style={st.row}>
-        <Pill label="Quick add calories" selected={false} onPress={onQuick} />
+        <Pill label="Scan barcode" selected={false} onPress={() => setScanning(true)} />
+        <Pill label="Quick add" selected={false} onPress={onQuick} />
         <Pill label="Create a food" selected={false} onPress={onCreate} />
       </View>
+      {scanning ? (
+        <BarcodeScanner
+          visible
+          onClose={() => setScanning(false)}
+          onScan={onScanned}
+        />
+      ) : null}
+      {looking ? <Mute style={{ marginTop: space.md }}>{`Looking up barcode ${looking}…`}</Mute> : null}
 
       {!q ? (
         results.length ? (
@@ -420,7 +452,7 @@ function SearchView({
                 <LinkButton label="Try again" onPress={() => setRetry((n) => n + 1)} />
               </View>
             ) : !results.length && (cached || q.length < 3) ? (
-              <Mute>{`No matches for “${q}”.`}</Mute>
+              <Mute>{barcode ? `No food found for barcode ${q}. Try searching by name, or create it.` : `No matches for “${q}”.`}</Mute>
             ) : null}
           </View>
 
