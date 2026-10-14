@@ -31,7 +31,7 @@ export interface Palette {
 }
 
 const light: Palette = {
-  bg: '#f2f3f0', card: '#ffffff', soft: '#e8eae6', ink: '#15181b', mute: '#5f656a', line: '#dcdfda',
+  bg: '#ebece8', card: '#ffffff', soft: '#e8eae6', ink: '#15181b', mute: '#5f656a', line: '#dcdfda',
   accent: '#15181b', onAccent: '#f2f3f0', accentbg: '#e2e5e0',
   ok: '#13733a', okbg: '#dff1e5', bad: '#bd2530', badbg: '#fae1e3', warn: '#8f5a08', warnbg: '#faedcb',
   onType: '#ffffff',
@@ -39,7 +39,7 @@ const light: Palette = {
 };
 
 const dark: Palette = {
-  bg: '#0f1113', card: '#171a1d', soft: '#21262a', ink: '#eceee9', mute: '#9aa1a6', line: '#2a3035',
+  bg: '#0c0e10', card: '#181c1f', soft: '#21262a', ink: '#eceee9', mute: '#9aa1a6', line: '#2a3035',
   accent: '#eceee9', onAccent: '#0f1113', accentbg: '#262c30',
   ok: '#4fc77c', okbg: '#12301f', bad: '#f06a72', badbg: '#3a1a1d', warn: '#e2a63e', warnbg: '#38290f',
   onType: '#101214',

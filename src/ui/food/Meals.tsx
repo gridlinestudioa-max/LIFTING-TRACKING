@@ -10,7 +10,6 @@ import {
   copyEntries,
   daysWithMeal,
   entryTotals,
-  fmt,
   fmtClock,
   fmtInt,
   mealEntries,
@@ -22,7 +21,7 @@ import {
   type MealSlot,
 } from '@/logic';
 
-import { Mute } from '../components';
+import { Mute, Section } from '../components';
 import { Select } from '../Select';
 import { useTracker } from '../store';
 import { fonts, space, tabular, useColors } from '../theme';
@@ -47,30 +46,40 @@ export function MealGroups({
   const c = useColors();
   const { state } = useTracker();
   return (
-    <View style={{ marginTop: space.md }}>
+    <>
       {MEALS.map((m) => {
         const list = mealEntries(entries, m.id);
         const canCopy = daysWithMeal(state.meals, day, m.id).length > 0;
         return (
-          <View key={m.id} style={[st.group, { borderTopColor: c.line }]}>
-            <View style={st.groupHead}>
-              <Text style={[st.groupTitle, { color: c.ink }]}>{m.label}</Text>
-              {list.length ? <Text style={{ color: c.mute, fontSize: 14, ...tabular }}>{`${fmtInt(sumTotals(list).kcal)} kcal`}</Text> : null}
-              <View style={{ flex: 1 }} />
-              {canCopy ? <LinkButton label="Copy" onPress={() => onCopy(m.id)} /> : null}
-              <LinkButton label="Add" onPress={() => onAdd(m.id)} />
-            </View>
-            {list.map((e) => (
-              <EntryRow key={e.id} e={e} flags={flags[e.id]} onPress={() => onEdit(e)} />
+          <Section
+            key={m.id}
+            title={m.label}
+            action={list.length ? <Text style={{ color: c.ink, fontSize: 16, fontWeight: '700', ...tabular }}>{fmtInt(sumTotals(list).kcal)}</Text> : undefined}>
+            {list.map((e, i) => (
+              <EntryRow key={e.id} e={e} flags={flags[e.id]} first={i === 0} onPress={() => onEdit(e)} />
             ))}
-          </View>
+            <View style={[st.foot, list.length ? { borderTopColor: c.line, borderTopWidth: 1, marginTop: space.xs } : null]}>
+              <TextButton label="+ Add food" onPress={() => onAdd(m.id)} a11y={`Add food to ${m.label.toLowerCase()}`} />
+              {canCopy ? <TextButton label="Copy previous" onPress={() => onCopy(m.id)} a11y={`Copy ${m.label.toLowerCase()} from an earlier day`} muted /> : null}
+            </View>
+          </Section>
         );
       })}
-    </View>
+    </>
   );
 }
 
-function EntryRow({ e, flags, onPress }: { e: FoodEntry; flags?: string[]; onPress: () => void }) {
+/** A plain text action, larger than a link and without the underline. */
+function TextButton({ label, onPress, a11y, muted }: { label: string; onPress: () => void; a11y?: string; muted?: boolean }) {
+  const c = useColors();
+  return (
+    <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={a11y ?? label} hitSlop={8}>
+      {({ pressed }) => <Text style={{ color: muted ? c.mute : c.ink, fontSize: 15, fontWeight: '700', opacity: pressed ? 0.5 : 1 }}>{label}</Text>}
+    </Pressable>
+  );
+}
+
+function EntryRow({ e, flags, first, onPress }: { e: FoodEntry; flags?: string[]; first: boolean; onPress: () => void }) {
   const c = useColors();
   const t = entryTotals(e);
   const off = !!flags?.length;
@@ -79,20 +88,16 @@ function EntryRow({ e, flags, onPress }: { e: FoodEntry; flags?: string[]; onPre
       onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel={`${e.name}${e.note ? `, ${e.note}` : ''}, ${fmtClock(e.at)}, ${fmtInt(t.kcal)} calories${off ? ', off track' : ''}. Edit`}
-      style={({ pressed }) => [st.entry, { opacity: pressed ? 0.6 : 1 }]}>
-      <Text style={{ width: 72, color: c.mute, fontSize: 13, paddingTop: 2, ...tabular }}>{fmtClock(e.at)}</Text>
+      style={({ pressed }) => [st.entry, !first && { borderTopWidth: 1, borderTopColor: c.line }, { opacity: pressed ? 0.6 : 1 }]}>
       <View style={{ flex: 1 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
           {off ? <Dot tone="bad" size={8} /> : null}
           <Text style={{ color: c.ink, fontSize: 16, fontWeight: '600', flexShrink: 1 }}>{e.name}</Text>
         </View>
-        {e.note ? <Text style={{ color: c.ink, fontSize: 13.5 }}>{e.note}</Text> : null}
-        <Text style={{ color: c.mute, fontSize: 13, ...tabular }}>
-          {amountText(e)} · P {fmt(Math.round(t.protein))} · C {fmt(Math.round(t.netCarbs))} net · F {fmt(Math.round(t.fat))}
-        </Text>
+        <Text style={{ color: c.mute, fontSize: 13, ...tabular }}>{[e.note, amountText(e), fmtClock(e.at)].filter(Boolean).join(' · ')}</Text>
         {off ? <Text style={{ color: c.bad, fontSize: 13, marginTop: 2 }}>{flags!.join(' · ')}</Text> : null}
       </View>
-      <Text style={{ color: c.ink, fontSize: 16, fontWeight: '700', ...tabular }}>{fmtInt(t.kcal)}</Text>
+      <Text style={{ color: c.ink, fontSize: 16, ...tabular }}>{fmtInt(t.kcal)}</Text>
     </Pressable>
   );
 }
@@ -139,8 +144,7 @@ export function CopyMealSheet({
               setOff(new Set());
             }}
           />
-          <Mute style={{ marginTop: space.lg }}>Untick anything that was different.</Mute>
-          <View style={{ marginTop: space.sm }}>
+          <View style={{ marginTop: space.lg }}>
             {list.map((e) => {
               const on = !off.has(e.id);
               return (
@@ -162,19 +166,15 @@ export function CopyMealSheet({
                   </View>
                   <View style={{ flex: 1 }}>
                     <Text style={{ color: c.ink, fontSize: 16, fontWeight: '600' }}>{e.name}</Text>
-                    {e.note ? <Text style={{ color: c.ink, fontSize: 13.5 }}>{e.note}</Text> : null}
-                    <Text style={{ color: c.mute, fontSize: 13 }}>{amountText(e)}</Text>
+                    <Text style={{ color: c.mute, fontSize: 13 }}>{[e.note, amountText(e)].filter(Boolean).join(' · ')}</Text>
                   </View>
                   <Text style={{ color: c.ink, fontSize: 16, fontWeight: '700', ...tabular }}>{fmtInt(entryTotals(e).kcal)}</Text>
                 </Pressable>
               );
             })}
           </View>
-          <Mute style={{ marginTop: space.md }}>
-            {chosen.length ? `${fmtInt(sumTotals(chosen).kcal)} kcal. Same times as before; tap an item afterwards to change it.` : 'Nothing ticked.'}
-          </Mute>
           <Button
-            label={chosen.length ? `Add ${chosen.length} to ${name}` : 'Add to log'}
+            label={chosen.length ? `Add ${chosen.length} · ${fmtInt(sumTotals(chosen).kcal)} kcal` : 'Nothing selected'}
             primary
             style={{ marginTop: space.lg, opacity: chosen.length ? 1 : 0.4 }}
             onPress={() => {
@@ -208,12 +208,7 @@ export function TallyList({ day, isToday, now }: { day: string; isToday: boolean
   };
 
   return (
-    <View style={[st.group, { borderTopColor: c.line }]}>
-      <View style={st.groupHead}>
-        <Text style={[st.groupTitle, { color: c.ink }]}>Tally</Text>
-        <View style={{ flex: 1 }} />
-        <LinkButton label={editing ? 'Done' : 'Edit list'} onPress={() => setEditing(!editing)} />
-      </View>
+    <Section title="Tally" action={<LinkButton label={editing ? 'Done' : 'Edit'} onPress={() => setEditing(!editing)} />}>
       {foods.map((f) => {
         const e = tallyEntry(entries, f.id);
         const n = e?.qty ?? 0;
@@ -222,13 +217,12 @@ export function TallyList({ day, isToday, now }: { day: string; isToday: boolean
           <View key={f.id} style={st.tally}>
             <View style={{ flex: 1 }}>
               <Text style={{ color: c.ink, fontSize: 16, fontWeight: '600' }}>{f.name}</Text>
-              {f.note ? <Text style={{ color: c.ink, fontSize: 13.5 }}>{f.note}</Text> : null}
               <Text style={{ color: c.mute, fontSize: 13, ...tabular }}>
-                {e ? `${amountText(e)} · ${fmtInt(entryTotals(e).kcal)} kcal` : 'None yet'}
+                {[f.note, e ? `${fmtInt(entryTotals(e).kcal)} kcal` : null].filter(Boolean).join(' · ') || ' '}
               </Text>
               {editing && listed ? (
                 <View style={{ flexDirection: 'row', marginTop: 4 }}>
-                  <LinkButton label="Take off the list" color={c.bad} onPress={() => {
+                  <LinkButton label="Remove" color={c.bad} onPress={() => {
                       const { tally: _t, tallyPortion: _p, ...rest } = f;
                       saveFood(rest);
                     }} />
@@ -243,16 +237,13 @@ export function TallyList({ day, isToday, now }: { day: string; isToday: boolean
           </View>
         );
       })}
-      <Mute style={{ fontSize: 13, marginTop: space.xs }}>Counts go into the day’s totals. Add more from Add food → Add to Tally list.</Mute>
-    </View>
+    </Section>
   );
 }
 
 const st = StyleSheet.create({
-  group: { borderTopWidth: 1, paddingTop: space.md, paddingBottom: space.sm },
-  groupHead: { flexDirection: 'row', alignItems: 'baseline', gap: space.md },
-  groupTitle: { fontFamily: fonts.semi, fontSize: 20, lineHeight: 26 },
-  entry: { flexDirection: 'row', alignItems: 'flex-start', gap: space.sm, paddingVertical: space.sm },
+  entry: { flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingVertical: space.sm + 2 },
+  foot: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingTop: space.md },
   lbl: { fontSize: 13, fontWeight: '600', marginBottom: 6 },
   check: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.md, borderTopWidth: 1 },
   box: { width: 24, height: 24, borderRadius: 6, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center' },

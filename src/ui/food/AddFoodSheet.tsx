@@ -39,7 +39,7 @@ import {
   type Totals,
 } from '@/logic';
 
-import { Field, Label, Mute } from '../components';
+import { Card, Field, Label, Mute } from '../components';
 import { MultiSelect, Select } from '../Select';
 import { useTracker } from '../store';
 import { fonts, space, tabular, toneColor, useColors } from '../theme';
@@ -383,10 +383,7 @@ function SearchView({
             ))}
           </View>
         ) : (
-          <Mute style={{ marginTop: space.lg }}>
-            Search about 12,900 foods from USDA, or branded and packaged foods from Open Food Facts. You can also type a barcode
-            number.
-          </Mute>
+          <Mute style={{ marginTop: space.lg }}>Search foods, brands or a barcode.</Mute>
         )
       ) : (
         <>
@@ -396,7 +393,7 @@ function SearchView({
               {results.map((f, i) => (
                 <FoodRow key={f.id} f={f} first={i === 0} onPress={() => onPick(f)} />
               ))}
-              {!usdaLoading && !results.length ? <Mute>{`No matches in your foods or USDA for “${q}”.`}</Mute> : null}
+              {!usdaLoading && !results.length ? <Mute>{`No matches for “${q}”.`}</Mute> : null}
             </View>
           ) : null}
 
@@ -431,16 +428,11 @@ function SearchView({
           </View>
 
           <View style={{ marginTop: space.xl, gap: space.sm }}>
-            <Mute>Can’t find it?</Mute>
             <Button label={`Create “${q}”`} onPress={onCreate} />
           </View>
         </>
       )}
 
-      <Mute style={{ marginTop: space.xl, fontSize: 12.5, lineHeight: 18 }}>
-        Foods from USDA FoodData Central (public domain) and Open Food Facts (Open Database License, entered by volunteers).
-        Food groups used by diets are a best guess from ingredients and labels; check the package if it matters.
-      </Mute>
     </View>
   );
 }
@@ -558,8 +550,9 @@ function AmountView({
         </View>
       ) : null}
 
+      <Card style={{ marginTop: space.lg }}>
       {options.length ? (
-        <View style={{ marginTop: space.lg, gap: 6 }}>
+        <View style={{ gap: 6 }}>
           <Text style={st.lbl(c.mute)}>Measure</Text>
           <Select
             label="Measure"
@@ -569,7 +562,7 @@ function AmountView({
           />
         </View>
       ) : (
-        <Mute style={{ marginTop: space.sm }}>1 serving = {food.serving}</Mute>
+        <Mute>1 serving = {food.serving}</Mute>
       )}
 
       <View style={[st.row, { marginTop: space.lg, alignItems: 'flex-start' }]}>
@@ -589,8 +582,11 @@ function AmountView({
         </View>
       </View>
       <View style={{ marginTop: space.md }}>{when}</View>
+      </Card>
 
-      <NutritionSummary t={t} />
+      <Card style={{ marginBottom: 0 }}>
+        <NutritionSummary t={t} />
+      </Card>
 
       {p ? (
         <Notice tone={p.tone} style={{ marginTop: space.lg }}>
@@ -606,7 +602,6 @@ function AmountView({
       {onTally && !byWeight ? (
         <View style={{ marginTop: space.md, gap: 6 }}>
           <Button label="Add to Tally list" onPress={() => qOk && onTally(q)} style={{ opacity: qOk && timeOk ? 1 : 0.4 }} />
-          <Mute style={{ fontSize: 13 }}>For things you have a few of through the day, like mints or coffees. Count them with + and − on the Food tab.</Mute>
         </View>
       ) : null}
       {onRemove ? <Button label="Remove from log" danger onPress={onRemove} style={{ marginTop: space.md }} /> : null}
@@ -626,7 +621,7 @@ export function NutritionSummary({ t }: { t: Totals }) {
     </View>
   );
   return (
-    <View style={[st.nutri, { borderColor: c.line }]}>
+    <View style={st.nutri}>
       <Text style={[st.kcal, { color: c.ink }]}>
         {fmtInt(t.kcal)}
         <Text style={{ fontFamily: fonts.semi, fontSize: 18, color: c.mute }}> kcal</Text>
@@ -670,8 +665,7 @@ function QuickView({
 
   return (
     <View>
-      <Mute>For a meal out or anything not in the list. Only calories are required.</Mute>
-      <View style={{ marginTop: space.md, gap: 6 }}>
+      <View style={{ gap: 6 }}>
         <Text style={st.lbl(c.mute)}>What was it? (optional)</Text>
         <Field value={name} onChangeText={setName} placeholder="e.g. Lunch out" accessibilityLabel="Name" />
       </View>
@@ -759,8 +753,7 @@ function FoodForm({
 
   return (
     <View>
-      <Mute>Copy the numbers from the nutrition label. Values are for one serving.</Mute>
-      <View style={{ marginTop: space.md, gap: 6 }}>
+      <View style={{ gap: 6 }}>
         <Text style={st.lbl(c.mute)}>Name</Text>
         <Field value={name} onChangeText={setName} placeholder="e.g. Protein bar, chocolate" accessibilityLabel="Food name" />
       </View>
@@ -773,7 +766,6 @@ function FoodForm({
           maxLength={120}
           accessibilityLabel="Details"
         />
-        <Mute style={{ fontSize: 13 }}>Shown under the name, so foods with the same name are easy to tell apart.</Mute>
       </View>
       <View style={[st.row, { marginTop: space.md }]}>
         <View style={{ flex: 1, gap: 6 }}>
@@ -830,7 +822,7 @@ function FoodForm({
       {onDelete ? (
         confirmDelete ? (
           <View style={{ marginTop: space.md, gap: space.sm }}>
-            <Mute>Delete this food? Entries already logged keep their numbers.</Mute>
+            <Mute>Delete this food? Past entries stay in your log.</Mute>
             <Button label="Delete food" danger onPress={onDelete} />
             <Button label="Keep it" onPress={() => setConfirmDelete(false)} />
           </View>
@@ -849,7 +841,7 @@ const st = {
     offBox: { marginTop: space.xl, paddingTop: space.lg, borderTopWidth: 1 },
     offHead: { fontFamily: fonts.semi, fontSize: 21, lineHeight: 26 },
     name: { fontFamily: fonts.display, fontSize: 30, lineHeight: 34 },
-    nutri: { marginTop: space.lg, borderTopWidth: 1, borderBottomWidth: 1, paddingVertical: space.md },
+    nutri: {},
     kcal: { fontFamily: fonts.display, fontSize: 40, lineHeight: 44, ...tabular },
     macro: { fontFamily: fonts.display, fontSize: 26, lineHeight: 30, ...tabular },
   }),

@@ -21,7 +21,7 @@ import {
   type Workout,
 } from '@/logic';
 import { Card, Header, Mute, Section } from '@/ui/components';
-import { Button, LinkButton, Pill, Sheet } from '@/ui/food/kit';
+import { Button, LinkButton, Sheet } from '@/ui/food/kit';
 import { ExercisePicker } from '@/ui/lifting/ExercisePicker';
 import { LiftPlanPicker, type LiftChoice } from '@/ui/lifting/LiftPlanPicker';
 import { useLibrary } from '@/ui/lifting/library';
@@ -66,7 +66,9 @@ export default function LiftingScreen() {
   return (
     <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: c.bg }}>
       <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 48 }}>
-        <Header title="Lifting">
+        <Header title="Lifting" />
+
+        <Card style={{ paddingVertical: space.md }}>
           <View style={st.week}>
             {week.map((d, i) => (
               <View key={d.day} style={st.weekDay}>
@@ -85,30 +87,30 @@ export default function LiftingScreen() {
               </View>
             ))}
           </View>
-        </Header>
+        </Card>
 
         {active ? (
-          <Card>
-            <Mute>Workout in progress</Mute>
+          <Section title="In progress">
             <Text style={[st.big, { color: c.ink }]}>{active.name}</Text>
             <Mute>
               {active.exercises.reduce((t, x) => t + x.sets.filter((s) => s.done).length, 0)} of{' '}
-              {active.exercises.reduce((t, x) => t + x.sets.length, 0)} sets done · started {shortDayLabel(active.date)}
+              {active.exercises.reduce((t, x) => t + x.sets.length, 0)} sets done
             </Mute>
             <Button label="Continue workout" primary onPress={() => show({ kind: 'workout', id: active.id })} style={{ marginTop: space.md }} />
-          </Card>
+          </Section>
         ) : (
-          <Card>
-            <Mute>Today</Mute>
+          <Section
+            title="Today"
+            action={!doneToday && todays ? <LinkButton label="Other workout" onPress={() => show({ kind: 'start' })} /> : undefined}>
             {doneToday ? (
               <>
-                <Text style={[st.big, { color: c.ink }]}>{doneToday.name} done</Text>
-                <Mute>{`${fmtInt(volume(doneToday))} lb lifted in total.`}</Mute>
+                <Text style={[st.big, { color: c.ink }]}>{`${doneToday.name} ✓`}</Text>
+                <Mute>{`${fmtInt(volume(doneToday))} lb lifted`}</Mute>
                 <Button label="View workout" onPress={() => show({ kind: 'workout', id: doneToday.id })} style={{ marginTop: space.md }} />
               </>
             ) : todays ? (
               <>
-                <Text style={[st.big, { color: c.ink }]}>{todays.name}</Text>
+                <Text style={[st.big, { color: c.ink, marginBottom: space.xs }]}>{todays.name}</Text>
                 {todays.items.map((it) => {
                   const ex = byId(it.exId);
                   const inc = it.inc ?? (ex ? defaultIncrement(ex) : 5);
@@ -130,19 +132,13 @@ export default function LiftingScreen() {
             ) : (
               <>
                 <Text style={[st.big, { color: c.ink }]}>Rest day</Text>
-                <Mute>Nothing scheduled. You can still lift.</Mute>
+                <Button label="Start a workout" onPress={() => show({ kind: 'start' })} style={{ marginTop: space.md }} />
               </>
             )}
-            {!doneToday ? (
-              <View style={{ flexDirection: 'row', marginTop: space.md }}>
-                <LinkButton label={todays ? 'Do something else' : 'Start a workout'} onPress={() => show({ kind: 'start' })} />
-              </View>
-            ) : null}
-          </Card>
+          </Section>
         )}
 
-        <Section title="Routines" note="Tap one to change exercises, rep ranges or days.">
-          {L.routines.length ? null : <Mute>No routines yet.</Mute>}
+        <Section title="Routines" action={L.routines.length ? <LinkButton label="New" onPress={newRoutine} /> : undefined}>
           {L.routines.map((r, i) => {
             const days = L.schedule.map((id, j) => (id === r.id ? DAY_NAMES[j] : null)).filter(Boolean);
             return (
@@ -150,26 +146,33 @@ export default function LiftingScreen() {
                 key={r.id}
                 onPress={() => show({ kind: 'routine', id: r.id })}
                 accessibilityRole="button"
+                accessibilityLabel={`${r.name}. Edit`}
                 style={({ pressed }) => [st.row, i > 0 && { borderTopWidth: 1, borderTopColor: c.line }, { opacity: pressed ? 0.6 : 1 }]}>
                 <View style={{ flex: 1 }}>
                   <Text style={{ color: c.ink, fontSize: 16, fontWeight: '700' }}>{r.name}</Text>
                   <Mute style={{ fontSize: 13 }}>
-                    {r.items.length} exercises · {days.length ? days.join(', ') : 'not scheduled'}
+                    {r.items.length} exercises{days.length ? ` · ${days.join(', ')}` : ''}
                   </Mute>
                 </View>
-                <Text style={{ color: c.mute, fontSize: 13 }}>Edit</Text>
+                <Text style={{ color: c.mute, fontSize: 22 }}>›</Text>
               </Pressable>
             );
           })}
-          <View style={{ flexDirection: 'row', gap: space.sm, marginTop: space.md, flexWrap: 'wrap' }}>
-            <Pill label="Choose a plan" selected={false} onPress={() => show({ kind: 'plan' })} />
-            <Pill label="New routine" selected={false} onPress={newRoutine} />
-            <Pill label="Browse exercises" selected={false} onPress={() => show({ kind: 'library' })} />
-          </View>
+          {L.routines.length ? (
+            <View style={[st.foot, { borderTopColor: c.line }]}>
+              <LinkButton label="Change plan" onPress={() => show({ kind: 'plan' })} />
+              <LinkButton label="Exercises" onPress={() => show({ kind: 'library' })} color={c.mute} />
+            </View>
+          ) : (
+            <View style={{ gap: space.sm }}>
+              <Button label="Choose a plan" primary onPress={() => show({ kind: 'plan' })} />
+              <Button label="Build my own" onPress={newRoutine} />
+            </View>
+          )}
         </Section>
 
         <Section title="History">
-          {history.length ? null : <Mute>Finished workouts show here.</Mute>}
+          {history.length ? null : <Mute>No workouts yet.</Mute>}
           {history.slice(0, 20).map((w, i) => (
             <Pressable
               key={w.id}
@@ -198,8 +201,7 @@ export default function LiftingScreen() {
       {open?.kind === 'plan' ? <PlanSheet key={n} onClose={() => setOpen(null)} /> : null}
       {open?.kind === 'start' ? (
         <Sheet visible title="Start a workout" onClose={() => setOpen(null)}>
-          <Mute>Pick a routine, or start empty and add exercises as you go.</Mute>
-          <View style={{ gap: space.sm, marginTop: space.md }}>
+          <View style={{ gap: space.sm }}>
             {L.routines.map((r) => (
               <Button key={r.id} label={r.name} onPress={() => start(r)} />
             ))}
@@ -220,7 +222,7 @@ function PlanSheet({ onClose }: { onClose: () => void }) {
       <LiftPlanPicker value={choice} onChange={setChoice} />
       {state.lifting.routines.length ? (
         <Mute style={{ marginTop: space.md, fontSize: 13 }}>
-          Your current routines stay in the list with their history, but come off the weekly schedule.
+          Your current routines and their history are kept.
         </Mute>
       ) : null}
       <Button
@@ -237,10 +239,11 @@ function PlanSheet({ onClose }: { onClose: () => void }) {
 }
 
 const st = StyleSheet.create({
-  big: { fontFamily: fonts.display, fontSize: 30, lineHeight: 34 },
+  big: { fontFamily: fonts.semi, fontSize: 22, lineHeight: 26 },
+  foot: { flexDirection: 'row', justifyContent: 'space-between', borderTopWidth: 1, paddingTop: space.md, marginTop: space.xs },
   planRow: { flexDirection: 'row', alignItems: 'baseline', gap: space.md, paddingVertical: 3 },
   row: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.md },
-  week: { flexDirection: 'row', justifyContent: 'space-between', marginTop: space.xs },
+  week: { flexDirection: 'row', justifyContent: 'space-between' },
   weekDay: { alignItems: 'center', gap: 4, flex: 1 },
   weekDot: { width: 28, height: 28, borderRadius: radius.pill, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center' },
 });

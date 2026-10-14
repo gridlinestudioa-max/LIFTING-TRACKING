@@ -1,6 +1,6 @@
 import { Text } from 'react-native';
 
-import { ACTIVITY, GOALS, profileSummary, statsOf, type Profile } from '@/logic';
+import { ACTIVITY, GOALS, profileSummary, type Profile } from '@/logic';
 
 import { Mute } from '../components';
 import { useColors } from '../theme';
@@ -17,11 +17,6 @@ export function ProfileLines({ profile }: { profile: Profile }) {
     <>
       <Text style={{ color: c.ink, fontSize: 15, fontWeight: '600' }}>{main || 'No stats added yet'}</Text>
       {more.length ? <Mute>{more.join(' · ')}</Mute> : null}
-      {statsOf(profile) && (!profile.activity || !profile.goal) ? (
-        <Mute style={{ fontSize: 13 }}>
-          {`Suggestions assume ${[!profile.activity ? 'light activity' : null, !profile.goal ? 'maintaining your weight' : null].filter(Boolean).join(' and ')} until you set ${!profile.activity && !profile.goal ? 'them' : 'it'}.`}
-        </Mute>
-      ) : null}
     </>
   );
 }

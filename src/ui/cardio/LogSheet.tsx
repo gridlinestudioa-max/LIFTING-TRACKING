@@ -21,7 +21,7 @@ import {
   type CardioType,
 } from '@/logic';
 
-import { Field, Mute } from '../components';
+import { Field } from '../components';
 import { Button, Sheet } from '../food/kit';
 import { Select } from '../Select';
 import { useTracker } from '../store';
@@ -146,7 +146,6 @@ export function LogSheet({ visible, day, editing, onClose }: { visible: boolean;
             ]}
             onChange={setPlanDay}
           />
-          <Mute style={{ fontSize: 13 }}>Pick a missed or upcoming planned workout to make it up, or log this as extra.</Mute>
         </View>
       ) : null}
 

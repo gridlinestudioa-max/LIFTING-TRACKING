@@ -16,9 +16,9 @@ import { fonts, radius, space, useColors } from './theme';
 type Step = 'sections' | 'body' | 'cardio' | 'lifting';
 
 export const SECTION_INFO: { id: keyof Sections; title: string; blurb: string }[] = [
-  { id: 'food', title: 'Food', blurb: 'Log meals from 12,900 USDA foods and branded products. Calories, macros, fasting and diets like keto.' },
-  { id: 'cardio', title: 'Cardio', blurb: 'Log runs, rides, swims and more. Optional plans from 5K to Ironman.' },
-  { id: 'lifting', title: 'Lifting', blurb: 'Plans for 3 to 7 days a week and 700+ exercises. The app raises your weights as you get stronger.' },
+  { id: 'food', title: 'Food', blurb: 'Meals, calories, macros and diets' },
+  { id: 'cardio', title: 'Cardio', blurb: 'Runs, rides and swims, with plans from 5K to Ironman' },
+  { id: 'lifting', title: 'Lifting', blurb: 'Routines that raise your weights as you get stronger' },
 ];
 
 /** A card that turns a section on or off. */
@@ -100,7 +100,6 @@ export function Onboarding() {
               <Logo size={48} />
             </View>
             <Text style={[st.h1, { color: c.ink }]}>Set up your profile</Text>
-            <Mute style={{ fontSize: 15 }}>You can change all of this later on the You tab.</Mute>
             <Text style={[st.lbl, { color: c.mute, marginTop: space.xl }]}>Your name (optional)</Text>
             <Field value={name} onChangeText={setName} placeholder="First name" autoCapitalize="words" accessibilityLabel="Your name" />
             <Text style={[st.h2, { color: c.ink }]}>What do you want to track?</Text>
@@ -115,9 +114,7 @@ export function Onboarding() {
         {step === 'body' ? (
           <>
             <Text style={[st.h1, { color: c.ink }]}>About you</Text>
-            <Mute style={{ fontSize: 15, marginBottom: space.md }}>
-              Used to suggest daily calories, protein, carbs, sugar and fat. You can add or change it later on the You tab.
-            </Mute>
+            <Mute style={{ fontSize: 15, marginBottom: space.md }}>Optional. Used for suggested daily targets.</Mute>
             <ProfileForm
               initial={state.profile}
               saveLabel="Next"
@@ -132,9 +129,7 @@ export function Onboarding() {
         {step === 'cardio' ? (
           <>
             <Text style={[st.h1, { color: c.ink }]}>Cardio</Text>
-            <Mute style={{ fontSize: 15, marginBottom: space.lg }}>
-              Log any run, ride, swim or walk. Want a plan too? It puts workouts on your calendar and tracks what you finish.
-            </Mute>
+            <Mute style={{ fontSize: 15, marginBottom: space.lg }}>Optional. A plan puts workouts on your calendar.</Mute>
             <PlanPicker plan={plan} today={today} onChange={setPlan} />
           </>
         ) : null}
@@ -142,7 +137,6 @@ export function Onboarding() {
         {step === 'lifting' ? (
           <>
             <Text style={[st.h1, { color: c.ink }]}>Lifting</Text>
-            <Mute style={{ fontSize: 15, marginBottom: space.lg }}>Choose a plan to start from. You can change anything later.</Mute>
             {hasRoutines ? (
               <View style={{ gap: space.sm, marginBottom: space.lg }}>
                 <SectionToggle
