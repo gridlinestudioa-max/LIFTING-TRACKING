@@ -6,7 +6,7 @@ import { AppState, Platform } from 'react-native';
 
 import type { TrackerState } from '@/logic';
 
-// Set in .env (see README). The anon key is public by design; Row Level Security protects the data.
+// Set in .env or Vercel (see README). The publishable/anon key is public by design; Row Level Security protects the data.
 const URL = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
 const KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '';
 

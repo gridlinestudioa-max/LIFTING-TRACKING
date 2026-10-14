@@ -99,13 +99,13 @@ Accounts use [Supabase](https://supabase.com) (free tier is enough). Until this 
 
 1. Create a project at supabase.com (any name and region). Wait for it to finish setting up.
 2. **SQL Editor** → New query → paste the contents of [`supabase/schema.sql`](supabase/schema.sql) → Run. This creates the table and the rules that let each person read and write only their own data.
-3. **Project Settings → API** (or **Connect**): copy the **Project URL** and the **anon / public** key.
+3. Copy the **Project URL** (green **Connect** button, or **Data API**) and the **publishable key** (`sb_publishable_…`, under **Project Settings → API Keys**; older projects call it the **anon / public** key). Never use the secret / `service_role` key.
 4. Put them where the app is built:
    - **Vercel** (the website): Project → Settings → Environment Variables → add `EXPO_PUBLIC_SUPABASE_URL` and `EXPO_PUBLIC_SUPABASE_ANON_KEY`, then redeploy.
    - **Locally / EAS builds:** copy `.env.example` to `.env` and fill in the two values.
 5. Optional: **Authentication → Sign In / Providers → Email**. "Confirm email" is on by default (people click a link before their first sign-in); turn it off for instant sign-up. Under **URL Configuration**, set the Site URL to the website's address so the confirmation and password-reset links open it.
 
-The anon key is safe to ship in the app; the access rules in `schema.sql` are what protect each person's data.
+The publishable (anon) key is safe to ship in the app; the access rules in `schema.sql` are what protect each person's data.
 
 ## Food data
 
