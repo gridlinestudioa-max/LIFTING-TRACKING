@@ -6,6 +6,7 @@ import {
   LIFTS,
   MONTHS,
   TYPES,
+  cinFor,
   daysInMonth,
   fmt,
   liftsDone,
@@ -17,7 +18,8 @@ import {
   type TrackerState,
 } from '@/logic';
 
-import { useColors, type Palette } from './theme';
+import { StatusMark, type MarkKind } from './marks';
+import { fonts, radius, space, tabular, useColors, type Palette } from './theme';
 
 interface Props {
   state: TrackerState;
@@ -44,11 +46,14 @@ export function CalendarGrid({ state, today, selected, year, month, onSelect, on
   return (
     <View>
       <View style={s.mhead}>
-        <NavButton label="‹" a11y="Previous month" onPress={onPrev} c={c} />
-        <Text style={{ fontSize: 16, fontWeight: '700', color: c.ink }}>
-          {MONTHS[month]} {year}
-        </Text>
-        <NavButton label="›" a11y="Next month" onPress={onNext} c={c} />
+        <View style={s.mtitle}>
+          <Text style={[s.month, { color: c.ink }]}>{MONTHS[month]}</Text>
+          <Text style={{ fontSize: 16, color: c.mute }}>{year}</Text>
+        </View>
+        <View style={{ flexDirection: 'row', gap: space.sm }}>
+          <NavButton label="‹" a11y="Previous month" onPress={onPrev} c={c} />
+          <NavButton label="›" a11y="Next month" onPress={onNext} c={c} />
+        </View>
       </View>
       <View style={s.row}>
         {DAY_NAMES.map((d) => (
@@ -76,10 +81,11 @@ function NavButton({ label, a11y, onPress, c }: { label: string; a11y: string; o
   return (
     <Pressable
       onPress={onPress}
+      accessibilityRole="button"
       accessibilityLabel={a11y}
-      hitSlop={8}
-      style={({ pressed }) => [s.nav, { borderColor: c.line, backgroundColor: c.bg, opacity: pressed ? 0.6 : 1 }]}>
-      <Text style={{ fontSize: 20, color: c.ink, lineHeight: 22 }}>{label}</Text>
+      hitSlop={6}
+      style={({ pressed }) => [s.nav, { borderColor: c.line, backgroundColor: pressed ? c.soft : c.card }]}>
+      <Text style={{ fontSize: 22, color: c.ink, lineHeight: 24 }}>{label}</Text>
     </Pressable>
   );
 }
@@ -103,15 +109,17 @@ const DayCell = memo(function DayCell({
   const st = status(state, date, today);
   const isToday = date === today;
 
-  let bg = c.bg, border = c.line;
-  if (st === 'done') { bg = c.okbg; border = c.ok; }
-  if (st === 'missed') { bg = c.badbg; border = c.bad; }
-  if (st === 'partial') { bg = c.warnbg; border = c.warn; }
+  // Open workout days sit on a white tile; rest days and days outside the plan stay flat.
+  let bg = p && st !== 'rest' ? c.card : 'transparent';
+  let border = p ? c.line : 'transparent';
+  if (st === 'done') { bg = c.okbg; border = c.okbg; }
+  if (st === 'missed') { bg = c.badbg; border = c.badbg; }
+  if (st === 'partial') { bg = c.warnbg; border = c.warnbg; }
   const moved = st === 'moved';
   const skipped = st === 'skipped' || moved;
 
   let meta: { text: string; ok: boolean } | null = null;
-  let mark: { ch: string; color: string } | null = null;
+  let mark: { kind: MarkKind; color: string } | null = null;
   if (p) {
     const kind = TYPES[p.type].kind;
     if (skipped) {
@@ -122,11 +130,13 @@ const DayCell = memo(function DayCell({
       const n = liftsDone(p.type as LiftGroup, l);
       if (n > 0) meta = { text: `${n}/${LIFTS[p.type as LiftGroup].length}`, ok: true };
     }
-    if (st === 'done') mark = { ch: '✓', color: c.ok };
-    else if (st === 'missed') mark = { ch: '✕', color: c.bad };
-    else if (st === 'partial') mark = { ch: '◐', color: c.warn };
+    if (st === 'done') mark = { kind: 'done', color: c.ok };
+    else if (st === 'missed') mark = { kind: 'missed', color: c.bad };
+    else if (st === 'partial') mark = { kind: 'partial', color: c.warn };
   }
-  const hasK = l && l.cin != null && l.cout != null;
+  const cin = cinFor(state, date);
+  const hasK = l && cin != null && l.cout != null;
+  const isRest = p ? TYPES[p.type].kind === 'rest' : false;
 
   return (
     <View style={s.cellWrap}>
@@ -136,42 +146,50 @@ const DayCell = memo(function DayCell({
         accessibilityLabel={`${date}${p ? `, ${p.race ? 'Race' : TYPES[p.type].label}` : ''}${st && st !== 'open' && st !== 'rest' ? `, ${st}` : ''}`}
         style={[
           s.cell,
-          { backgroundColor: bg, borderColor: selected ? c.accent : border, borderWidth: selected ? 2 : 1 },
-          skipped && !selected && { borderStyle: 'dashed', borderColor: c.mute },
+          { backgroundColor: bg, borderColor: border },
+          !p && { minHeight: 44 },
+          skipped && { borderStyle: 'dashed', borderColor: c.mute },
         ]}>
-        {mark ? <Text style={[s.mark, { color: mark.color }]}>{mark.ch}</Text> : null}
-        <Text style={[s.dn, { color: isToday ? c.accent : c.mute, fontWeight: isToday ? '800' : '400' }]}>
-          {Number(date.slice(8))}
-        </Text>
+        {p ? <View style={[s.band, { backgroundColor: c.types[p.type] }, skipped && { opacity: 0.35 }]} /> : null}
+        <View style={s.top}>
+          <View style={[s.dnWrap, isToday && { backgroundColor: c.accent }]}>
+            <Text style={[s.dn, { color: isToday ? c.onAccent : p ? c.ink : c.mute }]}>{Number(date.slice(8))}</Text>
+          </View>
+          {mark ? <StatusMark kind={mark.kind} color={mark.color} size={15} /> : null}
+        </View>
         {p ? (
-          <Text numberOfLines={1} style={[s.tag, { backgroundColor: c.types[p.type] }, skipped && { opacity: 0.45 }]}>
+          <Text numberOfLines={1} ellipsizeMode="clip" style={[s.tag, { color: isRest ? c.mute : c.ink }, skipped && { opacity: 0.5 }]}>
             {p.race ? 'RACE' : TYPES[p.type].label}
           </Text>
         ) : null}
         {meta ? (
-          <Text numberOfLines={1} style={[s.meta, { color: meta.ok ? c.ok : c.mute, fontWeight: meta.ok ? '700' : '400' }]}>
+          <Text numberOfLines={1} ellipsizeMode="clip" style={[s.meta, { color: meta.ok ? c.ok : c.mute, fontWeight: meta.ok ? '700' : '400' }]}>
             {meta.text}
           </Text>
         ) : null}
-        {hasK ? <View style={[s.kdot, { backgroundColor: l!.cout! - l!.cin! >= 0 ? c.ok : c.bad }]} /> : null}
+        {hasK ? <View style={[s.kbar, { backgroundColor: l!.cout! - cin! >= 0 ? c.ok : c.bad }]} /> : null}
+        {selected ? <View pointerEvents="none" style={[s.ring, { borderColor: c.accent }]} /> : null}
       </Pressable>
     </View>
   );
 });
 
 const s = StyleSheet.create({
-  mhead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 },
-  nav: { borderWidth: 1, borderRadius: 8, width: 44, height: 40, alignItems: 'center', justifyContent: 'center' },
+  mhead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: space.md },
+  mtitle: { flexDirection: 'row', alignItems: 'baseline', gap: space.sm },
+  month: { fontFamily: fonts.display, fontSize: 30, lineHeight: 34 },
+  nav: { borderWidth: 1, borderRadius: radius.pill, width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
   row: { flexDirection: 'row', marginHorizontal: -2 },
-  dow: { flex: 1, fontSize: 11, textAlign: 'center' },
+  dow: { flex: 1, fontSize: 12, textAlign: 'center', marginBottom: 2 },
   cellWrap: { flex: 1, paddingHorizontal: 2 },
-  cell: { minHeight: 66, borderRadius: 8, paddingTop: 4, paddingHorizontal: 2, paddingBottom: 3, gap: 3, overflow: 'hidden' },
-  dn: { fontSize: 11, paddingLeft: 2 },
-  mark: { position: 'absolute', top: 2, right: 4, fontSize: 13, fontWeight: '800', lineHeight: 15 },
-  tag: {
-    fontSize: 10, fontWeight: '700', color: '#fff', borderRadius: 4, overflow: 'hidden',
-    paddingHorizontal: 1, paddingVertical: 1, textAlign: 'center', letterSpacing: -0.2,
-  },
-  meta: { fontSize: 10, textAlign: 'center' },
-  kdot: { position: 'absolute', bottom: 4, right: 4, width: 7, height: 7, borderRadius: 3.5 },
+  cell: { minHeight: 72, borderRadius: radius.md - 2, borderWidth: 1, paddingTop: 7, paddingHorizontal: 3, paddingBottom: 8, gap: 2, overflow: 'hidden' },
+  // Top band = workout type. Bottom bar = calories (green deficit, red surplus).
+  band: { position: 'absolute', top: 0, left: 6, right: 6, height: 3, borderBottomLeftRadius: 2, borderBottomRightRadius: 2 },
+  kbar: { position: 'absolute', bottom: 0, left: 6, right: 6, height: 3, borderTopLeftRadius: 2, borderTopRightRadius: 2 },
+  top: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingRight: 1 },
+  dnWrap: { minWidth: 24, height: 24, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  dn: { fontFamily: fonts.semi, fontSize: 17, lineHeight: 20 },
+  tag: { fontSize: 10, fontWeight: '700', paddingLeft: 2, letterSpacing: -0.15 },
+  meta: { fontSize: 10, paddingLeft: 2, letterSpacing: -0.2, ...tabular },
+  ring: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, borderWidth: 2, borderRadius: radius.md - 2 },
 });

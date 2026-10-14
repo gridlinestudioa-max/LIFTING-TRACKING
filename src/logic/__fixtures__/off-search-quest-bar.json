@@ -1,0 +1,257 @@
+{
+ "products": [
+  {
+   "allergens_tags": [
+    "en:milk",
+    "en:nuts",
+    "en:soybeans"
+   ],
+   "brands": "Quest",
+   "categories_tags": [
+    "en:snacks",
+    "en:sweet-snacks",
+    "en:bars",
+    "en:dietary-supplements",
+    "en:bodybuilding-supplements",
+    "en:protein-bars"
+   ],
+   "code": "0888849000012",
+   "countries_tags": [
+    "en:france",
+    "en:united-states"
+   ],
+   "ingredients_analysis_tags": [
+    "en:palm-oil-free",
+    "en:non-vegan",
+    "en:vegetarian-status-unknown"
+   ],
+   "nutriments": {
+    "added-sugars_100g": 0,
+    "carbohydrates_100g": 36.6666666666667,
+    "energy-kcal_100g": 316.666666666667,
+    "energy_100g": 1933.33333333333,
+    "fat_100g": 15,
+    "fiber_100g": 20,
+    "proteins_100g": 35,
+    "sugars_100g": 1.66666666666667
+   },
+   "nutrition_data": "on",
+   "nutrition_data_prepared_per": "100g",
+   "product_name": "Chocolate Chip Cookie Dough",
+   "product_name_en": "Chocolate Chip Cookie Dough",
+   "serving_quantity": 60,
+   "serving_quantity_unit": "g",
+   "serving_size": "1 serving (60 g)"
+  },
+  {
+   "allergens_tags": [
+    "en:milk",
+    "en:nuts"
+   ],
+   "brands": "Quest",
+   "categories_tags": [
+    "en:snacks",
+    "en:dietary-supplements",
+    "en:bodybuilding-supplements",
+    "en:protein-bars",
+    "en:Protein supplements"
+   ],
+   "code": "0888849000005",
+   "countries_tags": [
+    "en:france",
+    "en:united-states"
+   ],
+   "ingredients_analysis_tags": [
+    "en:palm-oil-free",
+    "en:non-vegan",
+    "en:vegetarian-status-unknown"
+   ],
+   "nutriments": {
+    "added-sugars_100g": 0,
+    "carbohydrates_100g": 36.6666666666667,
+    "energy-kcal_100g": 316.666666666667,
+    "energy_100g": 1823.33333333333,
+    "fat_100g": 11.6666666666667,
+    "fiber_100g": 21.6666666666667,
+    "proteins_100g": 35,
+    "sugars_100g": 1.66666666666667
+   },
+   "nutrition_data": "on",
+   "nutrition_data_prepared_per": "100g",
+   "product_name": "Cookies & Cream Protein Bar",
+   "product_name_en": "Cookies & Cream Protein Bar",
+   "serving_quantity": 60,
+   "serving_quantity_unit": "g",
+   "serving_size": "1 bar (60 g)"
+  },
+  {
+   "allergens_tags": [
+    "en:milk",
+    "en:nuts"
+   ],
+   "brands": "Quest",
+   "categories_tags": [
+    "en:snacks",
+    "en:sweet-snacks",
+    "en:bars",
+    "en:dietary-supplements",
+    "en:bodybuilding-supplements",
+    "en:protein-bars"
+   ],
+   "code": "0888849004621",
+   "countries_tags": [
+    "en:france",
+    "en:united-states"
+   ],
+   "ingredients_analysis_tags": [
+    "en:palm-oil-free",
+    "en:non-vegan",
+    "en:vegetarian-status-unknown"
+   ],
+   "nutriments": {
+    "added-sugars_100g": 0,
+    "carbohydrates_100g": 38.3333333333333,
+    "energy-kcal_100g": 316.666666666667,
+    "energy_100g": 1751.66666666667,
+    "fat_100g": 11.6666666666667,
+    "fiber_100g": 20,
+    "proteins_100g": 33.3333333333333,
+    "sugars_100g": 1.66666666666667
+   },
+   "nutrition_data": "on",
+   "nutrition_data_prepared_per": "100g",
+   "product_name": "Oatmeal Chocolate Chip Protein Bar",
+   "product_name_en": "Oatmeal Chocolate Chip Protein Bar",
+   "serving_quantity": 60,
+   "serving_quantity_unit": "g",
+   "serving_size": "1 bar (60 g)"
+  },
+  {
+   "allergens_tags": [
+    "en:milk",
+    "en:nuts",
+    "en:Amandes",
+    "en:Lactos\u00e9rum",
+    "en:Lait"
+   ],
+   "brands": "Quest Nutrition",
+   "categories_tags": [
+    "en:snacks",
+    "en:dietary-supplements",
+    "en:bodybuilding-supplements",
+    "en:protein-bars"
+   ],
+   "code": "0888849000432",
+   "countries_tags": [
+    "en:france",
+    "en:united-states"
+   ],
+   "ingredients_analysis_tags": [
+    "en:palm-oil",
+    "en:non-vegan",
+    "en:vegetarian-status-unknown"
+   ],
+   "nutriments": {
+    "added-sugars_100g": 0,
+    "carbohydrates_100g": 38.3333333333333,
+    "energy-kcal_100g": 283.333333333333,
+    "energy_100g": 1695,
+    "fat_100g": 11.6666666666667,
+    "fiber_100g": 23.3333333333333,
+    "proteins_100g": 33.3333333333333,
+    "sugars_100g": 1.66666666666667
+   },
+   "nutrition_data": "on",
+   "nutrition_data_per": "100g",
+   "nutrition_data_prepared_per": "100g",
+   "product_name": "QuestBar Protein Bar Cinnamon Roll",
+   "product_name_en": "QuestBar Protein Bar Cinnamon Roll",
+   "serving_quantity": 60,
+   "serving_quantity_unit": "g",
+   "serving_size": "60 g"
+  },
+  {
+   "allergens_tags": [
+    "en:milk",
+    "en:peanuts"
+   ],
+   "brands": "Quest",
+   "categories_tags": [
+    "en:snacks",
+    "en:sweet-snacks",
+    "en:bars",
+    "en:dietary-supplements",
+    "en:bodybuilding-supplements",
+    "en:protein-bars"
+   ],
+   "code": "0888849000456",
+   "countries_tags": [
+    "en:france",
+    "en:united-states"
+   ],
+   "ingredients_analysis_tags": [
+    "en:palm-oil-free",
+    "en:non-vegan",
+    "en:vegetarian-status-unknown"
+   ],
+   "nutriments": {
+    "added-sugars_100g": 0.833333333333333,
+    "carbohydrates_100g": 36.67,
+    "energy-kcal_100g": 316,
+    "energy_100g": 1891.66666666667,
+    "fat_100g": 15,
+    "fiber_100g": 18.3333333333333,
+    "proteins_100g": 33.33,
+    "sugars_100g": 1.67
+   },
+   "nutrition_data": "on",
+   "nutrition_data_prepared_per": "100g",
+   "product_name": "Chocolate Peanut Butter",
+   "product_name_en": "Chocolate Peanut Butter",
+   "serving_quantity": 60,
+   "serving_quantity_unit": "g",
+   "serving_size": "1 portion (60 g)"
+  },
+  {
+   "allergens_tags": [
+    "en:milk",
+    "en:nuts"
+   ],
+   "brands": "Quest",
+   "categories_tags": [
+    "en:snacks",
+    "en:sweet-snacks",
+    "en:bars",
+    "en:dietary-supplements",
+    "en:bodybuilding-supplements",
+    "en:protein-bars"
+   ],
+   "code": "0888849014217",
+   "countries_tags": [
+    "en:united-states"
+   ],
+   "ingredients_analysis_tags": [
+    "en:palm-oil-free",
+    "en:non-vegan",
+    "en:vegetarian-status-unknown"
+   ],
+   "nutriments": {
+    "added-sugars_100g": 0,
+    "carbohydrates_100g": 36.6666666666667,
+    "energy-kcal_100g": 283.333333333333,
+    "energy_100g": 1933.33333333333,
+    "fat_100g": 15,
+    "fiber_100g": 20,
+    "proteins_100g": 35,
+    "sugars_100g": 1.66666666666667
+   },
+   "nutrition_data": "on",
+   "nutrition_data_prepared_per": "100g",
+   "product_name": "Protein Bar",
+   "product_name_en": "Protein Bar",
+   "serving_quantity": 60,
+   "serving_quantity_unit": "g",
+   "serving_size": "60g"
+  }
+ ]
+}

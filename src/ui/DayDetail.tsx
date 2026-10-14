@@ -4,12 +4,15 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import {
   LIFTS,
   REST_TEXT,
+  fmtInt,
+  foodKcal,
   RUN_TIPS,
   TYPES,
   fmt,
   formFromLog,
   formPlan,
   kcalInfo,
+  totalIn,
   madeUpBy,
   makeupCandidates,
   normalizeTimeInput,
@@ -26,9 +29,10 @@ import {
   type PlanDay,
 } from '@/logic';
 
-import { Field, Label, Mute } from './components';
+import { Field, Mute } from './components';
+import { StatusMark } from './marks';
 import { useTracker } from './store';
-import { toneColor, useColors, type Palette } from './theme';
+import { fonts, radius, space, tabular, toneBg, toneColor, useColors, type Palette } from './theme';
 
 export function DayDetail() {
   const c = useColors();
@@ -75,38 +79,46 @@ export function DayDetail() {
   else if (flash === s) { msg = 'Submitted ✓'; msgColor = c.ok; msgBold = true; }
   else if (sub) { msg = 'Submitted'; }
 
-  const k = kcalInfo(num(f.cin), num(f.cout), state.goal);
+  // Calories in = the number typed here plus anything logged on the Food tab (when the food log is on).
+  const fromFood = foodKcal(state, s);
+  const cinTotal = totalIn(num(f.cin), fromFood);
+  const k = kcalInfo(cinTotal, num(f.cout), state.goal);
+  const pace = paceText(parseFloat(f.miles), parseTime(f.time));
 
   return (
     <View>
       <View style={st.dtitle}>
-        <Text style={[st.title, { color: c.ink, flexShrink: 1 }]}>
-          {dname} · Week {base.w + 1}
-        </Text>
-        <Text style={[st.chip, { backgroundColor: c.types[p.type] }]}>{p.race ? 'Race day' : T.label}</Text>
+        <View style={{ flexShrink: 1 }}>
+          <Text style={[st.title, { color: c.ink }]}>{dname}</Text>
+          <Text style={{ color: c.mute, fontSize: 14 }}>Week {base.w + 1}</Text>
+        </View>
+        <Text style={[st.chip, { backgroundColor: c.types[p.type], color: c.onType }]}>{p.race ? 'Race day' : T.label}</Text>
       </View>
       <StatusBadge st={dayStatus} movedTo={movedTo} c={c} />
 
       <PlanBox plan={base} head="Scheduled" c={c} />
 
-      {!free && !p.swapped ? (
-        <SkipControl skipped={f.skipped} onToggle={() => edit({ skipped: !f.skipped })} c={c} />
-      ) : null}
-
-      {free || !f.skipped ? (
-        <WorkoutSwap
-          f={f}
-          scheduled={base.type}
-          free={free}
-          open={openFor === s || !!p.swapped}
-          onOpen={() => setOpenFor(s)}
-          candidates={makeupCandidates(state, s)}
-          edit={(patch) => {
-            if (!patch.swap && !patch.makeupFor) setOpenFor(null);
-            edit({ ...patch, skipped: false });
-          }}
-          c={c}
-        />
+      {(!free && !p.swapped) || free || !f.skipped ? (
+        <View style={st.actions}>
+          {!free && !p.swapped ? (
+            <SkipControl skipped={f.skipped} onToggle={() => edit({ skipped: !f.skipped })} c={c} />
+          ) : null}
+          {free || !f.skipped ? (
+            <WorkoutSwap
+              f={f}
+              scheduled={base.type}
+              free={free}
+              open={openFor === s || !!p.swapped}
+              onOpen={() => setOpenFor(s)}
+              candidates={makeupCandidates(state, s)}
+              edit={(patch) => {
+                if (!patch.swap && !patch.makeupFor) setOpenFor(null);
+                edit({ ...patch, skipped: false });
+              }}
+              c={c}
+            />
+          ) : null}
+        </View>
       ) : null}
 
       {p.swapped ? (
@@ -114,8 +126,7 @@ export function DayDetail() {
       ) : null}
 
       {showLog && T.kind === 'lift' ? (
-        <>
-          <Label>Log what you lifted</Label>
+        <Block title="Log what you lifted" c={c}>
           {LIFTS[p.type as LiftGroup].map((e, i) => {
             const rec = f.lifts[e.id] ?? { w: String(targetFor(state.base, e.id, p.w)), done: false };
             return (
@@ -127,9 +138,9 @@ export function DayDetail() {
                   onToggle={() => edit({ lifts: { ...f.lifts, [e.id]: { ...rec, done: !rec.done } } })}
                 />
                 <View style={{ flex: 1 }}>
-                  <Text style={{ fontWeight: '600', color: c.ink, fontSize: 15 }}>{e.name}</Text>
-                  <Text style={{ fontSize: 12, color: c.mute }}>
-                    {e.sets} · target {fmt(targetFor(state.base, e.id, p.w))} {e.unit}
+                  <Text style={{ fontWeight: '600', color: c.ink, fontSize: 16 }}>{e.name}</Text>
+                  <Text style={{ fontSize: 13, color: c.mute, ...tabular }}>
+                    {e.sets}, target {fmt(targetFor(state.base, e.id, p.w))} {e.unit}
                   </Text>
                 </View>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
@@ -138,20 +149,19 @@ export function DayDetail() {
                     onChangeText={(w) => edit({ lifts: { ...f.lifts, [e.id]: { ...rec, w } } })}
                     keyboardType="decimal-pad"
                     accessibilityLabel={`${e.name} weight used`}
-                    style={{ width: 76, textAlign: 'right' }}
+                    style={{ width: 68, textAlign: 'center', fontWeight: '700', paddingHorizontal: 4 }}
                   />
                   <Text style={{ fontSize: 13, color: c.mute, width: 18 }}>{e.unit}</Text>
                 </View>
               </View>
             );
           })}
-        </>
+        </Block>
       ) : null}
 
       {showLog && T.kind === 'run' ? (
-        <>
-          <Label>Log your run</Label>
-          <View style={st.runrow}>
+        <Block title="Log your run" c={c}>
+          <View style={st.pair}>
             <LabeledField label="Miles" c={c}>
               <Field
                 value={f.miles}
@@ -159,7 +169,6 @@ export function DayDetail() {
                 keyboardType="decimal-pad"
                 placeholder={fmt(p.miles)}
                 accessibilityLabel="Miles"
-                style={{ width: 80, textAlign: 'right' }}
               />
             </LabeledField>
             <LabeledField label="Time (m:ss or h:mm:ss)" c={c}>
@@ -173,58 +182,90 @@ export function DayDetail() {
                 keyboardType="numbers-and-punctuation"
                 placeholder="e.g. 58:30"
                 accessibilityLabel="Time"
-                style={{ width: 120 }}
               />
             </LabeledField>
-            <Text style={[st.pace, { color: c.ink }]}>{paceText(parseFloat(f.miles), parseTime(f.time))}</Text>
           </View>
-        </>
+          <View style={[st.readout, { backgroundColor: c.soft }]}>
+            <Text style={{ color: c.mute, fontSize: 14 }}>Pace</Text>
+            <Text style={[st.readoutValue, { color: pace ? c.ink : c.mute }]}>
+              {pace ? pace.replace(' /mi', '') : '–'}
+              {pace ? <Text style={{ fontFamily: fonts.semi, fontSize: 16, color: c.mute }}> /mi</Text> : null}
+            </Text>
+          </View>
+        </Block>
       ) : null}
 
-      <Label>Calories</Label>
-      <View style={st.runrow}>
-        <LabeledField label="In (eaten)" c={c}>
-          <Field
-            value={f.cin}
-            onChangeText={(cin) => edit({ cin })}
-            keyboardType="number-pad"
-            placeholder="0"
-            accessibilityLabel="Calories in"
-            style={{ width: 96, textAlign: 'right' }}
-          />
-        </LabeledField>
-        <LabeledField label="Out (total burned)" c={c}>
-          <Field
-            value={f.cout}
-            onChangeText={(cout) => edit({ cout })}
-            keyboardType="number-pad"
-            placeholder="0"
-            accessibilityLabel="Calories out"
-            style={{ width: 96, textAlign: 'right' }}
-          />
-        </LabeledField>
-      </View>
-      <Text style={{ color: toneColor(c, k.tone), fontSize: 15, fontWeight: k.tone === 'mute' ? '400' : '700', marginTop: 6 }}>
-        {k.text}
-      </Text>
+      <Block title="Calories" c={c}>
+        <View style={st.pair}>
+          <LabeledField label={fromFood != null ? 'In (not in food log)' : 'In (eaten)'} c={c}>
+            <Field
+              value={f.cin}
+              onChangeText={(cin) => edit({ cin })}
+              keyboardType="number-pad"
+              placeholder="0"
+              accessibilityLabel={fromFood != null ? 'Calories in, not in food log' : 'Calories in'}
+            />
+          </LabeledField>
+          <LabeledField label="Out (total burned)" c={c}>
+            <Field
+              value={f.cout}
+              onChangeText={(cout) => edit({ cout })}
+              keyboardType="number-pad"
+              placeholder="0"
+              accessibilityLabel="Calories out"
+            />
+          </LabeledField>
+        </View>
+        {fromFood != null ? (
+          <Text style={{ color: c.mute, fontSize: 14, marginTop: space.sm, ...tabular }}>
+            + {fmtInt(fromFood)} from the food log = <Text style={{ color: c.ink, fontWeight: '700' }}>{fmtInt(cinTotal ?? 0)} kcal in</Text>
+          </Text>
+        ) : null}
+        <View style={[st.result, { backgroundColor: toneBg(c, k.tone) }]} accessibilityLiveRegion="polite">
+          <Text
+            style={
+              k.tone === 'mute'
+                ? { color: c.mute, fontSize: 14 }
+                : { color: toneColor(c, k.tone), fontFamily: fonts.semi, fontSize: 22, lineHeight: 26 }
+            }>
+            {k.text}
+          </Text>
+        </View>
+      </Block>
 
-      <Field
-        value={f.note}
-        onChangeText={(note) => edit({ note })}
-        placeholder="Notes (how it felt, splits, etc.)"
-        multiline
-        style={{ marginTop: 10, minHeight: 60, textAlignVertical: 'top' }}
-      />
+      <Block title="Notes" c={c}>
+        <Field
+          value={f.note}
+          onChangeText={(note) => edit({ note })}
+          placeholder="How it felt, splits, anything to remember"
+          multiline
+          style={{ minHeight: 76, textAlignVertical: 'top', fontSize: 16 }}
+        />
+      </Block>
 
-      <View style={st.submitrow}>
-        <Pressable
-          onPress={() => setError(submit(s, f))}
-          accessibilityRole="button"
-          style={({ pressed }) => [st.submit, { backgroundColor: c.accent, opacity: pressed ? 0.8 : 1 }]}>
-          <Text style={{ color: c.bg, fontWeight: '700', fontSize: 15 }}>{sub ? 'Update' : 'Submit'}</Text>
-        </Pressable>
-        <Text style={{ color: msgColor, fontWeight: msgBold ? '700' : '400', fontSize: 13, flexShrink: 1 }}>{msg}</Text>
-      </View>
+      <Pressable
+        onPress={() => setError(submit(s, f))}
+        accessibilityRole="button"
+        style={({ pressed }) => [st.submit, { backgroundColor: c.accent, opacity: pressed ? 0.8 : 1 }]}>
+        <Text style={{ color: c.onAccent, fontWeight: '700', fontSize: 17 }}>{sub ? 'Update' : 'Submit'}</Text>
+      </Pressable>
+      {msg ? (
+        <Text
+          accessibilityLiveRegion="polite"
+          style={{ color: msgColor, fontWeight: msgBold ? '700' : '400', fontSize: 14, textAlign: 'center', marginTop: space.sm }}>
+          {msg}
+        </Text>
+      ) : null}
+    </View>
+  );
+}
+
+/** A titled group inside the day detail, set off by a hairline. */
+function Block({ title, c, children }: { title: string; c: Palette; children: React.ReactNode }) {
+  return (
+    <View style={[st.block, { borderTopColor: c.line }]}>
+      <Text style={[st.blockTitle, { color: c.ink }]}>{title}</Text>
+      {children}
     </View>
   );
 }
@@ -233,28 +274,43 @@ export function DayDetail() {
 function PlanBox({ plan, head, c }: { plan: PlanDay; head: string; c: Palette }) {
   const { state } = useTracker();
   const T = TYPES[plan.type];
-  let title: string;
-  let lines: string[];
-  if (T.kind === 'lift') {
-    title = `${head}: ${T.label} day`;
-    lines = LIFTS[plan.type as LiftGroup].map(
-      (e) => `${e.name} ${e.sets} @ ${fmt(targetFor(state.base, e.id, plan.w))} ${e.unit}`,
-    );
-  } else if (T.kind === 'run') {
-    title = `${head}: ${plan.race ? 'Race, ' : `${T.label} run, `}${fmt(plan.miles)} mi`;
-    lines = [plan.race ? RUN_TIPS.race : RUN_TIPS[plan.type as 'long' | 'tempo' | 'easy']];
-  } else {
-    title = `${head}: Rest day`;
-    lines = [REST_TEXT];
-  }
   return (
     <View style={[st.plan, { backgroundColor: c.bg, borderColor: c.line }]}>
-      <Text style={[st.planHead, { color: c.ink }]}>{title}</Text>
-      {lines.map((t) => (
-        <Text key={t} style={{ color: c.ink, fontSize: 13 }}>
-          {t}
-        </Text>
-      ))}
+      <View style={[st.rail, { backgroundColor: c.types[plan.type] }]} />
+      <View style={st.planBody}>
+        <Text style={{ color: c.mute, fontSize: 13 }}>{head}</Text>
+        {T.kind === 'lift' ? (
+          <>
+            <Text style={[st.planTitle, { color: c.ink }]}>{T.label} day</Text>
+            {LIFTS[plan.type as LiftGroup].map((e) => (
+              <View key={e.id} style={st.planRow}>
+                <Text style={{ flex: 1, color: c.ink, fontSize: 14 }}>
+                  {e.name} <Text style={{ color: c.mute }}>{e.sets}</Text>
+                </Text>
+                <Text style={{ color: c.ink, fontSize: 14, fontWeight: '700', ...tabular }}>
+                  {fmt(targetFor(state.base, e.id, plan.w))} {e.unit}
+                </Text>
+              </View>
+            ))}
+          </>
+        ) : T.kind === 'run' ? (
+          <>
+            <View style={st.planRow}>
+              <Text style={[st.planTitle, { color: c.ink, flex: 1 }]}>{plan.race ? 'Race day' : `${T.label} run`}</Text>
+              <Text style={[st.planMiles, { color: c.ink }]}>
+                {fmt(plan.miles)}
+                <Text style={{ fontFamily: fonts.semi, fontSize: 16, color: c.mute }}> mi</Text>
+              </Text>
+            </View>
+            <Text style={{ color: c.ink, fontSize: 14 }}>{plan.race ? RUN_TIPS.race : RUN_TIPS[plan.type as 'long' | 'tempo' | 'easy']}</Text>
+          </>
+        ) : (
+          <>
+            <Text style={[st.planTitle, { color: c.ink }]}>Rest day</Text>
+            <Text style={{ color: c.ink, fontSize: 14 }}>{REST_TEXT}</Text>
+          </>
+        )}
+      </View>
     </View>
   );
 }
@@ -286,15 +342,11 @@ function WorkoutSwap({
   c: Palette;
 }) {
   if (!open) {
-    return (
-      <View style={st.skiprow}>
-        <OptionButton label={free ? 'Do a workout instead' : 'Did something else'} selected={false} onPress={onOpen} c={c} />
-      </View>
-    );
+    return <OptionButton label={free ? 'Do a workout instead' : 'Did something else'} selected={false} onPress={onOpen} c={c} />;
   }
   const asScheduled = !f.makeupFor && (!f.swap || f.swap === scheduled);
   return (
-    <View style={{ gap: 6, marginBottom: 2 }}>
+    <View style={{ gap: space.sm, width: '100%' }}>
       {candidates.length ? (
         <>
           <Text style={[st.optHead, { color: c.mute }]}>{"Move another day's workout here"}</Text>
@@ -302,7 +354,7 @@ function WorkoutSwap({
             {candidates.map((m) => (
               <OptionButton
                 key={m.s}
-                label={`${shortDayLabel(m.s)} · ${TYPES[m.plan.type].label}${m.plan.miles ? ` ${fmt(m.plan.miles)} mi` : ''}`}
+                label={`${shortDayLabel(m.s)}, ${TYPES[m.plan.type].label}${m.plan.miles ? ` ${fmt(m.plan.miles)} mi` : ''}`}
                 selected={f.makeupFor === m.s}
                 color={c.types[m.plan.type]}
                 onPress={() => edit({ makeupFor: m.s, swap: m.plan.type })}
@@ -339,6 +391,7 @@ function WorkoutSwap({
   );
 }
 
+/** A pill choice. Workout types fill with their own color; everything else fills with ink. */
 function OptionButton({
   label,
   selected,
@@ -352,7 +405,8 @@ function OptionButton({
   color?: string;
   c: Palette;
 }) {
-  const fill = color ?? c.mute;
+  const fill = color ?? c.accent;
+  const onFill = color ? c.onType : c.onAccent;
   return (
     <Pressable
       onPress={onPress}
@@ -361,25 +415,29 @@ function OptionButton({
       hitSlop={4}
       style={({ pressed }) => [
         st.opt,
-        { borderColor: selected ? fill : c.line, backgroundColor: selected ? fill : c.bg, opacity: pressed ? 0.7 : 1 },
+        { borderColor: selected ? fill : c.line, backgroundColor: selected ? fill : c.card, opacity: pressed ? 0.7 : 1 },
       ]}>
-      <Text style={{ color: selected ? '#fff' : c.ink, fontWeight: '700', fontSize: 14 }}>{label}</Text>
+      {color && !selected ? <View style={[st.optDot, { backgroundColor: color }]} /> : null}
+      <Text style={{ color: selected ? onFill : c.ink, fontWeight: '600', fontSize: 14 }}>{label}</Text>
     </Pressable>
   );
 }
 
 function StatusBadge({ st: status, movedTo, c }: { st: string | null; movedTo: string | null; c: Palette }) {
   const m =
-    status === 'done' ? { t: '✓ Completed', fg: c.ok, bg: c.okbg }
-    : status === 'missed' ? { t: '✕ Missed', fg: c.bad, bg: c.badbg }
-    : status === 'partial' ? { t: '◐ Partial', fg: c.warn, bg: c.warnbg }
-    : status === 'skipped' ? { t: '– Skipped', fg: c.mute, bg: c.line }
-    : status === 'moved' ? { t: `↪ Moved to ${movedTo ? shortDayLabel(movedTo) : 'another day'}`, fg: c.mute, bg: c.line }
+    status === 'done' ? { t: 'Completed', fg: c.ok, bg: c.okbg, mark: 'done' as const }
+    : status === 'missed' ? { t: 'Missed', fg: c.bad, bg: c.badbg, mark: 'missed' as const }
+    : status === 'partial' ? { t: 'Partial', fg: c.warn, bg: c.warnbg, mark: 'partial' as const }
+    : status === 'skipped' ? { t: 'Skipped', fg: c.mute, bg: c.soft, mark: null }
+    : status === 'moved' ? { t: `Moved to ${movedTo ? shortDayLabel(movedTo) : 'another day'}`, fg: c.mute, bg: c.soft, mark: null }
     : null;
   if (!m) return null;
   return (
-    <View style={{ flexDirection: 'row', marginBottom: 6 }}>
-      <Text style={[st.badge, { color: m.fg, backgroundColor: m.bg }]}>{m.t}</Text>
+    <View style={{ flexDirection: 'row', marginTop: space.sm }}>
+      <View style={[st.badge, { backgroundColor: m.bg }]}>
+        {m.mark ? <StatusMark kind={m.mark} color={m.fg} size={14} /> : null}
+        <Text style={{ color: m.fg, fontSize: 13, fontWeight: '700' }}>{m.t}</Text>
+      </View>
     </View>
   );
 }
@@ -387,22 +445,12 @@ function StatusBadge({ st: status, movedTo, c }: { st: string | null; movedTo: s
 /** "Skip this workout" toggle. When on, the workout fields hide; calories and notes stay. */
 function SkipControl({ skipped, onToggle, c }: { skipped: boolean; onToggle: () => void; c: Palette }) {
   return (
-    <View style={st.skiprow}>
-      <Pressable
-        onPress={onToggle}
-        accessibilityRole="button"
-        accessibilityState={{ selected: skipped }}
-        hitSlop={6}
-        style={({ pressed }) => [
-          st.skipbtn,
-          { borderColor: skipped ? c.mute : c.line, backgroundColor: skipped ? c.line : c.bg, opacity: pressed ? 0.7 : 1 },
-        ]}>
-        <Text style={{ color: c.ink, fontWeight: '700', fontSize: 14 }}>{skipped ? 'Undo skip' : 'Skip'}</Text>
-      </Pressable>
+    <>
+      <OptionButton label={skipped ? 'Undo skip' : 'Skip'} selected={skipped} onPress={onToggle} c={c} />
       {skipped ? (
-        <Text style={{ color: c.mute, fontSize: 13, flexShrink: 1 }}>Workout skipped. You can still log calories.</Text>
+        <Text style={{ color: c.mute, fontSize: 14, flexShrink: 1 }}>Workout skipped. You can still log calories.</Text>
       ) : null}
-    </View>
+    </>
   );
 }
 
@@ -415,36 +463,55 @@ function Checkbox({ checked, onToggle, c, label }: { checked: boolean; onToggle:
       accessibilityState={{ checked }}
       accessibilityLabel={label}
       style={[st.check, { borderColor: checked ? c.accent : c.mute, backgroundColor: checked ? c.accent : 'transparent' }]}>
-      {checked ? <Text style={{ color: c.bg, fontWeight: '800', fontSize: 15, lineHeight: 17 }}>✓</Text> : null}
+      {checked ? <StatusMark kind="done" color={c.onAccent} size={18} /> : null}
     </Pressable>
   );
 }
 
 function LabeledField({ label, c, children }: { label: string; c: Palette; children: React.ReactNode }) {
   return (
-    <View style={{ gap: 3 }}>
-      <Text style={{ fontSize: 12, color: c.mute }}>{label}</Text>
+    <View style={{ flex: 1, gap: 6 }}>
+      <Text style={{ fontSize: 13, fontWeight: '600', color: c.mute }}>{label}</Text>
       {children}
     </View>
   );
 }
 
 const st = StyleSheet.create({
-  dtitle: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginBottom: 4 },
-  title: { fontSize: 16, fontWeight: '700' },
-  chip: { fontSize: 11, fontWeight: '700', color: '#fff', borderRadius: 6, overflow: 'hidden', paddingHorizontal: 8, paddingVertical: 2 },
-  badge: { fontSize: 12, fontWeight: '700', borderRadius: 6, overflow: 'hidden', paddingHorizontal: 8, paddingVertical: 2 },
-  plan: { borderWidth: 1, borderRadius: 10, paddingVertical: 8, paddingHorizontal: 10, marginTop: 6, marginBottom: 8, gap: 2 },
-  planHead: { fontSize: 14, fontWeight: '700' },
-  ex: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8 },
-  check: { width: 26, height: 26, borderRadius: 6, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
-  runrow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'flex-end', gap: 14, marginTop: 6 },
-  pace: { fontSize: 16, fontWeight: '700', paddingBottom: 9, minWidth: 80 },
-  submitrow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 12 },
-  skiprow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 2 },
-  optHead: { fontSize: 12, fontWeight: '700', marginTop: 2 },
-  optrow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  opt: { borderWidth: 1, borderRadius: 10, paddingVertical: 9, paddingHorizontal: 14, minHeight: 40, justifyContent: 'center' },
-  skipbtn: { borderWidth: 1, borderRadius: 10, paddingVertical: 9, paddingHorizontal: 18, minHeight: 40, justifyContent: 'center' },
-  submit: { borderRadius: 10, paddingVertical: 12, paddingHorizontal: 24 },
+  dtitle: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: space.sm },
+  title: { fontFamily: fonts.display, fontSize: 32, lineHeight: 36 },
+  chip: {
+    fontSize: 13, fontWeight: '700', borderRadius: radius.pill, overflow: 'hidden',
+    paddingHorizontal: space.md, paddingVertical: 5, marginTop: 4,
+  },
+  badge: { flexDirection: 'row', alignItems: 'center', gap: 5, borderRadius: radius.pill, paddingHorizontal: space.md, paddingVertical: 5 },
+  plan: { flexDirection: 'row', borderWidth: 1, borderRadius: radius.md, overflow: 'hidden', marginTop: space.md },
+  rail: { width: 5 },
+  planBody: { flex: 1, paddingVertical: space.md, paddingHorizontal: space.md, gap: 3 },
+  planTitle: { fontFamily: fonts.semi, fontSize: 22, lineHeight: 26 },
+  planRow: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', gap: space.md },
+  planMiles: { fontFamily: fonts.display, fontSize: 30, lineHeight: 34, ...tabular },
+  block: { marginTop: space.xl, paddingTop: space.lg, borderTopWidth: 1 },
+  blockTitle: { fontFamily: fonts.semi, fontSize: 22, lineHeight: 26, marginBottom: space.sm },
+  ex: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.md - 2 },
+  check: { width: 30, height: 30, borderRadius: 9, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
+  pair: { flexDirection: 'row', gap: space.md },
+  readout: {
+    flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', marginTop: space.md,
+    borderRadius: radius.md - 2, paddingVertical: space.sm + 2, paddingHorizontal: space.md,
+  },
+  readoutValue: { fontFamily: fonts.display, fontSize: 30, lineHeight: 34, ...tabular },
+  result: { marginTop: space.md, borderRadius: radius.md - 2, paddingVertical: space.md, paddingHorizontal: space.md },
+  submit: {
+    marginTop: space.xl, minHeight: 54, borderRadius: radius.md + 2,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  actions: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: space.sm, marginTop: space.md },
+  optHead: { fontSize: 13, fontWeight: '600', marginTop: space.xs },
+  optrow: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
+  opt: {
+    flexDirection: 'row', alignItems: 'center', gap: 7, borderWidth: 1.5, borderRadius: radius.pill,
+    paddingVertical: 8, paddingHorizontal: space.lg, minHeight: 42,
+  },
+  optDot: { width: 8, height: 8, borderRadius: 4 },
 });

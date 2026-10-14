@@ -5,6 +5,7 @@ import { AppState } from 'react-native';
 import {
   STORAGE_KEY,
   defaultState,
+  foodKcal,
   logFromForm,
   normalize,
   planFor,
@@ -12,6 +13,9 @@ import {
   submitError,
   todayString,
   type DayForm,
+  type DietSettings,
+  type Food,
+  type FoodEntry,
   type TrackerState,
 } from '@/logic';
 
@@ -31,6 +35,14 @@ interface Tracker {
   setBase: (id: string, v: number) => void;
   setGoal: (v: number | null) => void;
   setStart: (s: string) => void;
+  /** Add or replace (same id) a food log entry. Saved right away. */
+  saveEntry: (s: string, e: FoodEntry) => void;
+  removeEntry: (s: string, id: string) => void;
+  /** Add or replace (same id) a saved food: one the user created, or an Open Food Facts product. */
+  saveFood: (f: Food) => void;
+  deleteFood: (id: string) => void;
+  setDiet: (d: DietSettings) => void;
+  setFoodLog: (on: boolean) => void;
 }
 
 const Ctx = createContext<Tracker | null>(null);
@@ -89,7 +101,7 @@ export function TrackerProvider({ children }: { children: ReactNode }) {
       const p = planFor(state.start, s);
       if (!p) return null;
       const log = logFromForm(state, p, f);
-      const err = submitError(p, log);
+      const err = submitError(p, log, foodKcal(state, s) != null);
       if (err) return err;
       update((st) => ({ ...st, logs: { ...st.logs, [s]: { ...log, submitted: true } } }));
       setDrafts((d) => {
@@ -109,9 +121,46 @@ export function TrackerProvider({ children }: { children: ReactNode }) {
   const setGoal = useCallback((v: number | null) => update((st) => ({ ...st, goal: v })), [update]);
   const setStart = useCallback((s: string) => update((st) => ({ ...st, start: snapStart(s) })), [update]);
 
+  const saveEntry = useCallback(
+    (s: string, e: FoodEntry) =>
+      update((st) => {
+        const list = st.meals[s] ?? [];
+        const next = list.some((x) => x.id === e.id) ? list.map((x) => (x.id === e.id ? e : x)) : [...list, e];
+        return { ...st, meals: { ...st.meals, [s]: next } };
+      }),
+    [update],
+  );
+  const removeEntry = useCallback(
+    (s: string, id: string) =>
+      update((st) => {
+        const next = (st.meals[s] ?? []).filter((x) => x.id !== id);
+        const { [s]: _, ...rest } = st.meals;
+        return { ...st, meals: next.length ? { ...rest, [s]: next } : rest };
+      }),
+    [update],
+  );
+  const saveFood = useCallback(
+    (f: Food) =>
+      update((st) => {
+        const food = f;
+        const foods = st.foods.some((x) => x.id === f.id) ? st.foods.map((x) => (x.id === f.id ? food : x)) : [...st.foods, food];
+        return { ...st, foods };
+      }),
+    [update],
+  );
+  const deleteFood = useCallback((id: string) => update((st) => ({ ...st, foods: st.foods.filter((x) => x.id !== id) })), [update]);
+  const setDiet = useCallback((d: DietSettings) => update((st) => ({ ...st, diet: d })), [update]);
+  const setFoodLog = useCallback((on: boolean) => update((st) => ({ ...st, foodLog: on })), [update]);
+
   const value = useMemo(
-    () => ({ loaded, state, today, selected, select, drafts, setDraft, flash, submit, setBase, setGoal, setStart }),
-    [loaded, state, today, selected, select, drafts, setDraft, flash, submit, setBase, setGoal, setStart],
+    () => ({
+      loaded, state, today, selected, select, drafts, setDraft, flash, submit, setBase, setGoal, setStart,
+      saveEntry, removeEntry, saveFood, deleteFood, setDiet, setFoodLog,
+    }),
+    [
+      loaded, state, today, selected, select, drafts, setDraft, flash, submit, setBase, setGoal, setStart,
+      saveEntry, removeEntry, saveFood, deleteFood, setDiet, setFoodLog,
+    ],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

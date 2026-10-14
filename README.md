@@ -13,8 +13,12 @@ Data is stored only on the phone (AsyncStorage, key `mm_tracker_v1`). There's no
 | `src/logic/config.ts` | **Plan constants**: start date, long runs, weekly layout, tempo/easy mile rules, lifts. Edit the plan here. |
 | `src/logic/` | Pure TypeScript logic with no React: plan mapping, target weights, day status, time/pace, calories, progress stats, form/submit rules. |
 | `src/logic/__tests__/` | Unit tests (covers the HANDOFF test checklist). |
-| `src/app/` | Screens (expo-router): `index.tsx` = Calendar tab, `progress.tsx` = Progress tab. |
-| `src/ui/` | UI components, theme (light/dark follows the system), and the on-device store. |
+| `src/logic/nutrition.ts`, `diet.ts` | Food log, portions and totals, and diets: fasting windows, presets (keto, vegan, ...) and the on-track checks. |
+| `src/logic/usda.ts`, `src/logic/data/usda-foods.json` | Built-in USDA food list (about 12,900 foods), loaded the first time food search opens. |
+| `src/logic/openfoodfacts.ts` | Online search and barcode lookup for branded foods on Open Food Facts. |
+| `scripts/build-usda-foods.py` | Rebuilds `usda-foods.json` from USDA downloads (see below). |
+| `src/app/` | Screens (expo-router): `index.tsx` = Calendar tab, `food.tsx` = Food tab, `progress.tsx` = Progress tab. |
+| `src/ui/` | UI components, theme (light/dark follows the system), and the on-device store. `src/ui/food/` = Food tab sheets. |
 
 ## Develop
 
@@ -83,3 +87,16 @@ Bundle ID / package name is `com.trainingtracker.app` (in `app.json`). Change it
 - Cloud sync via `window.claude` is dropped (per the handoff). Data stays on the device.
 - If you open the app more than 3 weeks after race day, the daily deficit chart shows the plan's last 3 weeks. The prototype showed an empty chart in that case.
 - The day detail sits below the calendar grid. Tapping a day scrolls it into view.
+
+## Food data
+
+- **USDA FoodData Central** (public domain), built into the app so it works offline: FNDDS (foods as eaten, with household portions) and SR Legacy (ingredients; baby foods left out). Nutrients are per 100 g, with portions like "1 cup (163 g)".
+- **Open Food Facts** (Open Database License): branded and packaged foods, searched online when you tap *Search Open Food Facts* or type a barcode number. It allows about 10 searches a minute per user, so the app never searches as you type. Products you log are saved on the device.
+- Food groups used by diets (meat, dairy, grains, ...) are inferred: from USDA categories and ingredient lists, and from Open Food Facts allergens and categories. They're a best guess.
+
+To rebuild the USDA list, download the FNDDS (survey) and SR Legacy JSON zips from https://fdc.nal.usda.gov/download-datasets/, unzip them, then:
+
+```bash
+python3 scripts/build-usda-foods.py surveyDownload.json FoodData_Central_sr_legacy_food_json_2018-04.json
+```
+

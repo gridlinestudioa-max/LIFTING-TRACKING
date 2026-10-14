@@ -29,28 +29,26 @@ export default function CalendarScreen() {
     <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: c.bg }}>
       <ScrollView
         ref={scroll}
-        contentContainerStyle={{ padding: 12, paddingBottom: 40 }}
+        contentContainerStyle={{ padding: 16, paddingBottom: 48 }}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
         automaticallyAdjustKeyboardInsets>
         <Header />
-        <Card style={{ paddingHorizontal: 8 }}>
-          <CalendarGrid
-            state={state}
-            today={today}
-            selected={selected}
-            year={view.y}
-            month={view.m}
-            onSelect={(s) => {
-              select(s);
-              // Bring the day detail into view below the grid.
-              scroll.current?.scrollTo({ y: Math.max(detailY.current - 220, 0), animated: true });
-            }}
-            onPrev={() => shift(-1)}
-            onNext={() => shift(1)}
-          />
-        </Card>
-        <View onLayout={(e) => (detailY.current = e.nativeEvent.layout.y)}>
+        <CalendarGrid
+          state={state}
+          today={today}
+          selected={selected}
+          year={view.y}
+          month={view.m}
+          onSelect={(s) => {
+            select(s);
+            // Bring the day detail into view below the grid.
+            scroll.current?.scrollTo({ y: Math.max(detailY.current - 220, 0), animated: true });
+          }}
+          onPrev={() => shift(-1)}
+          onNext={() => shift(1)}
+        />
+        <View style={{ marginTop: 20 }} onLayout={(e) => (detailY.current = e.nativeEvent.layout.y)}>
           <Card>
             <DayDetail />
           </Card>

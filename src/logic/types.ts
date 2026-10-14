@@ -1,4 +1,6 @@
 import type { DayType } from './config';
+import type { DietSettings } from './diet';
+import type { Food, FoodEntry } from './nutrition';
 
 export interface LiftEntry {
   w: number;
@@ -27,4 +29,17 @@ export interface TrackerState {
   goal: number | null;
   base: Record<string, number>;
   logs: Record<string, DayLog>;
+  /**
+   * Foods saved on the device: ones the user created (`custom`), and Open Food Facts products that were
+   * logged (so they work offline and show in recents). The built-in USDA list is not stored.
+   */
+  foods: Food[];
+  /** Food log by date. Saved as soon as it changes (no Submit step). */
+  meals: Record<string, FoodEntry[]>;
+  diet: DietSettings;
+  /**
+   * Food log on: food logged on the Food tab counts as calories in, on top of any number typed on the day.
+   * Off: the Food tab is hidden and calories in is only the typed number. Logged food is kept either way.
+   */
+  foodLog: boolean;
 }

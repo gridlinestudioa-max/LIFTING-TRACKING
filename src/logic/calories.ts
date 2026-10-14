@@ -1,6 +1,7 @@
 import { PLAN_WEEKS } from './config';
 import { addDays, dayDiff } from './dates';
 import { fmtInt } from './format';
+import { sumTotals } from './nutrition';
 import { planEnd } from './plan';
 import type { TrackerState } from './types';
 
@@ -36,14 +37,31 @@ export interface KDay {
   net: number;
 }
 
+/** Calories eaten from the food log, or null when the food log is off or nothing is logged that day. */
+export function foodKcal(state: TrackerState, s: string): number | null {
+  const m = state.meals[s];
+  return state.foodLog && m && m.length ? Math.round(sumTotals(m).kcal) : null;
+}
+
+/** Total calories in: the number typed on the day plus the food log (when on). Null when neither has anything. */
+export function totalIn(typed: number | null | undefined, food: number | null): number | null {
+  return typed == null && food == null ? null : (typed ?? 0) + (food ?? 0);
+}
+
+/** Calories in for a day: the number typed on the day plus the food log total. */
+export function cinFor(state: TrackerState, s: string): number | null {
+  return totalIn(state.logs[s]?.cin, foodKcal(state, s));
+}
+
 /** Logged days with both calorie numbers, sorted by date. */
 export function kDays(state: TrackerState): KDay[] {
   return Object.keys(state.logs)
     .sort()
     .map((k) => {
       const l = state.logs[k];
-      return l && l.cin != null && l.cout != null
-        ? { s: k, cin: l.cin, cout: l.cout, net: net(l.cin, l.cout) }
+      const cin = cinFor(state, k);
+      return l && cin != null && l.cout != null
+        ? { s: k, cin, cout: l.cout, net: net(cin, l.cout) }
         : null;
     })
     .filter((d): d is KDay => d !== null);
