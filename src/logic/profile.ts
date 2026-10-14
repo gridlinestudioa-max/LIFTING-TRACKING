@@ -10,6 +10,7 @@
 // - Sugar: the app counts total sugar (fruit and milk included), so it uses the EU/UK reference intake for total
 //   sugars, 90 g per 2,000 kcal, scaled to your calories.
 
+import type { DailyMove, Tracker } from './burn';
 import { todayString } from './dates';
 import type { Limits, StyleId } from './diet';
 import { fmtInt } from './format';
@@ -31,6 +32,14 @@ export interface Profile {
   weightLb?: number;
   activity?: Activity;
   goal?: Goal;
+  /** How calories burned are tracked: a device, or 'none' for the app's estimate. */
+  tracker?: Tracker;
+  /** Movement outside workouts, for the estimate. */
+  daily?: DailyMove;
+  /** Average steps a day, for a better estimate. */
+  steps?: number;
+  /** Body fat %, for a better resting estimate. */
+  bodyFat?: number;
 }
 
 /** Everything the calorie and macro formulas need. */
@@ -193,6 +202,8 @@ export function profileError(p: Profile, today: string = todayString()): string 
   }
   if (p.heightIn != null && !(p.heightIn >= 48 && p.heightIn <= 96)) return 'Enter a height from 4 ft to 8 ft, or leave it blank.';
   if (p.weightLb != null && !(p.weightLb >= 70 && p.weightLb <= 700)) return 'Enter a weight from 70 to 700 lb, or leave it blank.';
+  if (p.steps != null && !(p.steps >= 500 && p.steps <= 60000)) return 'Enter steps from 500 to 60,000, or leave it blank.';
+  if (p.bodyFat != null && !(p.bodyFat >= 3 && p.bodyFat <= 60)) return 'Enter body fat from 3 to 60%, or leave it blank.';
   return null;
 }
 
@@ -230,5 +241,11 @@ export function normalizeProfile(src: unknown): Profile | null {
   if (w >= 70 && w <= 700) p.weightLb = w;
   if (ACTIVITY.some((a) => a.id === s.activity)) p.activity = s.activity as Activity;
   if (GOALS.some((g) => g.id === s.goal)) p.goal = s.goal as Goal;
+  if (['apple', 'fitbit', 'garmin', 'samsung', 'whoop', 'oura', 'other', 'none'].includes(s.tracker as string)) p.tracker = s.tracker as Tracker;
+  if (['desk', 'standing', 'onfeet', 'labor'].includes(s.daily as string)) p.daily = s.daily as DailyMove;
+  const steps = Number(s.steps);
+  if (steps >= 500 && steps <= 60000) p.steps = Math.round(steps);
+  const bf = Number(s.bodyFat);
+  if (bf >= 3 && bf <= 60) p.bodyFat = bf;
   return Object.keys(p).length ? p : null;
 }

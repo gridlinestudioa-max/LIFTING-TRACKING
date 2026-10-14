@@ -1,3 +1,4 @@
+import { coutFor } from './burn';
 import { addDays, dayDiff, mondayOf } from './dates';
 import { fmtInt } from './format';
 import { sumTotals } from './nutrition';
@@ -57,7 +58,7 @@ export function kDays(state: TrackerState): KDay[] {
   return [...keys]
     .sort()
     .map((k) => {
-      const cout = state.days[k]?.cout;
+      const cout = coutFor(state, k);
       const cin = cinFor(state, k);
       return cin != null && cout != null ? { s: k, cin, cout, net: net(cin, cout) } : null;
     })

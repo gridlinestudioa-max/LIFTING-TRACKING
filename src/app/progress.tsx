@@ -1,38 +1,14 @@
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useState } from 'react';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import {
-  METERS_PER_MILE,
-  MONTHS,
-  SPORT_LABEL,
-  addDays,
-  byWeek,
-  calorieSummary,
-  cardioStats,
-  cumulative,
-  dailyWindow,
-  defaultIncrement,
-  fmt,
-  fmtInt,
-  fmtTime,
-  fmtW,
-  nextTarget,
-  paceText,
-  planTitle,
-  planWeekRows,
-  sgn,
-  toD,
-  volume,
-  weeklyTotals,
-  weightHistory,
-  type Sport,
-  type WeekBar as BarRow,
-} from '@/logic';
-import { ChartKey, CumulativeLine, DeficitBars, PlanBars, Sparkline } from '@/ui/charts';
+import { MONTHS, byWeek, calorieSummary, cardioReport, cumulative, dailyWindow, fmt, fmtInt, liftSummary, sgn, toD } from '@/logic';
+import { ChartKey, CumulativeLine, DeficitBars } from '@/ui/charts';
 import { Header, Mute, Section, StatGrid, StatTile } from '@/ui/components';
-import { useLibrary } from '@/ui/lifting/library';
+import { CardioStatsSheet, paceFor } from '@/ui/stats/CardioStats';
+import { LiftStatsSheet } from '@/ui/stats/LiftStats';
 import { useTracker } from '@/ui/store';
-import { space, tabular, useColors } from '@/ui/theme';
+import { fonts, space, tabular, useColors } from '@/ui/theme';
 
 const weekLabel = (s: string) => {
   const d = toD(s);
@@ -57,99 +33,64 @@ export default function ProgressScreen() {
 }
 
 function LiftingSection() {
-  const c = useColors();
   const { state, today } = useTracker();
-  const { byId } = useLibrary();
-  const L = state.lifting;
-  const done = L.workouts.filter((w) => w.done);
-  const last28 = done.filter((w) => w.date > addDays(today, -28)).length;
-  const total = done.reduce((t, w) => t + volume(w), 0);
-  // Exercises you've done, in routine order first, then the rest.
-  const logged = new Set(done.flatMap((w) => w.exercises.filter((x) => x.sets.some((s) => s.done)).map((x) => x.exId)));
-  const ids = [...new Set([...L.routines.flatMap((r) => r.items.map((i) => i.exId)), ...logged])].filter((id) => logged.has(id));
-
+  const [open, setOpen] = useState(false);
+  const s = liftSummary(state.lifting, today);
   return (
     <>
-    <Section title="Lifting">
-      <StatGrid columns={3}>
-        <StatTile value={String(done.length)} label="Workouts" />
-        <StatTile value={String(last28)} label="Last 4 weeks" />
-        <StatTile value={total >= 1e5 ? `${fmt(+(total / 1000).toFixed(0))}k` : fmtInt(total)} label="Lb lifted" />
-      </StatGrid>
-    </Section>
-    {ids.length ? (
-    <Section title="Your lifts" action={<Text style={{ color: c.mute, fontSize: 13, fontWeight: '600' }}>Next</Text>}>
-      {ids.map((id, i) => {
-        const ex = byId(id);
-        const pts = weightHistory(L, id).map((p) => p.w);
-        const it = L.routines.flatMap((r) => r.items).find((x) => x.exId === id);
-        const plan = it ? { ...it, inc: it.inc ?? (ex ? defaultIncrement(ex) : 5) } : { sets: 3, repMin: 8, repMax: 12, inc: ex ? defaultIncrement(ex) : 5 };
-        const t = nextTarget(id, L.workouts, plan);
-        const name = ex?.name ?? done.flatMap((w) => w.exercises).find((x) => x.exId === id)?.name ?? 'Exercise';
-        const u = ex?.unit === 'plates' ? 'pl' : 'lb';
-        return (
-          <View key={id} style={[st.srow, i > 0 && { borderTopWidth: 1, borderTopColor: c.line }]}>
-            <Text style={{ flex: 1, fontWeight: '600', fontSize: 15, color: c.ink }}>{name}</Text>
-            <View style={{ width: 70, alignItems: 'center' }}>{pts.length >= 2 ? <Sparkline pts={pts} /> : <Text style={{ color: c.mute }}>–</Text>}</View>
-            <Text style={{ width: 84, textAlign: 'right', color: t.weight != null ? (t.reason === 'up' ? c.ok : c.ink) : c.mute, fontSize: 15, ...tabular }}>
-              {t.weight != null ? `${fmtW(t.weight)} ${u}${t.reason === 'up' ? ' ↑' : ''}` : '–'}
-            </Text>
-          </View>
-        );
-      })}
-    </Section>
-    ) : null}
+      <TapCard title="Lifting" onPress={() => setOpen(true)} a11y="Lifting stats. Show more">
+        <View style={{ flexDirection: 'row' }}>
+          <Big value={String(s.last4)} label="Last 4 weeks" />
+          <Big value={String(s.total)} label="Total workouts" />
+        </View>
+      </TapCard>
+      <LiftStatsSheet visible={open} onClose={() => setOpen(false)} />
     </>
   );
 }
 
 function CardioSection() {
-  const c = useColors();
   const { state, today } = useTracker();
-  const cardio = state.cardio;
-  const s = cardioStats(cardio, today);
-  const { long, sports } = planWeekRows(cardio);
-  // Bars are in miles; swims read better in meters.
-  const unitRows = (sport: Sport, rows: BarRow[]) =>
-    sport === 'swim' ? rows.map((r) => ({ ...r, planned: Math.round(r.planned * METERS_PER_MILE), actual: Math.round(r.actual * METERS_PER_MILE) })) : rows;
-  const unit = (sport: Sport) => (sport === 'swim' ? 'meters' : 'miles');
-  const weeks = weeklyTotals(cardio, today, 8);
+  const [open, setOpen] = useState(false);
+  // Runs if there are any, otherwise everything.
+  const runs = cardioReport(state.cardio, state.profile, today, 'run');
+  const g = runs.sessions.length ? 'run' : 'all';
+  const r = g === 'run' ? runs : cardioReport(state.cardio, state.profile, today, 'all');
   return (
     <>
-      <Section title="Cardio">
-        <StatGrid columns={3}>
-          <StatTile value={String(s.sessions)} label="Sessions" />
-          <StatTile value={fmt(+s.miles.toFixed(1))} label="Miles" />
-          <StatTile value={s.secs ? fmtTime(s.secs) : '–'} label="Time" />
-          <StatTile value={s.longestRun ? fmt(s.longestRun) : '–'} label="Longest run" />
-          <StatTile value={s.paceMiles > 0 ? paceText(s.paceMiles, s.paceSecs).replace(' /mi', '') : '–'} label="Pace /mi" />
-          {cardio.plan ? <StatTile value={String(s.planDone)} sub={`/${s.planDue}`} label="Plan done" /> : <StatTile value="–" label="No plan" />}
-        </StatGrid>
-      </Section>
-
-      {s.sessions ? (
-        <Section title="Miles per week">
-          <PlanBars rows={weeks.map((w) => ({ label: weekLabel(w.start), planned: 0, actual: w.miles }))} label="Miles per week, last 8 weeks" />
-        </Section>
-      ) : null}
-
-      {cardio.plan && sports.length ? (
-        <>
-          {long.length ? (
-            <Section title={`Long ${SPORT_LABEL[sports[0].sport].toLowerCase()}`} action={<Text style={{ color: c.mute, fontSize: 13 }}>{planTitle(cardio.plan.id)}</Text>}>
-              <PlanBars rows={unitRows(sports[0].sport, long)} label={`Long session ${unit(sports[0].sport)} by plan week`} />
-              <ChartKey items={['planned', 'logged']} />
-            </Section>
-          ) : null}
-          {sports.map((x) => (
-            <Section key={x.sport} title={`Weekly ${SPORT_LABEL[x.sport].toLowerCase()} ${unit(x.sport)}`}>
-              <PlanBars rows={unitRows(x.sport, x.rows)} label={`${SPORT_LABEL[x.sport]} ${unit(x.sport)} by plan week`} />
-              <ChartKey items={['planned', 'logged']} />
-            </Section>
-          ))}
-        </>
-      ) : null}
+      <TapCard title={g === 'run' ? 'Running' : 'Cardio'} onPress={() => setOpen(true)} a11y="Cardio stats. Show more">
+        <View style={{ flexDirection: 'row' }}>
+          <Big value={paceFor(g, r.avgPace).replace(' /mi', '')} unit={r.avgPace ? '/mi' : undefined} label="Avg pace" />
+          <Big value={r.avgMiles != null ? fmt(Math.round(r.avgMiles * 10) / 10) : '–'} unit={r.avgMiles != null ? 'mi' : undefined} label="Avg distance" />
+        </View>
+      </TapCard>
+      {open ? <CardioStatsSheet visible initial={g} onClose={() => setOpen(false)} /> : null}
     </>
+  );
+}
+
+/** A section card that opens more detail. */
+function TapCard({ title, onPress, a11y, children }: { title: string; onPress: () => void; a11y: string; children: React.ReactNode }) {
+  const c = useColors();
+  return (
+    <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={a11y} style={({ pressed }) => ({ opacity: pressed ? 0.75 : 1 })}>
+      <Section title={title} action={<Text style={{ color: c.mute, fontSize: 14, fontWeight: '600' }}>All stats ›</Text>}>
+        {children}
+      </Section>
+    </Pressable>
+  );
+}
+
+function Big({ value, unit, label }: { value: string; unit?: string; label: string }) {
+  const c = useColors();
+  return (
+    <View style={{ flex: 1 }}>
+      <Text style={{ color: c.ink, fontFamily: fonts.display, fontSize: 36, lineHeight: 40, ...tabular }}>
+        {value}
+        {unit ? <Text style={{ fontFamily: fonts.semi, fontSize: 18, color: c.mute }}>{` ${unit}`}</Text> : null}
+      </Text>
+      <Text style={{ color: c.mute, fontSize: 13 }}>{label}</Text>
+    </View>
   );
 }
 

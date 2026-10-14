@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import {
@@ -310,6 +310,13 @@ function FoodRow({ f, first, onPress }: { f: Food; first: boolean; onPress: () =
   );
 }
 
+/** Branded results already fetched, by query, so retyping a search doesn't spend another request. */
+const offCache = new Map<string, Food[]>();
+
+/**
+ * One search over everything: your foods, the built-in USDA list (instant) and Open Food Facts (online,
+ * a moment after you stop typing). Results are merged and ranked together. A barcode looks up that product.
+ */
 function SearchView({
   all,
   usdaLoading,
@@ -331,38 +338,54 @@ function SearchView({
 }) {
   const c = useColors();
   const q = query.trim();
-  const results = useMemo(() => searchFoods(all, q, recent, 40), [all, q, recent]);
-  const [off, setOff] = useState<OffState>({ status: 'idle' });
-  const abort = useRef<AbortController | null>(null);
-  useEffect(() => () => abort.current?.abort(), []);
-
-  const runOff = () => {
-    if (q.length < 2) return;
-    abort.current?.abort();
-    const ctl = new AbortController();
-    abort.current = ctl;
-    setOff({ status: 'loading', query: q });
-    const opts = { fetch: (u: string, i?: RequestInit) => fetch(u, i), headers: OFF_HEADERS, signal: ctl.signal };
-    const job = isBarcode(q) ? offByBarcode(q, opts).then((f) => [f]) : searchOff(q, opts);
-    job
-      .then((foods) => !ctl.signal.aborted && setOff({ status: 'done', query: q, foods }))
-      .catch((e) => {
-        if (ctl.signal.aborted) return;
-        setOff({ status: 'error', query: q, message: e instanceof OffError ? e.message : 'Something went wrong searching Open Food Facts.' });
-      });
-  };
-
-  // Branded results belong to the query they were searched for.
-  const offHere = off.status !== 'idle' && off.query === q ? off : null;
+  const key = q.toLowerCase();
   const barcode = isBarcode(q);
+  const [off, setOff] = useState<OffState>({ status: 'idle' });
+  const [retry, setRetry] = useState(0);
+  const cached = offCache.get(key);
+
+  // Search Open Food Facts once typing pauses. It allows about 10 searches a minute, so wait, and reuse results.
+  useEffect(() => {
+    if ((!barcode && q.length < 3) || offCache.has(key)) return;
+    const ctl = new AbortController();
+    const t = setTimeout(() => {
+      setOff({ status: 'loading', query: key });
+      const opts = { fetch: (u: string, i?: RequestInit) => fetch(u, i), headers: OFF_HEADERS, signal: ctl.signal };
+      const job = barcode ? offByBarcode(q, opts).then((f) => [f]) : searchOff(q, opts);
+      job
+        .then((foods) => {
+          if (ctl.signal.aborted) return;
+          offCache.set(key, foods);
+          setOff({ status: 'done', query: key, foods });
+        })
+        .catch((e) => {
+          if (ctl.signal.aborted) return;
+          setOff({ status: 'error', query: key, message: e instanceof OffError ? e.message : 'Couldn’t reach Open Food Facts.' });
+        });
+    }, barcode ? 0 : 700);
+    return () => {
+      clearTimeout(t);
+      ctl.abort();
+    };
+  }, [key, q, barcode, retry]);
+
+  const branded = useMemo(() => {
+    const mine = new Set(all.map((f) => f.id));
+    return (cached ?? []).filter((f) => !mine.has(f.id));
+  }, [cached, all]);
+  const results = useMemo(
+    () => (barcode ? branded : searchFoods([...all, ...branded], q, recent, 50)),
+    [all, branded, q, recent, barcode],
+  );
+  const loadingHere = off.status === 'loading' && off.query === key;
+  const errorHere = off.status === 'error' && off.query === key ? off.message : null;
 
   return (
     <View>
       <Field
         value={query}
         onChangeText={setQuery}
-        onSubmitEditing={runOff}
-        placeholder="Search foods or type a barcode"
+        placeholder="Search foods, brands or a barcode"
         autoFocus
         autoCorrect={false}
         returnKeyType="search"
@@ -382,57 +405,28 @@ function SearchView({
               <FoodRow key={f.id} f={f} first={i === 0} onPress={() => onPick(f)} />
             ))}
           </View>
-        ) : (
-          <Mute style={{ marginTop: space.lg }}>Search foods, brands or a barcode.</Mute>
-        )
+        ) : null
       ) : (
         <>
-          {!barcode ? (
-            <View style={{ marginTop: space.lg }}>
-              {usdaLoading ? <Mute>Loading the food list…</Mute> : null}
-              {results.map((f, i) => (
-                <FoodRow key={f.id} f={f} first={i === 0} onPress={() => onPick(f)} />
-              ))}
-              {!usdaLoading && !results.length ? <Mute>{`No matches for “${q}”.`}</Mute> : null}
-            </View>
-          ) : null}
-
-          <View style={[st.offBox, { borderTopColor: c.line }]}>
-            <Text style={[st.offHead, { color: c.ink }]}>Branded foods</Text>
-            {!offHere ? (
-              q.length >= 2 ? (
-                <Button
-                  label={barcode ? `Look up barcode ${q}` : `Search Open Food Facts for “${q}”`}
-                  onPress={runOff}
-                  style={{ marginTop: space.sm }}
-                />
-              ) : (
-                <Mute>Type at least 2 letters.</Mute>
-              )
-            ) : offHere.status === 'loading' ? (
-              <Mute style={{ marginTop: space.sm }}>Searching Open Food Facts…</Mute>
-            ) : offHere.status === 'error' ? (
-              <View style={{ gap: space.sm, marginTop: space.sm }}>
-                <Text style={{ color: c.bad, fontSize: 15 }}>{offHere.message}</Text>
-                <Button label="Try again" onPress={runOff} />
+          <View style={{ marginTop: space.lg }}>
+            {results.map((f, i) => (
+              <FoodRow key={f.id} f={f} first={i === 0} onPress={() => onPick(f)} />
+            ))}
+            {usdaLoading || loadingHere ? (
+              <Mute style={{ marginTop: space.sm }}>{results.length ? 'Looking for more…' : 'Searching…'}</Mute>
+            ) : errorHere ? (
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.md, marginTop: space.sm }}>
+                <Text style={{ color: c.mute, fontSize: 14, flex: 1 }}>Branded foods didn’t load.</Text>
+                <LinkButton label="Try again" onPress={() => setRetry((n) => n + 1)} />
               </View>
-            ) : offHere.foods.length ? (
-              <View style={{ marginTop: space.xs }}>
-                {offHere.foods.map((f, i) => (
-                  <FoodRow key={f.id} f={f} first={i === 0} onPress={() => onPick(f)} />
-                ))}
-              </View>
-            ) : (
-              <Mute style={{ marginTop: space.sm }}>{`Nothing on Open Food Facts for “${q}”.`}</Mute>
-            )}
+            ) : !results.length && (cached || q.length < 3) ? (
+              <Mute>{`No matches for “${q}”.`}</Mute>
+            ) : null}
           </View>
 
-          <View style={{ marginTop: space.xl, gap: space.sm }}>
-            <Button label={`Create “${q}”`} onPress={onCreate} />
-          </View>
+          <Button label={`Create “${q}”`} onPress={onCreate} style={{ marginTop: space.xl }} />
         </>
       )}
-
     </View>
   );
 }
@@ -838,8 +832,6 @@ const st = {
   ...StyleSheet.create({
     row: { flexDirection: 'row', gap: space.sm, marginTop: space.md },
     result: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.md, borderTopWidth: 1 },
-    offBox: { marginTop: space.xl, paddingTop: space.lg, borderTopWidth: 1 },
-    offHead: { fontFamily: fonts.semi, fontSize: 21, lineHeight: 26 },
     name: { fontFamily: fonts.display, fontSize: 30, lineHeight: 34 },
     nutri: {},
     kcal: { fontFamily: fonts.display, fontSize: 40, lineHeight: 44, ...tabular },

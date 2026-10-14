@@ -113,7 +113,7 @@ export function WorkoutSheet({ visible, id, onClose }: { visible: boolean; id: s
               onPress={() => {
                 if (!doneSets) return;
                 setSummary(progressionSummary(state.lifting, w));
-                save((w) => ({ ...w, done: true }));
+                save((w) => ({ ...w, done: true, end: w.end ?? Date.now() }));
                 setMode('summary');
               }}
             />

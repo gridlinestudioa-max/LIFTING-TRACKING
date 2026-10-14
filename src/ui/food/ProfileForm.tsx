@@ -3,7 +3,10 @@ import { StyleSheet, Text, View } from 'react-native';
 
 import {
   ACTIVITY,
+  DAILY_MOVES,
   GOALS,
+  TRACKERS,
+  burnAccuracy,
   MONTHS,
   ageOn,
   daysInMonth,
@@ -13,6 +16,8 @@ import {
   profileError,
   todayString,
   type Activity,
+  type DailyMove,
+  type Tracker,
   type Goal,
   type Profile,
   type Sex,
@@ -52,6 +57,10 @@ export function ProfileForm({
   const [lb, setLb] = useState(initial?.weightLb ? fmt(initial.weightLb) : '');
   const [activity, setActivity] = useState<Activity | undefined>(initial?.activity);
   const [goal, setGoal] = useState<Goal | undefined>(initial?.goal);
+  const [tracker, setTracker] = useState<Tracker | undefined>(initial?.tracker);
+  const [daily, setDaily] = useState<DailyMove | undefined>(initial?.daily);
+  const [steps, setSteps] = useState(initial?.steps ? String(initial.steps) : '');
+  const [bf, setBf] = useState(initial?.bodyFat ? fmt(initial.bodyFat) : '');
   const [err, setErr] = useState<string | null>(null);
 
   const thisYear = Number(today.slice(0, 4));
@@ -70,6 +79,13 @@ export function ProfileForm({
   if (!blank(lb)) draft.weightLb = Number(lb);
   if (activity) draft.activity = activity;
   if (goal) draft.goal = goal;
+  if (tracker) draft.tracker = tracker;
+  if (tracker === 'none') {
+    if (daily) draft.daily = daily;
+    if (!blank(steps)) draft.steps = Number(steps.replace(/,/g, ''));
+    if (!blank(bf)) draft.bodyFat = Number(bf);
+  }
+  const acc = burnAccuracy(draft);
   const missing = missingForSuggestions(draft, today);
 
   return (
@@ -113,6 +129,29 @@ export function ProfileForm({
       <Text style={[st.lbl, { color: c.mute, marginTop: space.lg }]}>Goal</Text>
       <Select label="Goal" value={goal} options={GOALS.map((g) => ({ value: g.id, label: g.label, hint: g.blurb }))} onChange={setGoal} placeholder="Not set" />
 
+      <Text style={[st.head, { color: c.ink }]}>Calories burned</Text>
+      <Text style={[st.lbl, { color: c.mute }]}>What tracks your calories burned?</Text>
+      <Select label="What tracks your calories burned?" value={tracker} options={TRACKERS.map((t) => ({ value: t.id, label: t.label }))} onChange={setTracker} placeholder="Not set" />
+      {tracker === 'none' ? (
+        <>
+          <Text style={[st.lbl, { color: c.mute, marginTop: space.lg }]}>Outside of workouts, you’re…</Text>
+          <Select
+            label="Outside of workouts"
+            value={daily}
+            options={DAILY_MOVES.map((d) => ({ value: d.id, label: d.label, hint: d.hint }))}
+            onChange={setDaily}
+            placeholder="Choose one"
+          />
+          <View style={[st.line, { marginTop: space.md }]}>
+            <Num label="Steps a day (avg)" unit="" value={steps} onChange={setSteps} a11y="Average steps a day" />
+            <Num label="Body fat" unit="%" value={bf} onChange={setBf} a11y="Body fat percent" />
+          </View>
+          <Mute style={{ marginTop: space.sm, fontSize: 13 }}>
+            {acc.level === 'best' ? 'Estimate accuracy: best.' : `Estimate accuracy: ${acc.level}. Add ${acc.add.join(' and ')} to improve it.`}
+          </Mute>
+        </>
+      ) : null}
+
       {missing ? <Mute style={{ marginTop: space.lg, fontSize: 13 }}>{`Add ${missing} for suggested daily targets.`}</Mute> : null}
 
       {err ? <Text style={{ color: c.bad, fontWeight: '700', marginTop: space.md }}>{err}</Text> : null}
@@ -122,6 +161,8 @@ export function ProfileForm({
         style={{ marginTop: space.lg }}
         onPress={() => {
           if (partialBirthday) return setErr('Choose the month, day and year of your birthday, or none of them.');
+          if (tracker === 'none' && ((!blank(steps) && !Number.isFinite(Number(steps.replace(/,/g, '')))) || (!blank(bf) && !Number.isFinite(Number(bf)))))
+            return setErr('Steps and body fat should be numbers.');
           if ((!blank(ft) && !Number.isFinite(Number(ft))) || (!blank(inch) && !Number.isFinite(Number(inch))) || (!blank(lb) && !Number.isFinite(Number(lb))))
             return setErr('Height and weight should be numbers.');
           const e = profileError(draft, today);
@@ -156,5 +197,6 @@ function Num({ label, unit, value, onChange, a11y }: { label: string; unit: stri
 
 const st = StyleSheet.create({
   lbl: { fontSize: 13, fontWeight: '600', marginBottom: 6 },
+  head: { fontSize: 16, fontWeight: '700', marginTop: space.xl, marginBottom: space.sm },
   line: { flexDirection: 'row', gap: space.sm },
 });

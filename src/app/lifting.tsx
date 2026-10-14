@@ -7,7 +7,6 @@ import {
   activeWorkout,
   applyTemplate,
   defaultIncrement,
-  fmtInt,
   fmtW,
   liftWeek,
   liftingPlan,
@@ -15,7 +14,7 @@ import {
   nextTarget,
   scheduledRoutine,
   shortDayLabel,
-  volume,
+  workoutLine,
   workoutFromRoutine,
   type Routine,
   type Workout,
@@ -53,7 +52,7 @@ export default function LiftingScreen() {
 
   const start = (r: Routine | null) => {
     const id = newId('w');
-    const w: Workout = r ? workoutFromRoutine(L, r, today, byId, id) : { id, date: today, name: 'Workout', done: false, exercises: [] };
+    const w: Workout = { ...(r ? workoutFromRoutine(L, r, today, byId, id) : { id, date: today, name: 'Workout', done: false, exercises: [] }), start: Date.now() };
     update((s) => ({ ...s, lifting: { ...s.lifting, workouts: [...s.lifting.workouts, w] } }));
     show({ kind: 'workout', id });
   };
@@ -105,7 +104,7 @@ export default function LiftingScreen() {
             {doneToday ? (
               <>
                 <Text style={[st.big, { color: c.ink }]}>{`${doneToday.name} ✓`}</Text>
-                <Mute>{`${fmtInt(volume(doneToday))} lb lifted`}</Mute>
+                <Mute>{workoutLine(doneToday)}</Mute>
                 <Button label="View workout" onPress={() => show({ kind: 'workout', id: doneToday.id })} style={{ marginTop: space.md }} />
               </>
             ) : todays ? (
@@ -181,11 +180,9 @@ export default function LiftingScreen() {
               style={({ pressed }) => [st.row, i > 0 && { borderTopWidth: 1, borderTopColor: c.line }, { opacity: pressed ? 0.6 : 1 }]}>
               <View style={{ flex: 1 }}>
                 <Text style={{ color: c.ink, fontSize: 16, fontWeight: '700' }}>{w.name}</Text>
-                <Mute style={{ fontSize: 13 }}>
-                  {shortDayLabel(w.date)} · {w.exercises.length} exercises
-                </Mute>
+                <Mute style={{ fontSize: 13 }}>{`${shortDayLabel(w.date)} · ${workoutLine(w)}`}</Mute>
               </View>
-              <Text style={{ color: c.ink, fontSize: 14, ...tabular }}>{fmtInt(volume(w))} lb</Text>
+              <Text style={{ color: c.mute, fontSize: 22 }}>›</Text>
             </Pressable>
           ))}
         </Section>

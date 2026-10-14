@@ -89,6 +89,34 @@ export function PlanBars({ rows, label }: { rows: BarRow[]; label: string }) {
   );
 }
 
+/** Plain bars with a unit, e.g. workouts or miles a week. The latest bar is darkest. */
+export function Bars({ rows, unit, label }: { rows: { label: string; v: number }[]; unit: string; label: string }) {
+  const c = useColors();
+  const W = 360, H = 140, padB = 22, padT = 16, n = rows.length, bw = W / n, ph = H - padB - padT;
+  const mx = Math.max(1, ...rows.map((r) => r.v));
+  const base = H - padB;
+  return (
+    <Chart w={W} h={H} label={label}>
+      <SvgText fontFamily={SANS} x={0} y={10} fontSize={11} fill={c.mute}>
+        {`${fmt(+mx.toFixed(1))} ${unit}`}
+      </SvgText>
+      {rows.map((r, i) => {
+        const x = i * bw + 3, w = bw - 6;
+        const hv = (r.v / mx) * ph;
+        return [
+          r.v > 0 ? <Rect key={`a${i}`} x={x} y={base - hv} width={w} height={hv} fill={c.ink} opacity={i === n - 1 ? 1 : 0.55} rx={3} /> : null,
+          (n - 1 - i) % 2 === 0 || n <= 8 ? (
+            <SvgText fontFamily={SANS} key={`l${i}`} x={x + w / 2} y={H - 6} textAnchor="middle" fontSize={10.5} fill={c.mute}>
+              {r.label}
+            </SvgText>
+          ) : null,
+        ];
+      })}
+      <Line x1={0} x2={W} y1={base} y2={base} stroke={c.line} strokeWidth={1.5} />
+    </Chart>
+  );
+}
+
 /** Green above zero = deficit, red below = surplus, dashed = goal. */
 export function DeficitBars({ vals, goal }: { vals: { s: string; v: number | null }[]; goal: number | null }) {
   const c = useColors();

@@ -32,14 +32,12 @@ export function MealGroups({
   day,
   entries,
   flags,
-  onAdd,
   onEdit,
   onCopy,
 }: {
   day: string;
   entries: FoodEntry[];
   flags: Record<string, string[]>;
-  onAdd: (m: MealSlot) => void;
   onEdit: (e: FoodEntry) => void;
   onCopy: (m: MealSlot) => void;
 }) {
@@ -54,14 +52,23 @@ export function MealGroups({
           <Section
             key={m.id}
             title={m.label}
-            action={list.length ? <Text style={{ color: c.ink, fontSize: 16, fontWeight: '700', ...tabular }}>{fmtInt(sumTotals(list).kcal)}</Text> : undefined}>
+            action={
+              list.length ? (
+                <Text style={{ color: c.ink, fontSize: 16, fontWeight: '700', ...tabular }}>{fmtInt(sumTotals(list).kcal)}</Text>
+              ) : canCopy ? (
+                <TextButton label="Copy previous" onPress={() => onCopy(m.id)} a11y={`Copy ${m.label.toLowerCase()} from an earlier day`} muted />
+              ) : undefined
+            }
+            style={list.length ? undefined : { paddingBottom: space.xs }}>
             {list.map((e, i) => (
               <EntryRow key={e.id} e={e} flags={flags[e.id]} first={i === 0} onPress={() => onEdit(e)} />
             ))}
-            <View style={[st.foot, list.length ? { borderTopColor: c.line, borderTopWidth: 1, marginTop: space.xs } : null]}>
-              <TextButton label="+ Add food" onPress={() => onAdd(m.id)} a11y={`Add food to ${m.label.toLowerCase()}`} />
-              {canCopy ? <TextButton label="Copy previous" onPress={() => onCopy(m.id)} a11y={`Copy ${m.label.toLowerCase()} from an earlier day`} muted /> : null}
-            </View>
+            {list.length && canCopy ? (
+              <View style={[st.foot, { borderTopColor: c.line, borderTopWidth: 1, marginTop: space.xs }]}>
+                <View />
+                <TextButton label="Copy previous" onPress={() => onCopy(m.id)} a11y={`Copy ${m.label.toLowerCase()} from an earlier day`} muted />
+              </View>
+            ) : null}
           </Section>
         );
       })}

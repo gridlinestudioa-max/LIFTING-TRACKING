@@ -1,5 +1,6 @@
 import type { CardioData } from './cardio';
 import type { DietSettings } from './diet';
+import type { WidgetId } from './home';
 import type { LiftingData } from './lifting';
 import type { Food, FoodEntry } from './nutrition';
 import type { Profile } from './profile';
@@ -16,6 +17,8 @@ export interface Settings {
   sections: Sections;
   /** Finished first-time setup. */
   onboarded: boolean;
+  /** Cards on the Home tab, in order. */
+  home: WidgetId[];
 }
 
 /** Calories typed for a day (outside the food log), calories burned, and a note. */

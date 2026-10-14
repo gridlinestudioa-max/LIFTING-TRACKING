@@ -22,7 +22,7 @@ import {
 } from '@/logic';
 
 import { Field } from '../components';
-import { Button, Sheet } from '../food/kit';
+import { Button, LinkButton, Sheet } from '../food/kit';
 import { Select } from '../Select';
 import { useTracker } from '../store';
 import { fonts, radius, space, tabular, useColors } from '../theme';
@@ -41,6 +41,11 @@ export function LogSheet({ visible, day, editing, onClose }: { visible: boolean;
   );
   const [time, setTime] = useState(editing?.secs ? fmtTime(editing.secs) : '');
   const [note, setNote] = useState(editing?.note ?? '');
+  const [elev, setElev] = useState(editing?.elevFt ? String(editing.elevFt) : '');
+  const [hr, setHr] = useState(editing?.hr ? String(editing.hr) : '');
+  const [maxHr, setMaxHr] = useState(editing?.maxHr ? String(editing.maxHr) : '');
+  const [kcal, setKcal] = useState(editing?.kcal ? String(editing.kcal) : '');
+  const [more, setMore] = useState(!!(editing?.elevFt || editing?.hr || editing?.maxHr || editing?.kcal));
   // '' = doesn't count toward a plan run.
   const [planDay, setPlanDay] = useState<string>(editing ? (editing.planDay ?? '') : (defaultPlanDay(cardio, day, type) ?? ''));
   const [err, setErr] = useState<string | null>(null);
@@ -63,6 +68,11 @@ export function LogSheet({ visible, day, editing, onClose }: { visible: boolean;
     if (okMiles && hasDistance) x.miles = mi;
     if (okTime) x.secs = secs!;
     if (note.trim()) x.note = note.trim();
+    const num = (v: string) => (v.trim() && Number(v) > 0 ? Math.round(Number(v)) : undefined);
+    if (num(elev)) x.elevFt = num(elev);
+    if (num(hr) && num(hr)! >= 40 && num(hr)! <= 230) x.hr = num(hr);
+    if (num(maxHr) && num(maxHr)! >= 40 && num(maxHr)! <= 240) x.maxHr = num(maxHr);
+    if (num(kcal)) x.kcal = num(kcal);
     if (planDay && options.some((o) => o.s === planDay)) x.planDay = planDay;
     update((s) => {
       const list = s.cardio.sessions.filter((y) => y.id !== x.id);
@@ -149,6 +159,23 @@ export function LogSheet({ visible, day, editing, onClose }: { visible: boolean;
         </View>
       ) : null}
 
+      {more ? (
+        <>
+          <View style={[st.pair, { marginTop: space.lg }]}>
+            {hasDistance && !swim ? <Small label="Elevation gain (ft)" value={elev} onChange={setElev} /> : null}
+            <Small label="Calories (from watch)" value={kcal} onChange={setKcal} />
+          </View>
+          <View style={[st.pair, { marginTop: space.md }]}>
+            <Small label="Avg heart rate" value={hr} onChange={setHr} />
+            <Small label="Max heart rate" value={maxHr} onChange={setMaxHr} />
+          </View>
+        </>
+      ) : (
+        <View style={{ flexDirection: 'row', marginTop: space.lg }}>
+          <LinkButton label="+ Heart rate, elevation, calories" onPress={() => setMore(true)} />
+        </View>
+      )}
+
       <Text style={[st.lbl, { color: c.mute, marginTop: space.lg, marginBottom: 6 }]}>Notes</Text>
       <Field value={note} onChangeText={setNote} placeholder="Splits, how it felt" multiline style={{ minHeight: 70, textAlignVertical: 'top' }} />
 
@@ -156,6 +183,16 @@ export function LogSheet({ visible, day, editing, onClose }: { visible: boolean;
       <Button label={editing ? 'Save' : 'Log it'} primary onPress={save} style={{ marginTop: space.xl }} />
       {editing ? <Button label="Delete" danger onPress={remove} style={{ marginTop: space.md }} /> : null}
     </Sheet>
+  );
+}
+
+function Small({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
+  const c = useColors();
+  return (
+    <View style={{ flex: 1, gap: 6 }}>
+      <Text style={[st.lbl, { color: c.mute }]}>{label}</Text>
+      <Field value={value} onChangeText={onChange} keyboardType="number-pad" placeholder="Optional" accessibilityLabel={label} />
+    </View>
   );
 }
 
