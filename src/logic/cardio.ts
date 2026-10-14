@@ -4,6 +4,7 @@
 import { DONE_RATIO } from './config';
 import { addDays, dayDiff, weekdayIndex } from './dates';
 import { fmt } from './format';
+import { normalizeRoute, type LatLng } from './gps';
 import { METERS_PER_MILE, PLAN_BY_ID, isPlanId, toMiles, type CardioPlan, type PlanDef, type Sport, type WorkoutKind } from './plans';
 
 export type CardioType = 'run' | 'walk' | 'hike' | 'bike' | 'swim' | 'row' | 'elliptical' | 'other';
@@ -41,6 +42,10 @@ export interface CardioSession {
   maxHr?: number;
   /** Calories from a watch or app, when entered. */
   kcal?: number;
+  /** GPS route of a recorded activity, [lat, lng] pairs. */
+  route?: LatLng[];
+  /** Seconds for each full mile of a recorded activity. */
+  splits?: number[];
   /**
    * The planned workout this session counts toward: the plan date, matched with this session's sport
    * (a run on a plan day, or a planned workout made up on another day).
@@ -352,6 +357,12 @@ export function normalizeCardio(src: unknown): CardioData {
           if (Number(x.maxHr) >= 40 && Number(x.maxHr) <= 240) out.maxHr = Math.round(Number(x.maxHr));
           if (Number(x.kcal) > 0) out.kcal = Math.round(Number(x.kcal));
           if (okDate(x.planDay)) out.planDay = x.planDay;
+          const route = normalizeRoute(x.route);
+          if (route) out.route = route;
+          if (Array.isArray(x.splits)) {
+            const sp = x.splits.map(Number).filter((v: number) => Number.isFinite(v) && v > 0).slice(0, 300);
+            if (sp.length) out.splits = sp.map((v: number) => Math.round(v));
+          }
           return out;
         })
     : [];

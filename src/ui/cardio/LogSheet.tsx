@@ -25,6 +25,8 @@ import { Field } from '../components';
 import { Button, LinkButton, Sheet } from '../food/kit';
 import { Select } from '../Select';
 import { useTracker } from '../store';
+import { Splits } from './Recorder';
+import { RouteMap } from './RouteMap';
 import { fonts, radius, space, tabular, useColors } from '../theme';
 
 /** Log a cardio session on a day, or edit one. Remount (change `key`) each time it opens. */
@@ -65,6 +67,8 @@ export function LogSheet({ visible, day, editing, onClose }: { visible: boolean;
     if (miles.trim() && !okMiles) return setErr(swim ? 'Distance should be a number of meters, like 750.' : 'Distance should be a number of miles, like 3.1.');
     if (time.trim() && !okTime) return setErr('Time looks like 45, 45:30 or 1:05:00.');
     const x: CardioSession = { id: editing?.id ?? newId('c'), date: day, type };
+    if (editing?.route) x.route = editing.route;
+    if (editing?.splits && editing.type === type) x.splits = editing.splits;
     if (okMiles && hasDistance) x.miles = mi;
     if (okTime) x.secs = secs!;
     if (note.trim()) x.note = note.trim();
@@ -92,6 +96,8 @@ export function LogSheet({ visible, day, editing, onClose }: { visible: boolean;
   return (
     <Sheet visible={visible} title={editing ? 'Edit cardio' : 'Log cardio'} onClose={onClose}>
       <Text style={[st.day, { color: c.ink }]}>{shortDayLabel(day)}</Text>
+      {editing?.route ? <RouteMap route={editing.route} height={240} style={{ marginTop: space.md }} /> : null}
+      {editing?.splits?.length ? <Splits splits={editing.splits} /> : null}
 
       <Text style={[st.lbl, { color: c.mute, marginTop: space.md, marginBottom: 6 }]}>What did you do?</Text>
       <Select

@@ -18,6 +18,7 @@ import {
   planWeeks,
   plannedOn,
   raceDay,
+  recordsSetBy,
   sessionsToward,
   shortDayLabel,
   skipKey,
@@ -31,6 +32,8 @@ import {
 import { CardioCalendar } from '@/ui/cardio/CardioCalendar';
 import { kindColor } from '@/ui/cardio/kinds';
 import { LogSheet } from '@/ui/cardio/LogSheet';
+import { Recorder } from '@/ui/cardio/Recorder';
+import { RouteMap } from '@/ui/cardio/RouteMap';
 import { Card, Header, Mute, WeekBar } from '@/ui/components';
 import { Button, LinkButton } from '@/ui/food/kit';
 import { StatusMark } from '@/ui/marks';
@@ -47,6 +50,7 @@ export default function CardioScreen() {
     return { y: d.getFullYear(), m: d.getMonth() };
   });
   const [sheet, setSheet] = useState<{ n: number; open: boolean; editing: CardioSession | null }>({ n: 0, open: false, editing: null });
+  const [recording, setRecording] = useState(false);
   const scroll = useRef<ScrollView>(null);
   const detailY = useRef(0);
 
@@ -77,6 +81,8 @@ export default function CardioScreen() {
     <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: c.bg }}>
       <ScrollView ref={scroll} contentContainerStyle={{ padding: 16, paddingBottom: 48 }}>
         <Header title="Cardio" />
+
+        <Button label="Record an activity" primary onPress={() => setRecording(true)} style={{ marginBottom: space.lg }} />
 
         <Card>
           {plan ? (
@@ -140,17 +146,26 @@ export default function CardioScreen() {
             {sessions.length ? (
               <View style={{ marginTop: space.md }}>
                 {sessions.map((x, i) => (
-                  <SessionRow key={x.id} x={x} first={i === 0} onPress={() => open(x)} c={c} />
+                  <SessionRow key={x.id} x={x} prs={recordsSetBy(cardio, x, today)} first={i === 0} onPress={() => open(x)} c={c} />
                 ))}
               </View>
             ) : !planned.length ? (
               <Mute style={{ marginTop: space.xs }}>Rest day</Mute>
             ) : null}
 
-            <Button label="Log cardio" primary onPress={() => open(null)} style={{ marginTop: space.lg }} />
+            <Button label="Log cardio" onPress={() => open(null)} style={{ marginTop: space.lg }} />
           </Card>
         </View>
       </ScrollView>
+      {recording ? (
+        <Recorder
+          visible
+          onClose={() => {
+            setRecording(false);
+            setSelected(today);
+          }}
+        />
+      ) : null}
       <LogSheet key={sheet.n} visible={sheet.open} day={selected} editing={sheet.editing} onClose={() => setSheet((s) => ({ ...s, open: false }))} />
     </SafeAreaView>
   );
@@ -181,7 +196,7 @@ function PlannedBlock({ wk, status, movedTo, onSkip, c }: { wk: PlannedWorkout; 
   );
 }
 
-function SessionRow({ x, first, onPress, c }: { x: CardioSession; first: boolean; onPress: () => void; c: Palette }) {
+function SessionRow({ x, prs, first, onPress, c }: { x: CardioSession; prs: string[]; first: boolean; onPress: () => void; c: Palette }) {
   const pace = x.type === 'run' || x.type === 'walk' || x.type === 'hike' ? paceText(x.miles, x.secs) : '';
   const bits = [x.miles ? distText(x.type, x.miles) : null, x.secs ? fmtTime(x.secs) : null, pace || null].filter(Boolean).join(' · ');
   return (
@@ -194,7 +209,9 @@ function SessionRow({ x, first, onPress, c }: { x: CardioSession; first: boolean
         <Text style={{ color: c.ink, fontSize: 16, fontWeight: '700' }}>{CARDIO_LABEL[x.type]}</Text>
         <Text style={{ color: c.mute, fontSize: 14, ...tabular }}>{bits}</Text>
         {x.planDay && x.planDay !== x.date ? <Text style={{ color: c.mute, fontSize: 13 }}>Counts toward {shortDayLabel(x.planDay)}’s plan</Text> : null}
+        {prs.length ? <Text style={{ color: '#b8860b', fontSize: 13, fontWeight: '700', marginTop: 2 }}>{`Personal record: ${prs.join(', ')}`}</Text> : null}
         {x.note ? <Text style={{ color: c.ink, fontSize: 14, marginTop: 2 }}>{x.note}</Text> : null}
+        {x.route ? <RouteMap route={x.route} height={150} style={{ marginTop: space.sm }} /> : null}
       </View>
       <Text style={{ color: c.mute, fontSize: 22 }}>›</Text>
     </Pressable>
