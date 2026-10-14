@@ -1,14 +1,15 @@
 import { useState } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { ACTIVITY, GOALS, fmt, heightText, mondayOf, raceDay, shortDayLabel, type Sections } from '@/logic';
+import { type Sections } from '@/logic';
 import { useAccount } from '@/ui/account';
 import { CommitNumberField, Field, Header, Mute, Section } from '@/ui/components';
 import { Button, LinkButton } from '@/ui/food/kit';
 import { ProfileForm } from '@/ui/food/ProfileForm';
+import { ProfileLines } from '@/ui/food/ProfileLines';
 import { SECTION_INFO, SectionToggle } from '@/ui/Onboarding';
-import { StartPicker } from '@/ui/StartPicker';
+import { PlanPicker } from '@/ui/cardio/PlanPicker';
 import { useTracker } from '@/ui/store';
 import { space, useColors } from '@/ui/theme';
 
@@ -72,15 +73,10 @@ export default function YouScreen() {
           {err ? <Text style={{ color: c.bad, fontWeight: '700', marginTop: space.sm }}>{err}</Text> : null}
         </Section>
 
-        <Section title="Body stats" note="Used for suggested calories and macros on the Food tab.">
+        <Section title="Body stats" note="Optional. Used for suggested calories and macros on the Food tab.">
           {p && !editStats ? (
             <View style={{ gap: 4 }}>
-              <Text style={{ color: c.ink, fontSize: 15, fontWeight: '600' }}>
-                {[p.sex === 'male' ? 'Male' : 'Female', `${p.age} years`, heightText(p.heightIn), `${fmt(p.weightLb)} lb`].join(' · ')}
-              </Text>
-              <Mute>
-                {ACTIVITY.find((a) => a.id === p.activity)!.label} activity · {GOALS.find((g) => g.id === p.goal)!.label}
-              </Mute>
+              <ProfileLines profile={p} />
               <View style={{ flexDirection: 'row', marginTop: space.xs }}>
                 <LinkButton label="Edit" onPress={() => setEditStats(true)} />
               </View>
@@ -98,24 +94,8 @@ export default function YouScreen() {
         </Section>
 
         {on.cardio ? (
-          <Section title="Half-marathon plan" note="12 weeks: tempo run Tuesday, easy run Friday, long run Sunday.">
-            <SectionToggle
-              title={state.cardio.plan ? 'Plan on' : 'Plan off'}
-              blurb={state.cardio.plan ? `Race day: ${shortDayLabel(raceDay(state.cardio.plan.start))}` : 'Turn on to see planned runs on the Cardio tab.'}
-              on={!!state.cardio.plan}
-              onPress={() =>
-                update((s) => ({ ...s, cardio: { ...s.cardio, plan: s.cardio.plan ? null : { start: mondayOf(today) } } }))
-              }
-            />
-            {state.cardio.plan ? (
-              <View style={{ marginTop: space.md }}>
-                <Text style={[st.lbl, { color: c.mute }]}>Plan start (snaps to Monday)</Text>
-                <StartPicker
-                  start={state.cardio.plan.start}
-                  onChange={(s) => update((x) => ({ ...x, cardio: { ...x.cardio, plan: { start: mondayOf(s) } } }))}
-                />
-              </View>
-            ) : null}
+          <Section title="Cardio plan" note="Planned workouts show on the Cardio tab. Changing plans keeps everything you logged.">
+            <PlanPicker plan={state.cardio.plan} today={today} onChange={(plan) => update((s) => ({ ...s, cardio: { ...s.cardio, plan } }))} />
           </Section>
         ) : null}
 
@@ -139,6 +119,3 @@ export default function YouScreen() {
   );
 }
 
-const st = StyleSheet.create({
-  lbl: { fontSize: 13, fontWeight: '600', marginBottom: 6 },
-});

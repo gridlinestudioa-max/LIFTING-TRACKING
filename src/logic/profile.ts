@@ -10,6 +10,7 @@
 // - Sugar: the app counts total sugar (fruit and milk included), so it uses the EU/UK reference intake for total
 //   sugars, 90 g per 2,000 kcal, scaled to your calories.
 
+import { todayString } from './dates';
 import type { Limits, StyleId } from './diet';
 import { fmtInt } from './format';
 
@@ -17,17 +18,66 @@ export type Sex = 'male' | 'female';
 export type Activity = 'sedentary' | 'light' | 'moderate' | 'active' | 'very';
 export type Goal = 'lose' | 'loseSlow' | 'maintain' | 'gain';
 
+/** Body stats as saved. Every field is optional; suggestions need sex, birthday (or age), height and weight. */
 export interface Profile {
+  sex?: Sex;
+  /** 'YYYY-MM-DD'. */
+  birthday?: string;
+  /** Saved by earlier versions, before birthdays. Used only when there's no birthday. */
+  age?: number;
+  /** Height in inches. */
+  heightIn?: number;
+  /** Weight in pounds. */
+  weightLb?: number;
+  activity?: Activity;
+  goal?: Goal;
+}
+
+/** Everything the calorie and macro formulas need. */
+export interface Stats {
   sex: Sex;
   age: number;
-  /** Height in inches. */
   heightIn: number;
-  /** Weight in pounds. */
   weightLb: number;
   activity: Activity;
   goal: Goal;
 }
 
+/** Used for suggestions when activity or goal isn't set. */
+export const DEFAULT_ACTIVITY: Activity = 'light';
+export const DEFAULT_GOAL: Goal = 'maintain';
+/** Suggested targets are for adults. */
+export const MIN_AGE = 18;
+
+/** Whole years from a birthday to a date. */
+export function ageOn(birthday: string, today: string): number {
+  const [by, bm, bd] = birthday.split('-').map(Number);
+  const [ty, tm, td] = today.split('-').map(Number);
+  return ty - by - (tm < bm || (tm === bm && td < bd) ? 1 : 0);
+}
+
+/** Age today, from the birthday (or the age saved by earlier versions). */
+export function ageOf(p: Profile | null, today: string = todayString()): number | null {
+  if (p?.birthday) return ageOn(p.birthday, today);
+  return p?.age ?? null;
+}
+
+/** The stats the formulas need, or null when something's missing (or under 18). Activity and goal have defaults. */
+export function statsOf(p: Profile | null, today: string = todayString()): Stats | null {
+  if (!p) return null;
+  const age = ageOf(p, today);
+  if (!p.sex || age == null || age < MIN_AGE || !p.heightIn || !p.weightLb) return null;
+  return { sex: p.sex, age, heightIn: p.heightIn, weightLb: p.weightLb, activity: p.activity ?? DEFAULT_ACTIVITY, goal: p.goal ?? DEFAULT_GOAL };
+}
+
+/** What's still needed for suggestions, in words ("sex and height"), or null when there's enough. */
+export function missingForSuggestions(p: Profile | null, today: string = todayString()): string | null {
+  const age = ageOf(p, today);
+  if (age != null && age < MIN_AGE) return 'an age of 18 or over (suggestions are for adults)';
+  const miss = [!p?.sex && 'sex', age == null && 'birthday', !p?.heightIn && 'height', !p?.weightLb && 'weight'].filter(Boolean) as string[];
+  if (!miss.length) return null;
+  return miss.length === 1 ? miss[0] : `${miss.slice(0, -1).join(', ')} and ${miss[miss.length - 1]}`;
+}
 export const ACTIVITY: { id: Activity; label: string; blurb: string; factor: number }[] = [
   { id: 'sedentary', label: 'Sedentary', blurb: 'Desk job, little exercise.', factor: 1.2 },
   { id: 'light', label: 'Light', blurb: 'Exercise 1 to 3 days a week.', factor: 1.375 },
@@ -52,31 +102,31 @@ const CM_PER_IN = 2.54;
 export const kgOf = (lb: number) => lb * KG_PER_LB;
 
 /** Calories burned at complete rest (Mifflin-St Jeor). */
-export function bmr(p: Profile): number {
+export function bmr(p: Stats): number {
   const base = 10 * kgOf(p.weightLb) + 6.25 * p.heightIn * CM_PER_IN - 5 * p.age;
   return base + (p.sex === 'male' ? 5 : -161);
 }
 
 /** Calories burned in a typical day, activity included. */
-export function tdee(p: Profile): number {
+export function tdee(p: Stats): number {
   const f = ACTIVITY.find((a) => a.id === p.activity)?.factor ?? 1.2;
   return bmr(p) * f;
 }
 
 /** Daily calories for the goal, rounded to 10, never below the safe minimum. */
-export function calorieTarget(p: Profile): number {
+export function calorieTarget(p: Stats): number {
   const delta = GOALS.find((g) => g.id === p.goal)?.delta ?? 0;
   return Math.max(MIN_KCAL[p.sex], Math.round((tdee(p) + delta) / 10) * 10);
 }
 
 /** True when the goal had to be raised to the safe minimum. */
-export function hitFloor(p: Profile): boolean {
+export function hitFloor(p: Stats): boolean {
   const delta = GOALS.find((g) => g.id === p.goal)?.delta ?? 0;
   return Math.round((tdee(p) + delta) / 10) * 10 < MIN_KCAL[p.sex];
 }
 
 /** Protein in g per kg of body weight, by activity, raised for high-protein and vegan diets. */
-export function proteinPerKg(p: Profile, style: StyleId): number {
+export function proteinPerKg(p: Stats, style: StyleId): number {
   let g = p.activity === 'sedentary' ? 1.0 : p.activity === 'light' ? 1.2 : 1.6;
   if (style === 'highprotein') g = Math.min(2.2, g + 0.6);
   if (style === 'vegan') g *= 1.1;
@@ -92,7 +142,7 @@ export interface Targets {
 const r5 = (v: number) => Math.round(v / 5) * 5;
 
 /** Suggested daily targets for a profile and food style. */
-export function suggestTargets(p: Profile, style: StyleId): Targets {
+export function suggestTargets(p: Stats, style: StyleId): Targets {
   const kcal = calorieTarget(p);
   const goal = GOALS.find((g) => g.id === p.goal)!;
   const limits: Limits = {};
@@ -134,14 +184,15 @@ export function suggestTargets(p: Profile, style: StyleId): Targets {
   return { limits, why };
 }
 
-/** Problems with the stats, or null when they can be saved. */
-export function profileError(p: Partial<Profile>): string | null {
-  if (!p.sex) return 'Choose male or female (the calorie formula differs).';
-  if (!(p.age! >= 18 && p.age! <= 100)) return 'Enter an age from 18 to 100. Suggestions are for adults.';
-  if (!(p.heightIn! >= 48 && p.heightIn! <= 96)) return 'Enter a height from 4 ft to 8 ft.';
-  if (!(p.weightLb! >= 70 && p.weightLb! <= 700)) return 'Enter a weight from 70 to 700 lb.';
-  if (!p.activity) return 'Choose how active you are.';
-  if (!p.goal) return 'Choose a goal.';
+/** Problems with the stats entered, or null when they can be saved. Only what's filled in is checked. */
+export function profileError(p: Profile, today: string = todayString()): string | null {
+  if (p.birthday != null) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(p.birthday) || p.birthday > today) return 'Choose a birthday in the past.';
+    const age = ageOn(p.birthday, today);
+    if (age > 120) return 'Check the birth year.';
+  }
+  if (p.heightIn != null && !(p.heightIn >= 48 && p.heightIn <= 96)) return 'Enter a height from 4 ft to 8 ft, or leave it blank.';
+  if (p.weightLb != null && !(p.weightLb >= 70 && p.weightLb <= 700)) return 'Enter a weight from 70 to 700 lb, or leave it blank.';
   return null;
 }
 
@@ -152,17 +203,32 @@ export function heightText(inches: number): string {
   return i === 12 ? `${ft + 1} ft 0 in` : `${ft} ft ${i} in`;
 }
 
-/** Accepts anything (parsed JSON) and returns a valid profile, or null. */
+/** "Male · 36 years · 5 ft 10 in · 180 lb", from whatever is filled in. */
+export function profileSummary(p: Profile, today: string = todayString()): string {
+  const age = ageOf(p, today);
+  return [
+    p.sex === 'male' ? 'Male' : p.sex === 'female' ? 'Female' : null,
+    age != null ? `${age} years` : null,
+    p.heightIn ? heightText(p.heightIn) : null,
+    p.weightLb ? `${Math.round(p.weightLb * 10) / 10} lb` : null,
+  ]
+    .filter(Boolean)
+    .join(' · ');
+}
+
+/** Accepts anything (parsed JSON) and returns the valid stats in it, or null when there are none. */
 export function normalizeProfile(src: unknown): Profile | null {
   if (!src || typeof src !== 'object') return null;
   const s = src as Record<string, unknown>;
-  const p: Partial<Profile> = {
-    sex: s.sex === 'male' || s.sex === 'female' ? s.sex : undefined,
-    age: Number(s.age),
-    heightIn: Number(s.heightIn),
-    weightLb: Number(s.weightLb),
-    activity: ACTIVITY.some((a) => a.id === s.activity) ? (s.activity as Activity) : undefined,
-    goal: GOALS.some((g) => g.id === s.goal) ? (s.goal as Goal) : undefined,
-  };
-  return profileError(p) ? null : (p as Profile);
+  const p: Profile = {};
+  if (s.sex === 'male' || s.sex === 'female') p.sex = s.sex;
+  if (typeof s.birthday === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s.birthday)) p.birthday = s.birthday;
+  else if (Number(s.age) >= 1 && Number(s.age) <= 120) p.age = Math.round(Number(s.age));
+  const h = Number(s.heightIn);
+  if (h >= 48 && h <= 96) p.heightIn = h;
+  const w = Number(s.weightLb);
+  if (w >= 70 && w <= 700) p.weightLb = w;
+  if (ACTIVITY.some((a) => a.id === s.activity)) p.activity = s.activity as Activity;
+  if (GOALS.some((g) => g.id === s.goal)) p.goal = s.goal as Goal;
+  return Object.keys(p).length ? p : null;
 }

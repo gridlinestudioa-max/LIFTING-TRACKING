@@ -160,7 +160,7 @@ export function migrateV1(src: Record<string, any>): Record<string, unknown> {
     meals: src.meals,
     diet: src.diet,
     profile: src.profile,
-    cardio: { plan: { start }, sessions, skips },
+    cardio: { plan: { id: 'run-half', start }, sessions, skips },
     lifting: { exercises, routines, schedule: ['m:push', null, 'm:pull', 'm:legs', null, null, null], workouts },
   };
 }

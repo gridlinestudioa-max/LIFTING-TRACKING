@@ -41,7 +41,7 @@ interface Tracker {
   deleteFood: (id: string) => void;
   setDiet: (d: DietSettings) => void;
   /** Save body stats. Suggested targets become the standard unless you already set your own numbers. */
-  setProfile: (p: Profile) => void;
+  setProfile: (p: Profile | null) => void;
 }
 
 const Ctx = createContext<Tracker | null>(null);
@@ -203,7 +203,7 @@ export function TrackerProvider({ user, remote, children }: { user: string; remo
   const deleteFood = useCallback((id: string) => update((st) => ({ ...st, foods: st.foods.filter((x) => x.id !== id) })), [update]);
   const setDiet = useCallback((d: DietSettings) => update((st) => ({ ...st, diet: d })), [update]);
   const setProfile = useCallback(
-    (p: Profile) =>
+    (p: Profile | null) =>
       update((st) => {
         // No numbers of your own yet: start from the suggestions.
         const own = Object.values(st.diet.limits).some((v) => v != null) && !st.diet.auto;

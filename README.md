@@ -3,8 +3,8 @@
 A phone app (and website) for tracking **food**, **cardio** and **lifting**. People sign in, set up a profile, and pick which of the three they use; each is a tab.
 
 - **Food:** a food log with about 12,900 built-in USDA foods plus branded foods from Open Food Facts, calories in and out, diets (fasting, keto, vegan, ...) and suggested daily targets from body stats.
-- **Cardio:** log any run, walk, ride, swim or row. An optional 12-week half-marathon plan shows planned runs and whether each was done.
-- **Lifting:** routines built from a library of 700+ exercises on a weekly schedule, or an unplanned workout any day. Each exercise has sets × a rep range; the app raises the weight when you hit the top of the range on every set (double progression).
+- **Cardio:** log any run, walk, ride, swim or row. Optional plans put workouts on a calendar and track whether each was done: running (maintenance, 5K, 10K, half marathon, marathon), biking (maintenance, 10, 25, 50, 100 miles), swimming (maintenance, 200, 400, 800, 1500 m) and triathlon (sprint, standard, half and full Ironman).
+- **Lifting:** plans for 3 to 7 days a week (push/pull/legs, upper/lower, full body, body part split, or custom), built from a library of 700+ exercises, or an unplanned workout any day. Each exercise has sets × a rep range; the app raises the weight when you hit the top of the range on every set (double progression).
 
 Built with Expo (React Native) + TypeScript. The original 12-week prototype is in [`docs/`](docs/).
 
@@ -20,8 +20,8 @@ Data saved by the first version of the app (key `mm_tracker_v1`) is brought forw
 |---|---|
 | `src/logic/` | Pure TypeScript, no React. Everything below is unit-tested in `src/logic/__tests__/`. |
 | `src/logic/types.ts`, `state.ts`, `migrate.ts` | The saved data (one document per person), loading it safely, and bringing first-version data forward. |
-| `src/logic/cardio.ts`, `config.ts` | Cardio sessions, the half-marathon plan (runs and statuses), cardio stats. Plan constants are in `config.ts`. |
-| `src/logic/lifting.ts`, `exercises.ts`, `templates.ts` | Routines, schedule, workouts, double progression; the exercise library; starter routines. |
+| `src/logic/plans.ts`, `cardio.ts` | The cardio plans (weekly layouts and distances), and sessions, planned workouts, statuses and stats. |
+| `src/logic/lifting.ts`, `exercises.ts`, `templates.ts` | Routines, schedule, workouts, double progression; the exercise library; lifting plans (splits × days a week). |
 | `src/logic/nutrition.ts`, `diet.ts`, `profile.ts`, `calories.ts` | Food log and totals, diets and on-track checks, body stats and suggested targets, calories in/out. |
 | `src/logic/usda.ts`, `openfoodfacts.ts` | The built-in USDA food list, and online search on Open Food Facts. |
 | `src/logic/sync.ts` | Which copy wins when the device and the account are compared. |
@@ -29,7 +29,8 @@ Data saved by the first version of the app (key `mm_tracker_v1`) is brought forw
 | `scripts/` | Rebuild the data files from their sources (see below). |
 | `src/app/` | Screens (expo-router): `food`, `cardio`, `lifting`, `progress`, `you`. `_layout.tsx` = sign-in, setup, and the tabs. |
 | `src/ui/` | Components, theme (light/dark follows the system), the store (`store.tsx`: saving and syncing), accounts (`account.tsx`, `cloud.ts`), sign-in and setup screens. `food/`, `cardio/`, `lifting/` = each tab's sheets. |
-| `supabase/schema.sql` | The database table and access rules for accounts. |
+| `src/brand.ts`, `assets/brand/` | The app's name and logo (see [Name and logo](#name-and-logo)). |
+| `supabase/schema.sql`, `supabase/email-templates/` | The database table and access rules for accounts; branded sign-up and password emails. |
 
 ## Develop
 
@@ -103,9 +104,15 @@ Accounts use [Supabase](https://supabase.com) (free tier is enough). Until this 
 4. Put them where the app is built:
    - **Vercel** (the website): Project → Settings → Environment Variables → add `EXPO_PUBLIC_SUPABASE_URL` and `EXPO_PUBLIC_SUPABASE_ANON_KEY`, then redeploy.
    - **Locally / EAS builds:** copy `.env.example` to `.env` and fill in the two values.
-5. Optional: **Authentication → Sign In / Providers → Email**. "Confirm email" is on by default (people click a link before their first sign-in); turn it off for instant sign-up. Under **URL Configuration**, set the Site URL to the website's address so the confirmation and password-reset links open it.
+5. **Authentication → URL Configuration**: set **Site URL** to the website's address, and add it with `/**` under **Redirect URLs** (plus `https://*-gridlinestudioa-max.vercel.app/**` for preview builds). Confirmation and password-reset links then open the website already signed in: a confirmation link shows "You're signed in", a reset link asks for a new password.
+6. **Emails:** paste the branded templates from [`supabase/email-templates/`](supabase/email-templates/) (steps in its README). For real users, also set up your own email sender (SMTP) there.
+7. Optional: **Authentication → Sign In / Providers → Email**. "Confirm email" is on by default (people click a link before their first sign-in); turn it off for instant sign-up.
 
 The publishable (anon) key is safe to ship in the app; the access rules in `schema.sql` are what protect each person's data.
+
+## Name and logo
+
+The app's name, tagline and logo are set in [`src/brand.ts`](src/brand.ts). To add a logo, put a square PNG in `assets/brand/` and point `LOGO` at it; until then a simple mark with the first letter shows. The sign-in screen, setup, welcome page and emails use them. The file lists the other places the name appears (app.json, the web manifest, icons, email templates).
 
 ## Food data
 

@@ -5,7 +5,7 @@
 
 import type { Tone } from './calories';
 import { fmt, fmtInt } from './format';
-import { suggestTargets, type Profile } from './profile';
+import { statsOf, suggestTargets, type Profile } from './profile';
 import { TAG_LABEL, byTime, entryTotals, fatPct, fmtClock, fmtDuration, sumTotals, type FoodEntry, type FoodTag, type Totals } from './nutrition';
 
 /** Food and drink under this many calories (black coffee, tea, water) don't break a fast. */
@@ -114,12 +114,12 @@ export function isAdjusted(d: DietSettings): boolean {
 
 /** True when the diet's targets come from the profile right now. */
 export function usesSuggestions(d: DietSettings, profile: Profile | null): boolean {
-  return d.auto && !!profile;
+  return d.auto && !!statsOf(profile);
 }
 
 /** The diet with the limits actually in force: suggested from the profile, or the stored ones. */
 export function activeDiet(d: DietSettings, profile: Profile | null): DietSettings {
-  return usesSuggestions(d, profile) ? { ...d, limits: suggestTargets(profile!, d.style).limits } : d;
+  return usesSuggestions(d, profile) ? { ...d, limits: suggestTargets(statsOf(profile)!, d.style).limits } : d;
 }
 
 /** Switch to editing your own numbers, starting from what's in force now. */
@@ -136,10 +136,11 @@ export function hasRules(d: DietSettings): boolean {
 export function dietName(d: DietSettings, profile: Profile | null = null): string {
   const parts: string[] = [];
   const suggested = usesSuggestions(d, profile);
+  const stats = statsOf(profile);
   if (d.fasting) parts.push(`${fastLabel(d.fasting)} fasting`);
-  if (d.style !== 'none') parts.push(STYLE_BY_ID[d.style].name + (!suggested && profile == null && isAdjusted(d) ? ' (adjusted)' : ''));
+  if (d.style !== 'none') parts.push(STYLE_BY_ID[d.style].name + (!suggested && stats == null && isAdjusted(d) ? ' (adjusted)' : ''));
   if (suggested) parts.push('suggested targets');
-  else if (profile && hasRules({ ...d, fasting: null, exclude: [] })) parts.push('your own targets');
+  else if (stats && hasRules({ ...d, fasting: null, exclude: [] })) parts.push('your own targets');
   else if (d.style === 'none' && hasRules({ ...d, fasting: null })) parts.push('Custom limits');
   return parts.length ? parts.join(' · ') : 'No diet set';
 }

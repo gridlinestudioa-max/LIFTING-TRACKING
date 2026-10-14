@@ -2,9 +2,12 @@ import { useState } from 'react';
 import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { BRAND } from '@/brand';
+
 import { useAccount } from './account';
 import { Field, Mute } from './components';
 import { Button, LinkButton, Notice } from './food/kit';
+import { Brand } from './Logo';
 import { fonts, space, useColors } from './theme';
 
 type Mode = 'signIn' | 'signUp' | 'reset';
@@ -12,12 +15,12 @@ type Mode = 'signIn' | 'signUp' | 'reset';
 /** Sign in, create an account, reset a password, or use the app on this device only. */
 export function SignIn() {
   const c = useColors();
-  const { cloud, signIn, signUp, resetPassword, useWithoutAccount } = useAccount();
+  const { cloud, signIn, signUp, resetPassword, useWithoutAccount, linkError } = useAccount();
   const [mode, setMode] = useState<Mode>('signIn');
   const [email, setEmail] = useState('');
   const [pw, setPw] = useState('');
   const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(linkError);
   const [info, setInfo] = useState<string | null>(null);
 
   const go = async () => {
@@ -34,7 +37,7 @@ export function SignIn() {
         const r = await signUp(email, pw);
         if (r.error) setErr(r.error);
         else if (r.confirm) {
-          setInfo(`We sent a link to ${email.trim()}. Open it to confirm your email, then sign in here.`);
+          setInfo(`We sent a confirmation link to ${email.trim()}. Open it on this device to confirm your email; it signs you in. (Check spam if it’s not there in a minute.)`);
           setMode('signIn');
         }
       } else {
@@ -51,8 +54,8 @@ export function SignIn() {
     <SafeAreaView style={{ flex: 1, backgroundColor: c.bg }}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
         <ScrollView contentContainerStyle={st.page} keyboardShouldPersistTaps="handled">
-          <Text style={[st.brand, { color: c.ink }]}>Training</Text>
-          <Mute style={{ fontSize: 16, lineHeight: 22 }}>Track food, cardio and lifting. Use one, two or all three.</Mute>
+          <Brand size={48} />
+          <Mute style={{ fontSize: 16, lineHeight: 22, marginTop: space.md }}>{BRAND.tagline}</Mute>
 
           {cloud ? (
             <View style={{ marginTop: space.xl }}>
@@ -131,7 +134,6 @@ export function SignIn() {
 
 const st = StyleSheet.create({
   page: { padding: space.lg, paddingTop: space.xxl, maxWidth: 520, width: '100%', alignSelf: 'center' },
-  brand: { fontFamily: fonts.display, fontSize: 52, lineHeight: 56 },
   h: { fontFamily: fonts.semi, fontSize: 26, lineHeight: 30 },
   lbl: { fontSize: 13, fontWeight: '600' },
   links: { flexDirection: 'row', justifyContent: 'space-between', flexWrap: 'wrap', gap: space.md, marginTop: space.lg },

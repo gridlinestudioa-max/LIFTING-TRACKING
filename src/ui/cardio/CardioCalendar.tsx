@@ -4,18 +4,19 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import {
   CARDIO_LABEL,
   DAY_NAMES,
+  KIND_SHORT,
   MONTHS,
-  RUN_LABEL,
+  dayStatus,
   daysInMonth,
-  fmt,
+  distText,
   monthOffset,
   pad,
-  planRun,
-  runStatus,
+  plannedOn,
   type CardioData,
 } from '@/logic';
 
 import { StatusMark, type MarkKind } from '../marks';
+import { kindColor } from './kinds';
 import { fonts, radius, space, tabular, useColors, type Palette } from '../theme';
 
 interface Props {
@@ -101,13 +102,16 @@ const DayCell = memo(function DayCell({
   onSelect: (s: string) => void;
 }) {
   const c = useColors();
-  const run = planRun(cardio.plan, date);
-  const st = runStatus(cardio, date, today);
+  const planned = plannedOn(cardio.plan, date);
+  const run = planned[0] ?? null;
+  const st = dayStatus(cardio, date, today);
   const isToday = date === today;
   const logged = cardio.sessions.filter((x) => x.date === date);
   const miles = logged.reduce((t, x) => t + (x.miles ?? 0), 0);
+  // Swims alone show meters; anything else shows miles.
+  const loggedText = miles > 0 ? distText(logged.every((x) => x.type === 'swim') ? 'swim' : 'run', miles).replace(/\.(\d)\d+ mi/, '.$1 mi') : null;
 
-  // Planned runs sit on a white tile; other days stay flat unless something was logged.
+  // Planned workouts sit on a white tile; other days stay flat unless something was logged.
   let bg = run || logged.length ? c.card : 'transparent';
   let border = run || logged.length ? c.line : 'transparent';
   if (st === 'done') { bg = c.okbg; border = c.okbg; }
@@ -120,8 +124,16 @@ const DayCell = memo(function DayCell({
   else if (st === 'missed') mark = { kind: 'missed', color: c.bad };
   else if (st === 'partial') mark = { kind: 'partial', color: c.warn };
 
-  const tag = run ? (run.race ? 'RACE' : RUN_LABEL[run.type]) : logged.length ? CARDIO_LABEL[logged[0].type] : null;
-  const meta = miles > 0 ? `${fmt(+miles.toFixed(1))} mi` : run ? `${fmt(run.miles)} mi` : logged.length ? `${logged.length}×` : null;
+  const tag = run
+    ? run.race
+      ? 'RACE'
+      : planned.length > 1
+        ? planned.some((x) => x.kind === 'brick') ? 'Brick' : `${planned.length} workouts`
+        : KIND_SHORT[run.kind]
+    : logged.length
+      ? CARDIO_LABEL[logged[0].type]
+      : null;
+  const meta = loggedText ?? (run && planned.length === 1 ? distText(run.sport, run.miles) : logged.length ? `${logged.length}×` : null);
 
   return (
     <View style={s.cellWrap}>
@@ -130,7 +142,7 @@ const DayCell = memo(function DayCell({
         accessibilityRole="button"
         accessibilityLabel={`${date}${tag ? `, ${tag}` : ''}${st && st !== 'open' ? `, ${st}` : ''}`}
         style={[s.cell, { backgroundColor: bg, borderColor: border }, faded && { borderStyle: 'dashed', borderColor: c.mute }]}>
-        {run ? <View style={[s.band, { backgroundColor: c.types[run.type] }, faded && { opacity: 0.35 }]} /> : null}
+        {run ? <View style={[s.band, { backgroundColor: kindColor(c, run.kind) }, faded && { opacity: 0.35 }]} /> : null}
         <View style={s.top}>
           <View style={[s.dnWrap, isToday && { backgroundColor: c.accent }]}>
             <Text style={[s.dn, { color: isToday ? c.onAccent : c.ink }]}>{Number(date.slice(8))}</Text>
@@ -143,7 +155,7 @@ const DayCell = memo(function DayCell({
           </Text>
         ) : null}
         {meta ? (
-          <Text numberOfLines={1} ellipsizeMode="clip" style={[s.meta, { color: miles > 0 ? c.ok : c.mute, fontWeight: miles > 0 ? '700' : '400' }]}>
+          <Text numberOfLines={1} ellipsizeMode="clip" style={[s.meta, { color: loggedText ? c.ok : c.mute, fontWeight: loggedText ? '700' : '400' }]}>
             {meta}
           </Text>
         ) : null}
@@ -162,7 +174,7 @@ const s = StyleSheet.create({
   dow: { flex: 1, fontSize: 12, textAlign: 'center', marginBottom: 2 },
   cellWrap: { flex: 1, paddingHorizontal: 2 },
   cell: { minHeight: 64, borderRadius: radius.md - 2, borderWidth: 1, paddingTop: 7, paddingHorizontal: 3, paddingBottom: 8, gap: 2, overflow: 'hidden' },
-  // Top band = planned run type.
+  // Top band = planned workout kind.
   band: { position: 'absolute', top: 0, left: 6, right: 6, height: 3, borderBottomLeftRadius: 2, borderBottomRightRadius: 2 },
   top: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingRight: 1 },
   dnWrap: { minWidth: 24, height: 24, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },

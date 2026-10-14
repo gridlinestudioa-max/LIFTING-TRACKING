@@ -16,11 +16,46 @@ export const cloudConfigured = !!URL && !!KEY;
 
 let client: SupabaseClient | null = null;
 
+/** What an email link brought the person here to do. */
+export type Arrival = 'confirmed' | 'recovery' | null;
+
+/**
+ * On the web, an email link (confirm your email, reset your password) opens the site with the result in the
+ * address: "#access_token=…&type=signup", or "#error=…&error_description=…" when the link is used or expired.
+ * Read it once, before Supabase signs the person in from it.
+ */
+function readLink(): { arrival: Arrival; error: string | null } {
+  if (Platform.OS !== 'web' || typeof window === 'undefined') return { arrival: null, error: null };
+  const params = new URLSearchParams(`${window.location.search.slice(1)}&${window.location.hash.slice(1)}`);
+  const error = params.get('error_description') || params.get('error');
+  if (error) {
+    const code = params.get('error_code') ?? '';
+    const expired = code.includes('expired') || /expired|invalid/i.test(error);
+    return { arrival: null, error: expired ? 'That link has expired or was already used. Sign in, or ask for a new link.' : error.replace(/\+/g, ' ') };
+  }
+  if (!params.get('access_token') && !params.get('code')) return { arrival: null, error: null };
+  const type = params.get('type');
+  return { arrival: type === 'recovery' ? 'recovery' : type === 'signup' || type === 'email' || type === 'invite' ? 'confirmed' : null, error: null };
+}
+
+export const link = readLink();
+
+/** Take the link's details out of the address bar once they've been used. */
+export function clearLinkFromUrl() {
+  if (Platform.OS !== 'web' || typeof window === 'undefined') return;
+  if (window.location.hash || window.location.search) window.history.replaceState(null, '', window.location.pathname);
+}
+
+/** Where email links should open: this website (so a link from a preview opens that preview). */
+export function linkTarget(): string | undefined {
+  return Platform.OS === 'web' && typeof window !== 'undefined' ? `${window.location.origin}/` : undefined;
+}
+
 export function supabase(): SupabaseClient | null {
   if (!cloudConfigured) return null;
   if (!client) {
     client = createClient(URL, KEY, {
-      auth: { storage: AsyncStorage, autoRefreshToken: true, persistSession: true, detectSessionInUrl: false },
+      auth: { storage: AsyncStorage, autoRefreshToken: true, persistSession: true, detectSessionInUrl: Platform.OS === 'web' },
     });
     if (Platform.OS !== 'web') {
       // Refresh the session only while the app is in the foreground.

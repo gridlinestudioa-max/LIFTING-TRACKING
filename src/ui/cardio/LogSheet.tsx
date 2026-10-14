@@ -3,8 +3,11 @@ import { StyleSheet, Text, View } from 'react-native';
 
 import {
   CARDIO_TYPES,
-  RUN_LABEL,
+  KIND_LABEL,
+  METERS_PER_MILE,
+  SPORT_LABEL,
   defaultPlanDay,
+  distText,
   fmt,
   fmtTime,
   newId,
@@ -12,13 +15,15 @@ import {
   paceText,
   parseTime,
   planDayOptions,
+  plannedOn,
   shortDayLabel,
   type CardioSession,
   type CardioType,
 } from '@/logic';
 
 import { Field, Mute } from '../components';
-import { Button, Pill, Sheet } from '../food/kit';
+import { Button, Sheet } from '../food/kit';
+import { Select } from '../Select';
 import { useTracker } from '../store';
 import { fonts, radius, space, tabular, useColors } from '../theme';
 
@@ -27,18 +32,24 @@ export function LogSheet({ visible, day, editing, onClose }: { visible: boolean;
   const c = useColors();
   const { state, today, update } = useTracker();
   const cardio = state.cardio;
-  const [type, setType] = useState<CardioType>(editing?.type ?? 'run');
-  const [miles, setMiles] = useState(editing?.miles != null ? fmt(editing.miles) : '');
+  // Without a session to edit, start from the sport planned today (or a run).
+  const [type, setType] = useState<CardioType>(editing?.type ?? plannedOn(cardio.plan, day)[0]?.sport ?? 'run');
+  const swim = type === 'swim';
+  // Swims are entered in meters; everything is stored in miles.
+  const [miles, setMiles] = useState(
+    editing?.miles != null ? (editing.type === 'swim' ? String(Math.round(editing.miles * METERS_PER_MILE)) : fmt(editing.miles)) : '',
+  );
   const [time, setTime] = useState(editing?.secs ? fmtTime(editing.secs) : '');
   const [note, setNote] = useState(editing?.note ?? '');
   // '' = doesn't count toward a plan run.
-  const [planDay, setPlanDay] = useState<string>(editing ? (editing.planDay ?? '') : (defaultPlanDay(cardio, day, 'run') ?? ''));
+  const [planDay, setPlanDay] = useState<string>(editing ? (editing.planDay ?? '') : (defaultPlanDay(cardio, day, type) ?? ''));
   const [err, setErr] = useState<string | null>(null);
 
   const others = { ...cardio, sessions: cardio.sessions.filter((x) => x.id !== editing?.id) };
-  const options = type === 'run' && cardio.plan ? planDayOptions(others, day, today) : [];
+  const options = cardio.plan ? planDayOptions(others, day, today, type) : [];
   const hasDistance = CARDIO_TYPES.find((t) => t.id === type)!.distance;
-  const mi = parseFloat(miles);
+  const entered = parseFloat(miles);
+  const mi = swim ? entered / METERS_PER_MILE : entered;
   const secs = parseTime(time);
   const pace = type === 'run' || type === 'walk' || type === 'hike' ? paceText(mi, secs) : '';
 
@@ -46,13 +57,13 @@ export function LogSheet({ visible, day, editing, onClose }: { visible: boolean;
     const okMiles = Number.isFinite(mi) && mi > 0;
     const okTime = secs != null && secs > 0;
     if (!okMiles && !okTime) return setErr(hasDistance ? 'Enter the distance or the time.' : 'Enter the time.');
-    if (miles.trim() && !okMiles) return setErr('Distance should be a number of miles, like 3.1.');
+    if (miles.trim() && !okMiles) return setErr(swim ? 'Distance should be a number of meters, like 750.' : 'Distance should be a number of miles, like 3.1.');
     if (time.trim() && !okTime) return setErr('Time looks like 45, 45:30 or 1:05:00.');
     const x: CardioSession = { id: editing?.id ?? newId('c'), date: day, type };
     if (okMiles && hasDistance) x.miles = mi;
     if (okTime) x.secs = secs!;
     if (note.trim()) x.note = note.trim();
-    if (type === 'run' && planDay && options.some((o) => o.s === planDay)) x.planDay = planDay;
+    if (planDay && options.some((o) => o.s === planDay)) x.planDay = planDay;
     update((s) => {
       const list = s.cardio.sessions.filter((y) => y.id !== x.id);
       // Logging toward a skipped run un-skips it.
@@ -72,27 +83,30 @@ export function LogSheet({ visible, day, editing, onClose }: { visible: boolean;
     <Sheet visible={visible} title={editing ? 'Edit cardio' : 'Log cardio'} onClose={onClose}>
       <Text style={[st.day, { color: c.ink }]}>{shortDayLabel(day)}</Text>
 
-      <Text style={[st.lbl, { color: c.mute, marginTop: space.md }]}>What did you do?</Text>
-      <View style={st.wrap}>
-        {CARDIO_TYPES.map((t) => (
-          <Pill
-            key={t.id}
-            label={t.label}
-            selected={type === t.id}
-            onPress={() => {
-              setType(t.id);
-              if (t.id !== 'run') setPlanDay('');
-              else if (!editing) setPlanDay(defaultPlanDay(cardio, day, 'run') ?? '');
-            }}
-          />
-        ))}
-      </View>
+      <Text style={[st.lbl, { color: c.mute, marginTop: space.md, marginBottom: 6 }]}>What did you do?</Text>
+      <Select
+        label="What did you do?"
+        value={type}
+        options={CARDIO_TYPES.map((t) => ({ value: t.id, label: t.label }))}
+        onChange={(t) => {
+          if (t === type) return;
+          setType(t);
+          if (t === 'swim' || type === 'swim') setMiles('');
+          setPlanDay(editing ? '' : (defaultPlanDay(cardio, day, t) ?? ''));
+        }}
+      />
 
       <View style={[st.pair, { marginTop: space.lg }]}>
         {hasDistance ? (
           <View style={{ flex: 1, gap: 6 }}>
-            <Text style={[st.lbl, { color: c.mute }]}>Miles</Text>
-            <Field value={miles} onChangeText={setMiles} keyboardType="decimal-pad" placeholder="e.g. 3.1" accessibilityLabel="Miles" />
+            <Text style={[st.lbl, { color: c.mute }]}>{swim ? 'Meters' : 'Miles'}</Text>
+            <Field
+              value={miles}
+              onChangeText={setMiles}
+              keyboardType="decimal-pad"
+              placeholder={swim ? 'e.g. 750' : 'e.g. 3.1'}
+              accessibilityLabel={swim ? 'Meters' : 'Miles'}
+            />
           </View>
         ) : null}
         <View style={{ flex: 1, gap: 6 }}>
@@ -120,18 +134,19 @@ export function LogSheet({ visible, day, editing, onClose }: { visible: boolean;
       {options.length ? (
         <View style={{ marginTop: space.lg, gap: 6 }}>
           <Text style={[st.lbl, { color: c.mute }]}>Counts toward your plan</Text>
-          <View style={st.wrap}>
-            {options.map((o) => (
-              <Pill
-                key={o.s}
-                label={`${o.s === day ? 'Today’s' : shortDayLabel(o.s)} ${o.run.race ? 'race' : RUN_LABEL[o.run.type].toLowerCase()} · ${fmt(o.run.miles)} mi`}
-                selected={planDay === o.s}
-                onPress={() => setPlanDay(o.s)}
-              />
-            ))}
-            <Pill label="Extra run" selected={!planDay} onPress={() => setPlanDay('')} />
-          </View>
-          <Mute style={{ fontSize: 13 }}>Pick a missed or upcoming plan run to make it up, or log this as an extra run.</Mute>
+          <Select
+            label="Counts toward your plan"
+            value={planDay}
+            options={[
+              ...options.map((o) => ({
+                value: o.s,
+                label: `${o.s === day ? 'Today’s' : shortDayLabel(o.s)} ${o.wk.race ? 'race' : KIND_LABEL[o.wk.kind].toLowerCase()} ${SPORT_LABEL[o.wk.sport].toLowerCase()} · ${distText(o.wk.sport, o.wk.miles)}`,
+              })),
+              { value: '', label: `Extra ${SPORT_LABEL[type as keyof typeof SPORT_LABEL]?.toLowerCase() ?? 'session'}, not part of the plan` },
+            ]}
+            onChange={setPlanDay}
+          />
+          <Mute style={{ fontSize: 13 }}>Pick a missed or upcoming planned workout to make it up, or log this as extra.</Mute>
         </View>
       ) : null}
 
@@ -148,7 +163,6 @@ export function LogSheet({ visible, day, editing, onClose }: { visible: boolean;
 const st = StyleSheet.create({
   day: { fontFamily: fonts.display, fontSize: 28, lineHeight: 32 },
   lbl: { fontSize: 13, fontWeight: '600' },
-  wrap: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm, marginTop: 6 },
   pair: { flexDirection: 'row', gap: space.md },
   readout: {
     flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', marginTop: space.md,

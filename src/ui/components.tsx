@@ -1,8 +1,6 @@
 import { createContext, useContext, useState, type ReactNode } from 'react';
 import { Platform, StyleSheet, Text, TextInput, View, type StyleProp, type TextInputProps, type TextStyle, type ViewStyle } from 'react-native';
 
-import { PLAN_WEEKS } from '@/logic';
-
 import { useTracker, type SyncStatus } from './store';
 import { fonts, radius, space, tabular, useColors } from './theme';
 
@@ -44,8 +42,8 @@ export function Section({ title, note, first, children }: { title: string; note?
   );
 }
 
-/** Twelve segments, one per plan week. Past weeks are filled, this week is taller and solid. */
-export function WeekBar({ current, weeks = PLAN_WEEKS }: { current: number; weeks?: number }) {
+/** One segment per plan week. Past weeks are filled, this week is taller and solid. */
+export function WeekBar({ current, weeks }: { current: number; weeks: number }) {
   const c = useColors();
   const label = current < 0 ? 'Plan has not started' : current >= weeks ? 'Plan complete' : `Week ${current + 1} of ${weeks}`;
   return (

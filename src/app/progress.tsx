@@ -2,7 +2,9 @@ import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import {
+  METERS_PER_MILE,
   MONTHS,
+  SPORT_LABEL,
   addDays,
   byWeek,
   calorieSummary,
@@ -16,12 +18,15 @@ import {
   fmtW,
   nextTarget,
   paceText,
+  planTitle,
   planWeekRows,
   sgn,
   toD,
   volume,
   weeklyTotals,
   weightHistory,
+  type Sport,
+  type WeekBar as BarRow,
 } from '@/logic';
 import { ChartKey, CumulativeLine, DeficitBars, PlanBars, Sparkline } from '@/ui/charts';
 import { H2, Header, Mute, Section, StatGrid, StatTile } from '@/ui/components';
@@ -99,7 +104,11 @@ function CardioSection({ first }: { first?: boolean }) {
   const { state, today } = useTracker();
   const cardio = state.cardio;
   const s = cardioStats(cardio, today);
-  const { long, week } = planWeekRows(cardio);
+  const { long, sports } = planWeekRows(cardio);
+  // Bars are in miles; swims read better in meters.
+  const unitRows = (sport: Sport, rows: BarRow[]) =>
+    sport === 'swim' ? rows.map((r) => ({ ...r, planned: Math.round(r.planned * METERS_PER_MILE), actual: Math.round(r.actual * METERS_PER_MILE) })) : rows;
+  const unit = (sport: Sport) => (sport === 'swim' ? 'meters' : 'miles');
   const weeks = weeklyTotals(cardio, today, 8);
   return (
     <Section title="Cardio" first={first}>
@@ -109,18 +118,26 @@ function CardioSection({ first }: { first?: boolean }) {
         <StatTile value={s.secs ? fmtTime(s.secs) : '–'} label="Time" />
         <StatTile value={s.longestRun ? fmt(s.longestRun) : '–'} label="Longest run (mi)" />
         <StatTile value={s.paceMiles > 0 ? paceText(s.paceMiles, s.paceSecs).replace(' /mi', '') : '–'} label="Average run pace" />
-        {cardio.plan ? <StatTile value={String(s.planDone)} sub={`/${s.planDue}`} label={s.planSkipped ? `Plan runs done, ${s.planSkipped} skipped` : 'Plan runs done'} /> : <StatTile value="–" label="No plan" />}
+        {cardio.plan ? <StatTile value={String(s.planDone)} sub={`/${s.planDue}`} label={s.planSkipped ? `Planned workouts done, ${s.planSkipped} skipped` : 'Planned workouts done'} /> : <StatTile value="–" label="No plan" />}
       </StatGrid>
 
       <H2>Last 8 weeks</H2>
       <PlanBars rows={weeks.map((w) => ({ label: weekLabel(w.start).replace(/^(\w{3}) /, '$1 '), planned: 0, actual: w.miles }))} label="Miles per week, last 8 weeks" />
 
-      {cardio.plan ? (
+      {cardio.plan && sports.length ? (
         <>
-          <H2 style={{ marginTop: space.xl }}>Half-marathon plan: long run</H2>
-          <PlanBars rows={long} label="Long run miles by plan week" />
-          <H2 style={{ marginTop: space.xl }}>Plan: weekly running miles</H2>
-          <PlanBars rows={week} label="Running miles by plan week" />
+          {long.length ? (
+            <>
+              <H2 style={{ marginTop: space.xl }}>{`${planTitle(cardio.plan.id)}: long ${SPORT_LABEL[sports[0].sport].toLowerCase()}`}</H2>
+              <PlanBars rows={unitRows(sports[0].sport, long)} label={`Long session ${unit(sports[0].sport)} by plan week`} />
+            </>
+          ) : null}
+          {sports.map((x) => (
+            <View key={x.sport}>
+              <H2 style={{ marginTop: space.xl }}>{`Plan: weekly ${SPORT_LABEL[x.sport].toLowerCase()} ${unit(x.sport)}`}</H2>
+              <PlanBars rows={unitRows(x.sport, x.rows)} label={`${SPORT_LABEL[x.sport]} ${unit(x.sport)} by plan week`} />
+            </View>
+          ))}
           <ChartKey items={['planned', 'logged']} />
         </>
       ) : null}

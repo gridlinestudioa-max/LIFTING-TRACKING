@@ -10,6 +10,7 @@ export * from './usda';
 export * from './openfoodfacts';
 export * from './diet';
 export * from './profile';
+export * from './plans';
 export * from './cardio';
 export * from './lifting';
 export * from './exercises';
