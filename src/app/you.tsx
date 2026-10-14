@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { type Sections } from '@/logic';
+import { EMPTY_CARDIO, EMPTY_LIFTING, type Sections } from '@/logic';
 import { useAccount } from '@/ui/account';
 import { CommitNumberField, Field, Header, Mute, Section } from '@/ui/components';
 import { Button, LinkButton } from '@/ui/food/kit';
@@ -19,6 +19,17 @@ export default function YouScreen() {
   const { state, today, update, setSettings, setProfile, setGoal } = useTracker();
   const [editStats, setEditStats] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [confirmReset, setConfirmReset] = useState(false);
+  // Training starts fresh; food, profile and diet are kept. Setup runs again to pick new plans.
+  const startOver = () => {
+    update((s) => ({
+      ...s,
+      cardio: { ...EMPTY_CARDIO, sessions: [], skips: [] },
+      lifting: { ...EMPTY_LIFTING, exercises: [], routines: [], schedule: [...EMPTY_LIFTING.schedule], workouts: [] },
+      settings: { ...s.settings, onboarded: false },
+    }));
+    setConfirmReset(false);
+  };
   const on = state.settings.sections;
   const p = state.profile;
 
@@ -105,6 +116,20 @@ export default function YouScreen() {
             </View>
           </Section>
         ) : null}
+
+        <Section title="Start a new plan">
+          {confirmReset ? (
+            <View style={{ gap: space.sm }}>
+              <Text style={{ color: c.ink, fontSize: 15 }}>
+                This clears your cardio plan and sessions, and your lifting routines and workouts, then walks you through setup again. Food, your profile and your diet stay.
+              </Text>
+              <Button label="Clear training and start over" danger onPress={startOver} />
+              <Button label="Cancel" onPress={() => setConfirmReset(false)} />
+            </View>
+          ) : (
+            <Button label="Start a new plan" onPress={() => setConfirmReset(true)} />
+          )}
+        </Section>
 
         <Text style={{ color: c.mute, fontSize: 12, lineHeight: 17, marginTop: space.sm, paddingHorizontal: space.xs }}>
           Food data: USDA FoodData Central and Open Food Facts (ODbL). Exercises: free-exercise-db. Targets are general guidance, not medical advice.

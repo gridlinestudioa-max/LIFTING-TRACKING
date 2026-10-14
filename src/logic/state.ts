@@ -1,5 +1,6 @@
 import { EMPTY_CARDIO, normalizeCardio } from './cardio';
 import { DEFAULT_DIET, normalizeDiet } from './diet';
+import { DEFAULT_HOME, normalizeHome } from './home';
 import { EMPTY_LIFTING, normalizeLifting } from './lifting';
 import { isV1, migrateV1 } from './migrate';
 import type { Food, FoodEntry, FoodTag, Nutrients, Portion } from './nutrition';
@@ -13,7 +14,7 @@ export function defaultState(): TrackerState {
   return {
     v: 2,
     updatedAt: 0,
-    settings: { name: '', sections: { ...ALL_SECTIONS }, onboarded: false },
+    settings: { name: '', sections: { ...ALL_SECTIONS }, onboarded: false, home: [...DEFAULT_HOME] },
     goal: null,
     days: {},
     foods: [],
@@ -43,6 +44,7 @@ export function normalize(s: unknown): TrackerState {
     });
   }
   d.settings.onboarded = st.onboarded === true;
+  d.settings.home = normalizeHome(st.home);
 
   if (typeof src.goal === 'number' && src.goal > 0) d.goal = src.goal;
   if (src.days && typeof src.days === 'object') {

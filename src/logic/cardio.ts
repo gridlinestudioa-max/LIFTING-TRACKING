@@ -33,6 +33,14 @@ export interface CardioSession {
   /** Duration in seconds. */
   secs?: number;
   note?: string;
+  /** Elevation gained, feet. */
+  elevFt?: number;
+  /** Average heart rate, bpm. */
+  hr?: number;
+  /** Highest heart rate, bpm. */
+  maxHr?: number;
+  /** Calories from a watch or app, when entered. */
+  kcal?: number;
   /**
    * The planned workout this session counts toward: the plan date, matched with this session's sport
    * (a run on a plan day, or a planned workout made up on another day).
@@ -339,6 +347,10 @@ export function normalizeCardio(src: unknown): CardioData {
           if (Number(x.miles) > 0) out.miles = Number(x.miles);
           if (Number(x.secs) > 0) out.secs = Number(x.secs);
           if (typeof x.note === 'string' && x.note) out.note = x.note;
+          if (Number(x.elevFt) > 0) out.elevFt = Math.round(Number(x.elevFt));
+          if (Number(x.hr) >= 40 && Number(x.hr) <= 230) out.hr = Math.round(Number(x.hr));
+          if (Number(x.maxHr) >= 40 && Number(x.maxHr) <= 240) out.maxHr = Math.round(Number(x.maxHr));
+          if (Number(x.kcal) > 0) out.kcal = Math.round(Number(x.kcal));
           if (okDate(x.planDay)) out.planDay = x.planDay;
           return out;
         })

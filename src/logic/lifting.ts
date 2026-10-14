@@ -71,6 +71,9 @@ export interface Workout {
   done: boolean;
   exercises: WorkoutExercise[];
   note?: string;
+  /** When it was started and finished, ms since 1970. */
+  start?: number;
+  end?: number;
 }
 
 export interface LiftingData {
@@ -392,6 +395,8 @@ export function normalizeLifting(src: unknown): LiftingData {
           };
           if (typeof w.routineId === 'string') out.routineId = w.routineId;
           if (typeof w.note === 'string' && w.note) out.note = w.note;
+          if (Number(w.start) > 0) out.start = Number(w.start);
+          if (Number(w.end) > 0) out.end = Number(w.end);
           return out;
         })
     : [];

@@ -40,6 +40,7 @@ const FoodIcon = icon('M5 3v6a2 2 0 0 0 4 0V3M7 11v10M17 21V3c-2.2 0-3.5 2.6-3.5
 const CardioIcon = icon('M3 17h16a2 2 0 0 0 0-4l-5-1-3-5H7L5 13H3zM3 20h18M10 9l1.5 2M12.5 8.5 14 10.5');
 // A dumbbell.
 const LiftIcon = icon('M6 8v8M3.5 10v4M18 8v8M20.5 10v4M6 12h12');
+const HomeIcon = icon('M3 11 12 4l9 7M5 9.5V20h5v-6h4v6h5V9.5');
 const ChartIcon = icon('M4 20V10M10 20V4M16 20v-7M22 20H2');
 const YouIcon = icon('M4 21c.8-4 4-6 8-6s7.2 2 8 6', (p) => <Circle cx={12} cy={8} r={4} stroke={p.color} />);
 
@@ -54,11 +55,10 @@ function AppTabs() {
         tabBarActiveTintColor: c.ink,
         tabBarInactiveTintColor: c.mute,
         tabBarStyle: { backgroundColor: c.card, borderTopColor: c.line },
-        tabBarLabelStyle: { fontSize: 12, fontWeight: '700' },
+        tabBarLabelStyle: { fontSize: 11, fontWeight: '700' },
         sceneStyle: { backgroundColor: c.bg },
       }}>
-      {/* "/" opens the first section that's turned on. */}
-      <Tabs.Screen name="index" options={{ href: null }} />
+      <Tabs.Screen name="index" options={{ title: 'Home', tabBarIcon: (p) => <HomeIcon color={String(p.color)} focused={p.focused} /> }} />
       <Tabs.Screen name="food" options={{ href: on.food ? undefined : null, title: 'Food', tabBarIcon: (p) => <FoodIcon color={String(p.color)} focused={p.focused} /> }} />
       <Tabs.Screen name="cardio" options={{ href: on.cardio ? undefined : null, title: 'Cardio', tabBarIcon: (p) => <CardioIcon color={String(p.color)} focused={p.focused} /> }} />
       <Tabs.Screen name="lifting" options={{ href: on.lifting ? undefined : null, title: 'Lifting', tabBarIcon: (p) => <LiftIcon color={String(p.color)} focused={p.focused} /> }} />
