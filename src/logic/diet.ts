@@ -5,6 +5,7 @@
 
 import type { Tone } from './calories';
 import { fmt, fmtInt } from './format';
+import { suggestTargets, type Profile } from './profile';
 import { TAG_LABEL, byTime, entryTotals, fatPct, fmtClock, fmtDuration, sumTotals, type FoodEntry, type FoodTag, type Totals } from './nutrition';
 
 /** Food and drink under this many calories (black coffee, tea, water) don't break a fast. */
@@ -41,13 +42,18 @@ export type StyleId =
 export interface DietSettings {
   fasting: Fasting | null;
   style: StyleId;
-  /** Limits in force. Start from the style's preset; the user can change any of them. */
+  /**
+   * Use the targets suggested from the profile and food style (the default). Off: `limits` are the
+   * user's own numbers. Without a profile, `limits` (the style's preset) are used either way.
+   */
+  auto: boolean;
+  /** The user's own limits, or the style's preset. See `activeDiet` for what's in force. */
   limits: Limits;
   /** Food groups to avoid. */
   exclude: FoodTag[];
 }
 
-export const DEFAULT_DIET: DietSettings = { fasting: null, style: 'none', limits: {}, exclude: [] };
+export const DEFAULT_DIET: DietSettings = { fasting: null, style: 'none', auto: true, limits: {}, exclude: [] };
 
 export const FAST_PRESETS: { id: string; eatHours: number; blurb: string }[] = [
   { id: '14:10', eatHours: 10, blurb: '14 h fast, 10 h to eat. A gentle start.' },
@@ -74,9 +80,9 @@ export interface StylePreset {
 export const STYLES: StylePreset[] = [
   { id: 'none', name: 'No food rules', blurb: 'Just track what you eat.', limits: {}, exclude: [] },
   { id: 'keto', name: 'Keto', blurb: 'Very low carb: 20 g net carbs a day or less.', limits: { netCarbsMax: 20 }, exclude: [] },
-  { id: 'lowcarb', name: 'Low carb', blurb: '100 g net carbs a day or less.', limits: { netCarbsMax: 100 }, exclude: [] },
-  { id: 'highprotein', name: 'High protein', blurb: 'Hit a daily protein target (150 g to start).', limits: { proteinMin: 150 }, exclude: [] },
-  { id: 'lowfat', name: 'Low fat', blurb: 'No more than 30% of calories from fat.', limits: { fatPctMax: 30 }, exclude: [] },
+  { id: 'lowcarb', name: 'Low carb', blurb: 'Fewer carbs: 50 to 130 g net a day.', limits: { netCarbsMax: 100 }, exclude: [] },
+  { id: 'highprotein', name: 'High protein', blurb: 'Extra protein every day, for building muscle.', limits: { proteinMin: 150 }, exclude: [] },
+  { id: 'lowfat', name: 'Low fat', blurb: 'No more than 25% of calories from fat.', limits: { fatPctMax: 25 }, exclude: [] },
   { id: 'vegetarian', name: 'Vegetarian', blurb: 'No meat, poultry or fish.', limits: {}, exclude: ['meat', 'fish'] },
   { id: 'pescatarian', name: 'Pescatarian', blurb: 'Fish is fine; no meat or poultry.', limits: {}, exclude: ['meat'] },
   { id: 'vegan', name: 'Vegan', blurb: 'No animal foods: meat, fish, dairy or eggs.', limits: {}, exclude: ['meat', 'fish', 'dairy', 'egg'] },
@@ -106,17 +112,35 @@ export function isAdjusted(d: DietSettings): boolean {
   return [...d.exclude].sort().join() !== [...p.exclude].sort().join();
 }
 
+/** True when the diet's targets come from the profile right now. */
+export function usesSuggestions(d: DietSettings, profile: Profile | null): boolean {
+  return d.auto && !!profile;
+}
+
+/** The diet with the limits actually in force: suggested from the profile, or the stored ones. */
+export function activeDiet(d: DietSettings, profile: Profile | null): DietSettings {
+  return usesSuggestions(d, profile) ? { ...d, limits: suggestTargets(profile!, d.style).limits } : d;
+}
+
+/** Switch to editing your own numbers, starting from what's in force now. */
+export function editOwnLimits(d: DietSettings, profile: Profile | null): DietSettings {
+  return { ...d, auto: false, limits: { ...activeDiet(d, profile).limits } };
+}
+
 /** True when the diet has any rule at all. */
 export function hasRules(d: DietSettings): boolean {
   return !!d.fasting || d.exclude.length > 0 || Object.values(d.limits).some((v) => v != null);
 }
 
-/** "16:8 fasting · Keto", or "No diet set". */
-export function dietName(d: DietSettings): string {
+/** "16:8 fasting · Keto", "Keto · your targets", or "No diet set". */
+export function dietName(d: DietSettings, profile: Profile | null = null): string {
   const parts: string[] = [];
+  const suggested = usesSuggestions(d, profile);
   if (d.fasting) parts.push(`${fastLabel(d.fasting)} fasting`);
-  if (d.style !== 'none') parts.push(STYLE_BY_ID[d.style].name + (isAdjusted(d) ? ' (adjusted)' : ''));
-  else if (hasRules({ ...d, fasting: null })) parts.push('Custom limits');
+  if (d.style !== 'none') parts.push(STYLE_BY_ID[d.style].name + (!suggested && profile == null && isAdjusted(d) ? ' (adjusted)' : ''));
+  if (suggested) parts.push('suggested targets');
+  else if (profile && hasRules({ ...d, fasting: null, exclude: [] })) parts.push('your own targets');
+  else if (d.style === 'none' && hasRules({ ...d, fasting: null })) parts.push('Custom limits');
   return parts.length ? parts.join(' · ') : 'No diet set';
 }
 
@@ -403,5 +427,7 @@ export function normalizeDiet(src: unknown): DietSettings {
     });
   }
   const exclude = Array.isArray(s.exclude) ? (s.exclude.filter((t: unknown) => typeof t === 'string' && t in TAG_LABEL) as FoodTag[]) : [];
-  return { fasting, style, limits, exclude };
+  // Diets saved before suggestions existed keep the numbers they had.
+  const auto = s.auto === true;
+  return { fasting, style, auto, limits, exclude };
 }

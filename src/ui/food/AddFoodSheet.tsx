@@ -5,6 +5,7 @@ import {
   FOOD_TAGS,
   GRAMS,
   SOURCE_LABEL,
+  activeDiet,
   OffError,
   entryFromFood,
   entryTotals,
@@ -90,6 +91,7 @@ export function AddFoodSheet({
 }) {
   const { state, saveEntry, removeEntry, saveFood, deleteFood } = useTracker();
   const usda = useUsdaFoods();
+  const diet = activeDiet(state.diet, state.profile);
   // Saved foods (yours, and branded foods you've logged) first, then USDA.
   const all = useMemo(() => [...state.foods, ...(usda.foods ?? [])], [state.foods, usda.foods]);
   const dayEntries = state.meals[day] ?? [];
@@ -179,7 +181,7 @@ export function AddFoodSheet({
           isToday={isToday}
           now={now}
           totals={(q) => entryTotals(entryFor(q, 'preview'))}
-          preview={(q) => (timeOk ? previewEntry(state.diet, others, entryFor(q, 'preview'), isToday ? now : null, extra) : null)}
+          preview={(q) => (timeOk ? previewEntry(diet, others, entryFor(q, 'preview'), isToday ? now : null, extra) : null)}
           submitLabel={editing ? 'Save' : 'Add to log'}
           onSubmit={(q) => {
             if (!timeOk || !(q > 0)) return;
@@ -215,7 +217,7 @@ export function AddFoodSheet({
           setTime={setTime}
           isToday={isToday}
           now={now}
-          preview={(name, n) => (timeOk ? previewEntry(state.diet, others, quickEntry(name, n, at!), isToday ? now : null, extra) : null)}
+          preview={(name, n) => (timeOk ? previewEntry(diet, others, quickEntry(name, n, at!), isToday ? now : null, extra) : null)}
           onSubmit={(name, n) => timeOk && add(quickEntry(name, n, at!))}
         />
       ) : null}

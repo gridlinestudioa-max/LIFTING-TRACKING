@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, type ReactNode } from 'react';
-import { StyleSheet, Text, TextInput, View, type StyleProp, type TextInputProps, type TextStyle, type ViewStyle } from 'react-native';
+import { Platform, StyleSheet, Text, TextInput, View, type StyleProp, type TextInputProps, type TextStyle, type ViewStyle } from 'react-native';
 
 import { LONG, PLAN_WEEKS, fmt, headline, planFor } from '@/logic';
 
@@ -132,6 +132,8 @@ export function Field(props: TextInputProps) {
       onBlur={(e) => {
         setFocused(false);
         props.onBlur?.(e);
+        // react-native-web never fires onEndEditing; leaving the field is the end of editing there.
+        if (Platform.OS === 'web') props.onEndEditing?.(e as unknown as Parameters<NonNullable<TextInputProps['onEndEditing']>>[0]);
       }}
       style={[styles.input, { color: c.ink, backgroundColor: c.card, borderColor: focused ? c.ink : c.line }, props.style]}
     />

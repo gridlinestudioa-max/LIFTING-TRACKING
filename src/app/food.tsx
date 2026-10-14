@@ -3,6 +3,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import {
+  activeDiet,
   addDays,
   amountText,
   byTime,
@@ -48,7 +49,8 @@ export default function FoodScreen() {
   const entries = byTime(state.meals[day] ?? []);
   // Calories typed on the Calendar for this day, outside the food log.
   const typed = state.logs[day]?.cin ?? null;
-  const ev = evaluateDay(state.diet, entries, day < today, typed ?? 0);
+  const diet = activeDiet(state.diet, state.profile);
+  const ev = evaluateDay(diet, entries, day < today, typed ?? 0);
   const openSheet = (editing: FoodEntry | null) => setSheet((s) => ({ n: s.n + 1, open: true, editing }));
 
   return (
@@ -70,8 +72,8 @@ export default function FoodScreen() {
         <View style={[st.section, { borderTopColor: c.line }]}>
           <View style={st.sectionHead}>
             <Text style={[st.h, { color: c.ink }]}>Eaten</Text>
-            {state.diet.limits.kcalMax ? (
-              <Text style={{ color: c.mute, fontSize: 14, ...tabular }}>Limit {fmtInt(state.diet.limits.kcalMax)} kcal</Text>
+            {diet.limits.kcalMax ? (
+              <Text style={{ color: c.mute, fontSize: 14, ...tabular }}>Limit {fmtInt(diet.limits.kcalMax)} kcal</Text>
             ) : null}
           </View>
           <NutritionSummary t={ev.totals} />
@@ -128,14 +130,16 @@ function NavButton({ label, a11y, onPress }: { label: string; a11y: string; onPr
 function DietStatus({ ev, isToday, now, day, onChange }: { ev: DayEval; isToday: boolean; now: number; day: string; onChange: () => void }) {
   const c = useColors();
   const { state } = useTracker();
-  const d = state.diet;
+  const d = activeDiet(state.diet, state.profile);
 
   if (!hasRules(d)) {
     return (
       <View style={[st.dietRow, { marginTop: space.lg }]}>
         <View style={{ flex: 1 }}>
           <Text style={{ color: c.ink, fontSize: 16, fontWeight: '700' }}>No diet set</Text>
-          <Mute style={{ fontSize: 13 }}>Pick fasting, keto, vegan and more. Food you log is checked against it.</Mute>
+          <Mute style={{ fontSize: 13 }}>
+            Add your body stats for suggested daily targets, and pick fasting, keto, vegan and more. Food you log is checked against it.
+          </Mute>
         </View>
         <Pill label="Choose a diet" selected={false} onPress={onChange} />
       </View>
@@ -152,7 +156,7 @@ function DietStatus({ ev, isToday, now, day, onChange }: { ev: DayEval; isToday:
       <View style={st.dietRow}>
         <View style={{ flex: 1 }}>
           <Mute style={{ fontSize: 13 }}>Your diet</Mute>
-          <Text style={{ color: c.ink, fontSize: 16, fontWeight: '700' }}>{dietName(d)}</Text>
+          <Text style={{ color: c.ink, fontSize: 16, fontWeight: '700' }}>{dietName(state.diet, state.profile)}</Text>
         </View>
         <LinkButton label="Change" onPress={onChange} />
       </View>

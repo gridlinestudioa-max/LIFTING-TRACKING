@@ -14,6 +14,7 @@ Data is stored only on the phone (AsyncStorage, key `mm_tracker_v1`). There's no
 | `src/logic/` | Pure TypeScript logic with no React: plan mapping, target weights, day status, time/pace, calories, progress stats, form/submit rules. |
 | `src/logic/__tests__/` | Unit tests (covers the HANDOFF test checklist). |
 | `src/logic/nutrition.ts`, `diet.ts` | Food log, portions and totals, and diets: fasting windows, presets (keto, vegan, ...) and the on-track checks. |
+| `src/logic/profile.ts` | Body stats and suggested daily targets (Mifflin-St Jeor calories; protein, carbs, sugar and fat by diet). Sources are listed at the top of the file. |
 | `src/logic/usda.ts`, `src/logic/data/usda-foods.json` | Built-in USDA food list (about 12,900 foods), loaded the first time food search opens. |
 | `src/logic/openfoodfacts.ts` | Online search and barcode lookup for branded foods on Open Food Facts. |
 | `scripts/build-usda-foods.py` | Rebuilds `usda-foods.json` from USDA downloads (see below). |
