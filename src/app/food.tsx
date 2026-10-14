@@ -5,29 +5,27 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   activeDiet,
   addDays,
-  amountText,
   byTime,
   dietName,
   evaluateDay,
   fastHeadline,
-  fmt,
-  fmtClock,
   fmtDuration,
   fmtInt,
   hasRules,
   minsSinceLastMeal,
   shortDayLabel,
   cinFor,
-  entryTotals,
   foodKcal,
   kcalInfo,
   type DayEval,
   type FoodEntry,
+  type MealSlot,
   type Verdict,
 } from '@/logic';
 import { CommitNumberField, Field, Header, Mute } from '@/ui/components';
 import { AddFoodSheet, NutritionSummary } from '@/ui/food/AddFoodSheet';
 import { DietSheet } from '@/ui/food/DietSheet';
+import { CopyMealSheet, MealGroups, TallyList } from '@/ui/food/Meals';
 import { Button, Dot, LinkButton, Notice, Pill, useClock } from '@/ui/food/kit';
 import { useTracker } from '@/ui/store';
 import { fonts, radius, space, tabular, toneBg, toneColor, useColors } from '@/ui/theme';
@@ -45,7 +43,8 @@ export default function FoodScreen() {
   const now = useClock();
   const [day, setDay] = useState(today);
   // Add/edit sheet. `n` remounts it fresh on every open.
-  const [sheet, setSheet] = useState<{ n: number; open: boolean; editing: FoodEntry | null }>({ n: 0, open: false, editing: null });
+  const [sheet, setSheet] = useState<{ n: number; open: boolean; editing: FoodEntry | null; meal?: MealSlot }>({ n: 0, open: false, editing: null });
+  const [copy, setCopy] = useState<{ n: number; open: boolean; meal: MealSlot }>({ n: 0, open: false, meal: 'breakfast' });
   const [dietOpen, setDietOpen] = useState(false);
 
   const isToday = day === today;
@@ -54,7 +53,7 @@ export default function FoodScreen() {
   const typed = state.days[day]?.cin ?? null;
   const diet = activeDiet(state.diet, state.profile);
   const ev = evaluateDay(diet, entries, day < today, typed ?? 0);
-  const openSheet = (editing: FoodEntry | null) => setSheet((s) => ({ n: s.n + 1, open: true, editing }));
+  const openSheet = (editing: FoodEntry | null, meal?: MealSlot) => setSheet((s) => ({ n: s.n + 1, open: true, editing, meal }));
 
   return (
     <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: c.bg }}>
@@ -82,23 +81,23 @@ export default function FoodScreen() {
           <NutritionSummary t={ev.totals} />
           {typed ? (
             <Mute style={{ marginTop: space.sm }}>
-              {`Plus ${fmtInt(typed)} kcal entered below = ${fmtInt(ev.totals.kcal + typed)} kcal in.`}
+              {`Plus ${fmtInt(typed)} extra kcal entered below = ${fmtInt(ev.totals.kcal + typed)} kcal in.`}
             </Mute>
           ) : null}
           <Button label="Add food" primary onPress={() => openSheet(null)} style={{ marginTop: space.lg }} />
 
-          {entries.length ? (
-            <View style={{ marginTop: space.md }}>
-              {entries.map((e, i) => (
-                <EntryRow key={e.id} e={e} flags={ev.flags[e.id]} first={i === 0} onPress={() => openSheet(e)} />
-              ))}
-            </View>
-          ) : (
-            <Mute style={{ marginTop: space.md }}>Nothing logged for this day.</Mute>
-          )}
+          <MealGroups
+            day={day}
+            entries={entries}
+            flags={ev.flags}
+            onAdd={(m) => openSheet(null, m)}
+            onEdit={(e) => openSheet(e)}
+            onCopy={(m) => setCopy((x) => ({ n: x.n + 1, open: true, meal: m }))}
+          />
+          <TallyList day={day} isToday={isToday} now={now} />
         </View>
 
-        <InAndOut day={day} onSave={saveDay} />
+        <InAndOut key={day} day={day} onSave={saveDay} />
       </ScrollView>
 
       <AddFoodSheet
@@ -108,7 +107,16 @@ export default function FoodScreen() {
         isToday={isToday}
         now={now}
         editing={sheet.editing}
+        meal={sheet.meal}
         onClose={() => setSheet((s) => ({ ...s, open: false }))}
+      />
+      <CopyMealSheet
+        key={`copy${copy.n}`}
+        visible={copy.open}
+        day={day}
+        today={today}
+        meal={copy.meal}
+        onClose={() => setCopy((x) => ({ ...x, open: false }))}
       />
       <DietSheet visible={dietOpen} onClose={() => setDietOpen(false)} />
     </SafeAreaView>
@@ -121,18 +129,26 @@ function InAndOut({ day, onSave }: { day: string; onSave: (s: string, patch: { c
   const { state } = useTracker();
   const info = state.days[day] ?? {};
   const food = foodKcal(state, day);
-  const k = kcalInfo(cinFor(state, day), info.cout, state.goal);
+  const total = cinFor(state, day);
+  const k = kcalInfo(total, info.cout, state.goal);
+  const [low, setLow] = useState(false);
   return (
     <View style={[st.section, { borderTopColor: c.line }]}>
       <Text style={[st.h, { color: c.ink }]}>In and out</Text>
       <View style={[st.pair, { marginTop: space.sm }]}>
         <View style={{ flex: 1, gap: 6 }}>
-          <Text style={[st.lbl, { color: c.mute }]}>{food != null ? 'Other calories in' : 'Calories in'}</Text>
+          <Text style={[st.lbl, { color: c.mute }]}>Calories in</Text>
           <CommitNumberField
-            value={info.cin ?? null}
-            onCommit={(v) => onSave(day, { cin: v ?? undefined })}
+            key={`${day}:${total ?? ''}`}
+            value={total}
+            onCommit={(v) => {
+              // With a food log, the field shows the log plus anything extra; only the extra is saved.
+              const extra = v == null ? 0 : Math.round(v - (food ?? 0));
+              setLow(food != null && v != null && extra < 0);
+              onSave(day, { cin: extra > 0 ? extra : undefined });
+            }}
             placeholder="0"
-            accessibilityLabel={food != null ? 'Other calories in, not in the food log' : 'Calories in'}
+            accessibilityLabel="Calories in"
           />
         </View>
         <View style={{ flex: 1, gap: 6 }}>
@@ -141,8 +157,16 @@ function InAndOut({ day, onSave }: { day: string; onSave: (s: string, patch: { c
         </View>
       </View>
       <Mute style={{ fontSize: 13, marginTop: space.xs }}>
-        {food != null ? 'For anything not in the log above. ' : ''}Burned = your watch or Health app total for the whole day.
+        {food != null
+          ? info.cin
+            ? `${fmtInt(food)} from your food log + ${fmtInt(info.cin)} extra. `
+            : `Filled in from your food log. Make it higher to add anything you didn’t log. `
+          : ''}
+        Burned = your watch or Health app total for the whole day.
       </Mute>
+      {low && food != null ? (
+        <Text style={{ color: c.bad, fontSize: 13, marginTop: 2 }}>{`Can’t be less than the ${fmtInt(food)} kcal in your food log. Remove foods above to lower it.`}</Text>
+      ) : null}
       <View style={[st.result, { backgroundColor: toneBg(c, k.tone) }]} accessibilityLiveRegion="polite">
         <Text style={k.tone === 'mute' ? { color: c.mute, fontSize: 14 } : { color: toneColor(c, k.tone), fontFamily: fonts.semi, fontSize: 22, lineHeight: 26 }}>
           {k.text}
@@ -251,32 +275,6 @@ function DietStatus({ ev, isToday, now, day, onChange }: { ev: DayEval; isToday:
   );
 }
 
-function EntryRow({ e, flags, first, onPress }: { e: FoodEntry; flags?: string[]; first: boolean; onPress: () => void }) {
-  const c = useColors();
-  const t = entryTotals(e);
-  const off = !!flags?.length;
-  return (
-    <Pressable
-      onPress={onPress}
-      accessibilityRole="button"
-      accessibilityLabel={`${e.name}, ${fmtClock(e.at)}, ${fmtInt(t.kcal)} calories${off ? ', off track' : ''}. Edit`}
-      style={({ pressed }) => [st.entry, !first && { borderTopWidth: 1, borderTopColor: c.line }, { opacity: pressed ? 0.6 : 1 }]}>
-      <Text style={{ width: 72, color: c.mute, fontSize: 13, paddingTop: 2, ...tabular }}>{fmtClock(e.at)}</Text>
-      <View style={{ flex: 1 }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-          {off ? <Dot tone="bad" size={8} /> : null}
-          <Text style={{ color: c.ink, fontSize: 16, fontWeight: '600', flexShrink: 1 }}>{e.name}</Text>
-        </View>
-        <Text style={{ color: c.mute, fontSize: 13, ...tabular }}>
-          {amountText(e)} · P {fmt(Math.round(t.protein))} · C {fmt(Math.round(t.netCarbs))} net · F {fmt(Math.round(t.fat))}
-        </Text>
-        {off ? <Text style={{ color: c.bad, fontSize: 13, marginTop: 2 }}>{flags!.join(' · ')}</Text> : null}
-      </View>
-      <Text style={{ color: c.ink, fontSize: 16, fontWeight: '700', ...tabular }}>{fmtInt(t.kcal)}</Text>
-    </Pressable>
-  );
-}
-
 const st = StyleSheet.create({
   daynav: { flexDirection: 'row', alignItems: 'center', gap: space.md },
   day: { fontFamily: fonts.display, fontSize: 28, lineHeight: 32 },
@@ -292,5 +290,4 @@ const st = StyleSheet.create({
   pair: { flexDirection: 'row', gap: space.md },
   lbl: { fontSize: 13, fontWeight: '600' },
   result: { marginTop: space.md, borderRadius: radius.md - 2, paddingVertical: space.md, paddingHorizontal: space.md },
-  entry: { flexDirection: 'row', alignItems: 'flex-start', gap: space.sm, paddingVertical: space.md },
 });

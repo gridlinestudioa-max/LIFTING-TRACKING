@@ -3,7 +3,7 @@ import { DEFAULT_DIET, normalizeDiet } from './diet';
 import { EMPTY_LIFTING, normalizeLifting } from './lifting';
 import { isV1, migrateV1 } from './migrate';
 import type { Food, FoodEntry, FoodTag, Nutrients, Portion } from './nutrition';
-import { TAG_LABEL } from './nutrition';
+import { TAG_LABEL, isMealSlot } from './nutrition';
 import { normalizeProfile } from './profile';
 import type { DayInfo, Sections, TrackerState } from './types';
 
@@ -75,6 +75,10 @@ export function normalize(s: unknown): TrackerState {
           food.per100 = per100;
           food.portions = portions;
         }
+        if (typeof f.note === 'string' && f.note.trim()) food.note = f.note.trim().slice(0, 120);
+        if (f.tally === true) food.tally = true;
+        const tp = f.tallyPortion;
+        if (food.per100 && tp && typeof tp.label === 'string' && Number(tp.g) > 0) food.tallyPortion = { label: tp.label, g: Number(tp.g) };
         return food;
       })
       .filter((f: Food | null): f is Food => f !== null);
@@ -98,6 +102,9 @@ export function normalize(s: unknown): TrackerState {
             at: Math.round(at),
           };
           if (typeof e.foodId === 'string') out.foodId = e.foodId;
+          if (isMealSlot(e.meal)) out.meal = e.meal;
+          if (typeof e.note === 'string' && e.note) out.note = e.note;
+          if (e.tally === true && out.foodId) out.tally = true;
           return out;
         })
         .filter((e: FoodEntry | null): e is FoodEntry => e !== null);

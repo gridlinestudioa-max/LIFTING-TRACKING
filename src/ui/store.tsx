@@ -36,6 +36,8 @@ interface Tracker {
   /** Add or replace (same id) a food log entry. */
   saveEntry: (s: string, e: FoodEntry) => void;
   removeEntry: (s: string, id: string) => void;
+  /** Change a day's whole food log at once (copying a meal, a tally tap). */
+  setEntries: (s: string, fn: (list: FoodEntry[]) => FoodEntry[]) => void;
   /** Add or replace (same id) a saved food: one the user created, or an Open Food Facts product. */
   saveFood: (f: Food) => void;
   deleteFood: (id: string) => void;
@@ -195,6 +197,15 @@ export function TrackerProvider({ user, remote, children }: { user: string; remo
       }),
     [update],
   );
+  const setEntries = useCallback(
+    (s: string, fn: (list: FoodEntry[]) => FoodEntry[]) =>
+      update((st) => {
+        const next = fn(st.meals[s] ?? []);
+        const { [s]: _, ...rest } = st.meals;
+        return { ...st, meals: next.length ? { ...rest, [s]: next } : rest };
+      }),
+    [update],
+  );
   const saveFood = useCallback(
     (f: Food) =>
       update((st) => ({ ...st, foods: st.foods.some((x) => x.id === f.id) ? st.foods.map((x) => (x.id === f.id ? f : x)) : [...st.foods, f] })),
@@ -215,9 +226,9 @@ export function TrackerProvider({ user, remote, children }: { user: string; remo
   const value = useMemo(
     () => ({
       loaded, state, today, sync, update, setSettings, setDay, setGoal,
-      saveEntry, removeEntry, saveFood, deleteFood, setDiet, setProfile,
+      saveEntry, removeEntry, setEntries, saveFood, deleteFood, setDiet, setProfile,
     }),
-    [loaded, state, today, sync, update, setSettings, setDay, setGoal, saveEntry, removeEntry, saveFood, deleteFood, setDiet, setProfile],
+    [loaded, state, today, sync, update, setSettings, setDay, setGoal, saveEntry, removeEntry, setEntries, saveFood, deleteFood, setDiet, setProfile],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
