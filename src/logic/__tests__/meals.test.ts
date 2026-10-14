@@ -1,6 +1,7 @@
 import { describe, expect, it } from '@jest/globals';
 
 import {
+  amountText,
   bumpTally,
   copyEntries,
   daysWithMeal,
@@ -10,9 +11,12 @@ import {
   mealEntries,
   mealOf,
   normalize,
+  piecesIn,
   searchFoods,
   sumTotals,
+  tallyCount,
   tallyEntry,
+  tallyUnit,
   type Food,
   type FoodEntry,
 } from '..';
@@ -119,5 +123,47 @@ describe('food details', () => {
     const b: Food = { ...mint, id: 'b', name: 'Chili', note: 'Canned, low sodium' };
     expect(searchFoods([a, b], 'chili').map((f) => f.id).sort()).toEqual(['a', 'b']);
     expect(searchFoods([a, b], 'chili canned').map((f) => f.id)).toEqual(['b']);
+  });
+});
+
+describe('tally by the piece', () => {
+  const mints: Food = { id: 'f-wg', name: 'Wintergreen mints', serving: '4 pieces (8 g)', n: { kcal: 20, protein: 0, carbs: 5, fat: 0 }, tags: [], custom: true, tally: true };
+
+  it('reads pieces from serving labels', () => {
+    expect(piecesIn('4 pieces (8 g)')).toBe(4);
+    expect(piecesIn('3 mints')).toBe(3);
+    expect(piecesIn('4pc')).toBe(4);
+    expect(piecesIn('1 cup (158 g)')).toBeNull();
+    expect(piecesIn('30 g')).toBeNull();
+    expect(piecesIn('2 tbsp (32 g)')).toBeNull();
+  });
+
+  it('counts pieces, a quarter of a serving each', () => {
+    let day = bumpTally([], mints, 1, at(10));
+    day = bumpTally(day, mints, 2, at(11));
+    const t = tallyEntry(day, mints.id)!;
+    expect(t.qty).toBe(3);
+    expect(t.serving).toBe('1 piece');
+    expect(sumTotals(day).kcal).toBe(15);
+    expect(amountText(t)).toBe('3 pieces');
+  });
+
+  it('lets the food say how many pieces, or 1 to count servings', () => {
+    expect(tallyUnit({ ...mints, serving: '1 roll', pieces: 12 }).n.kcal).toBeCloseTo(20 / 12, 2);
+    expect(tallyUnit({ ...mints, pieces: 1 }).serving).toBe('4 pieces (8 g)');
+  });
+
+  it('switches a count made by the serving over to pieces', () => {
+    const old = bumpTally([], { ...mints, pieces: 1 }, 2, at(9)); // 2 servings = 8 pieces
+    expect(tallyCount(old[0], mints)).toBe(8);
+    const day = bumpTally(old, mints, 1, at(10));
+    expect(tallyEntry(day, mints.id)).toMatchObject({ qty: 9, serving: '1 piece' });
+    expect(sumTotals(day).kcal).toBe(45);
+  });
+
+  it('keeps pieces through a save and load', () => {
+    const st = defaultState();
+    st.foods = [{ ...mints, pieces: 4 }];
+    expect(normalize(JSON.parse(JSON.stringify(st))).foods[0].pieces).toBe(4);
   });
 });

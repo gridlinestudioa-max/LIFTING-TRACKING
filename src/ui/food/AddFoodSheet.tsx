@@ -7,6 +7,8 @@ import {
   MEALS,
   SOURCE_LABEL,
   bumpTally,
+  piecesIn,
+  tallyPieces,
   mealAt,
   mealOf,
   activeDiet,
@@ -216,7 +218,8 @@ export function AddFoodSheet({
                   if (portion && portion !== GRAMS) f.tallyPortion = portion;
                   else delete f.tallyPortion;
                   saveFood(f);
-                  setEntries(day, (list) => bumpTally(list, f, Math.max(1, Math.round(q)), at!));
+                  // Servings typed here become pieces when the tally counts by the piece.
+                  setEntries(day, (list) => bumpTally(list, f, Math.max(1, Math.round(q * tallyPieces(f))), at!));
                   onClose();
                 }
           }
@@ -761,6 +764,7 @@ function FoodForm({
   const [note, setNote] = useState(initial?.note ?? '');
   const [brand, setBrand] = useState(initial?.brand ?? '');
   const [serving, setServing] = useState(initial?.serving ?? '');
+  const [pieces, setPieces] = useState(initial?.pieces ? String(initial.pieces) : '');
   const [kcal, setKcal] = useState(str(initial?.n.kcal));
   const [p, setP] = useState(str(initial?.n.protein));
   const [cb, setCb] = useState(str(initial?.n.carbs));
@@ -804,6 +808,19 @@ function FoodForm({
         </View>
       </View>
       <View style={[st.row, { marginTop: space.md }]}>
+        <View style={{ flex: 1, gap: 6 }}>
+          <Text style={st.lbl(c.mute)}>Pieces per serving (optional)</Text>
+          <Field
+            value={pieces}
+            onChangeText={setPieces}
+            keyboardType="number-pad"
+            placeholder={`e.g. ${piecesIn(serving) ?? 4}`}
+            accessibilityLabel="Pieces per serving"
+          />
+        </View>
+        <View style={{ flex: 1 }} />
+      </View>
+      <View style={[st.row, { marginTop: space.md }]}>
         <NumField label="Calories" value={kcal} onChange={setKcal} unit="kcal" />
         <NumField label="Protein" value={p} onChange={setP} unit="g" />
       </View>
@@ -838,7 +855,10 @@ function FoodForm({
           const draft = { name: name.trim(), serving: serving.trim(), n };
           const e = foodError(draft);
           if (e) return setErr(e);
+          const pc = pieces.trim() ? Number(pieces) : null;
+          if (pc != null && !(Number.isInteger(pc) && pc >= 1 && pc <= 200)) return setErr('Pieces per serving should be a whole number, like 4.');
           const food: Food = { id: initial?.id ?? newId('f'), ...draft, tags, custom: true };
+          if (pc) food.pieces = pc;
           if (brand.trim()) food.brand = brand.trim();
           if (note.trim()) food.note = note.trim();
           if (initial?.tally) food.tally = true;

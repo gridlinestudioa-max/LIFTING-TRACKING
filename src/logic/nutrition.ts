@@ -66,8 +66,10 @@ export interface Food {
   note?: string;
   /** Kept on the Tally list, counted with + and − through the day. */
   tally?: boolean;
-  /** What one tap of the tally adds, for foods with weights. Otherwise one serving. */
+  /** What the tally counts, for foods with weights. Otherwise one serving. */
   tallyPortion?: Portion;
+  /** Pieces in one serving ("4 mints"), so the tally counts pieces. 1 counts whole servings. */
+  pieces?: number;
 }
 
 /**
@@ -149,10 +151,41 @@ export function copyEntries(entries: readonly FoodEntry[], meal: MealSlot): Food
 
 // ---------- Tally ----------
 
-/** What one tap of a food's tally adds: its tally measure, or one serving. */
-export function tallyUnit(food: Food): { serving: string; n: Nutrients } {
+const NOT_PIECES = /^(g|grams?|kg|mg|mcg|oz|ounces?|lbs?|pounds?|ml|cl|dl|l|liters?|litres?|fl|cups?|tbsps?|tablespoons?|tsps?|teaspoons?|servings?|kcal|kj|cal|calories|percent|x)$/i;
+
+/** How many pieces a serving label names: "4 mints (2 g)" is 4, "1 cup" or "30 g" is null. */
+export function piecesIn(label: string): number | null {
+  for (const m of label.matchAll(/(\d+)\s*([a-z]+)/gi)) {
+    const n = Number(m[1]);
+    if (n >= 2 && n <= 200 && !NOT_PIECES.test(m[2])) return n;
+  }
+  return null;
+}
+
+/** What the tally counts before splitting into pieces: its tally measure, or one serving. */
+function tallyBase(food: Food): { label: string; g?: number; n: Nutrients } {
   const p = food.tallyPortion && food.per100 ? food.tallyPortion : null;
-  return p ? { serving: portionText(p), n: scaleNutrients(food.per100!, p.g / 100) } : { serving: food.serving, n: { ...food.n } };
+  return p ? { label: portionText(p), g: p.g, n: scaleNutrients(food.per100!, p.g / 100) } : { label: food.serving, n: { ...food.n } };
+}
+
+/** Pieces the tally splits a serving into: set on the food, else read from the serving label, else 1. */
+export function tallyPieces(food: Food): number {
+  return food.pieces ?? piecesIn(tallyBase(food).label) ?? 1;
+}
+
+/** What one tap of a food's tally adds: a piece when the serving has several, else the serving. */
+export function tallyUnit(food: Food): { serving: string; n: Nutrients } {
+  const b = tallyBase(food);
+  const k = tallyPieces(food);
+  if (k <= 1) return { serving: b.label, n: b.n };
+  return { serving: b.g ? `1 piece (${fmtG(b.g / k)} g)` : '1 piece', n: scaleNutrients(b.n, 1 / k) };
+}
+
+/** A tally entry's count in the food's current unit (it may have been counted by the serving before). */
+export function tallyCount(e: FoodEntry, food: Food): number {
+  const u = tallyUnit(food);
+  if (e.serving === u.serving || !(u.n.kcal > 0) || !(e.n.kcal > 0)) return e.qty;
+  return Math.round((e.qty * e.n.kcal) / u.n.kcal);
 }
 
 /** The day's tally entry for a food, if it has one. */
@@ -166,10 +199,10 @@ export function tallyEntry(entries: readonly FoodEntry[], foodId: string): FoodE
  */
 export function bumpTally(entries: readonly FoodEntry[], food: Food, delta: number, at: number): FoodEntry[] {
   const cur = tallyEntry(entries, food.id);
-  const qty = Math.max(0, (cur?.qty ?? 0) + delta);
+  const qty = Math.max(0, (cur ? tallyCount(cur, food) : 0) + delta);
+  const u = tallyUnit(food);
   if (!cur) {
     if (qty <= 0) return [...entries];
-    const u = tallyUnit(food);
     const e: FoodEntry = {
       id: newId('e'),
       foodId: food.id,
@@ -186,7 +219,7 @@ export function bumpTally(entries: readonly FoodEntry[], food: Food, delta: numb
     return [...entries, e];
   }
   if (qty <= 0) return entries.filter((e) => e !== cur);
-  return entries.map((e) => (e === cur ? { ...e, qty, at: delta > 0 ? at : e.at } : e));
+  return entries.map((e) => (e === cur ? { ...e, serving: u.serving, n: u.n, qty, at: delta > 0 ? at : e.at } : e));
 }
 
 export interface Totals {
@@ -287,6 +320,7 @@ export function portionText(p: Portion): string {
 export function amountText(e: Pick<FoodEntry, 'qty' | 'serving'>): string {
   const q = Math.round(e.qty * 100) / 100;
   if (e.serving === '1 g') return `${q} g`;
+  if (e.serving.startsWith('1 piece')) return `${q} piece${q === 1 ? '' : 's'}${e.serving.slice(7)}`;
   return q === 1 ? e.serving : `${q} × ${e.serving}`;
 }
 

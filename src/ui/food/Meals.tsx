@@ -15,13 +15,15 @@ import {
   mealEntries,
   shortDayLabel,
   sumTotals,
+  tallyCount,
   tallyEntry,
+  tallyPieces,
   type Food,
   type FoodEntry,
   type MealSlot,
 } from '@/logic';
 
-import { Mute, Section } from '../components';
+import { Field, Mute, Section } from '../components';
 import { Select } from '../Select';
 import { useTracker } from '../store';
 import { fonts, space, tabular, useColors } from '../theme';
@@ -209,6 +211,15 @@ export function TallyList({ day, isToday, now }: { day: string; isToday: boolean
     .forEach((e) => foods.push({ id: e.foodId!, name: e.name, serving: e.serving, n: e.n, tags: e.tags, ...(e.note ? { note: e.note } : {}) }));
   if (!foods.length) return null;
 
+  const setPieces = (f: Food, v: number) => {
+    if (v === tallyPieces(f)) return;
+    const next = { ...f, pieces: v };
+    // Today's count keeps its calories and switches to the new unit.
+    const cur = tallyEntry(entries, f.id);
+    if (cur) setEntries(day, (l) => bumpTally(l, next, 0, cur.at));
+    saveFood(next);
+  };
+
   const tap = (f: Food, d: number) => {
     const cur = tallyEntry(entries, f.id);
     setEntries(day, (l) => bumpTally(l, f, d, isToday ? now : (cur?.at ?? 12 * 60)));
@@ -218,17 +229,20 @@ export function TallyList({ day, isToday, now }: { day: string; isToday: boolean
     <Section title="Tally" action={<LinkButton label={editing ? 'Done' : 'Edit'} onPress={() => setEditing(!editing)} />}>
       {foods.map((f) => {
         const e = tallyEntry(entries, f.id);
-        const n = e?.qty ?? 0;
+        const n = e ? tallyCount(e, f) : 0;
         const listed = state.foods.some((x) => x.id === f.id && x.tally);
+        const k = tallyPieces(f);
         return (
           <View key={f.id} style={st.tally}>
             <View style={{ flex: 1 }}>
               <Text style={{ color: c.ink, fontSize: 16, fontWeight: '600' }}>{f.name}</Text>
               <Text style={{ color: c.mute, fontSize: 13, ...tabular }}>
-                {[f.note, e ? `${fmtInt(entryTotals(e).kcal)} kcal` : null].filter(Boolean).join(' · ') || ' '}
+                {[f.note, k > 1 ? `${k} per serving` : 'by the serving', e ? `${fmtInt(entryTotals(e).kcal)} kcal` : null].filter(Boolean).join(' · ')}
               </Text>
               {editing && listed ? (
-                <View style={{ flexDirection: 'row', marginTop: 4 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.md, marginTop: 6 }}>
+                  <Text style={{ color: c.mute, fontSize: 13, fontWeight: '600' }}>Pieces per serving</Text>
+                  <PiecesField start={k} label={`${f.name}: pieces per serving`} onSet={(v) => setPieces(f, v)} />
                   <LinkButton label="Remove" color={c.bad} onPress={() => {
                       const { tally: _t, tallyPortion: _p, ...rest } = f;
                       saveFood(rest);
@@ -245,6 +259,27 @@ export function TallyList({ day, isToday, now }: { day: string; isToday: boolean
         );
       })}
     </Section>
+  );
+}
+
+/** How many pieces a tally serving holds; saved when the field is left or submitted. */
+function PiecesField({ start, label, onSet }: { start: number; label: string; onSet: (v: number) => void }) {
+  const [v, setV] = useState(String(start));
+  const commit = () => {
+    const n = Number(v);
+    if (Number.isInteger(n) && n >= 1 && n <= 200) onSet(n);
+    else setV(String(start));
+  };
+  return (
+    <Field
+      value={v}
+      onChangeText={setV}
+      keyboardType="number-pad"
+      accessibilityLabel={label}
+      onEndEditing={commit}
+      onSubmitEditing={commit}
+      style={{ width: 64, textAlign: 'center', paddingVertical: 6 }}
+    />
   );
 }
 
