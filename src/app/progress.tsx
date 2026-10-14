@@ -29,7 +29,7 @@ import {
   type WeekBar as BarRow,
 } from '@/logic';
 import { ChartKey, CumulativeLine, DeficitBars, PlanBars, Sparkline } from '@/ui/charts';
-import { H2, Header, Mute, Section, StatGrid, StatTile } from '@/ui/components';
+import { Header, Mute, Section, StatGrid, StatTile } from '@/ui/components';
 import { useLibrary } from '@/ui/lifting/library';
 import { useTracker } from '@/ui/store';
 import { space, tabular, useColors } from '@/ui/theme';
@@ -48,15 +48,15 @@ export default function ProgressScreen() {
     <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: c.bg }}>
       <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 48 }}>
         <Header title="Progress" />
-        {on.lifting ? <LiftingSection first /> : null}
-        {on.cardio ? <CardioSection first={!on.lifting} /> : null}
-        {on.food ? <CaloriesSection first={!on.lifting && !on.cardio} /> : null}
+        {on.lifting ? <LiftingSection /> : null}
+        {on.cardio ? <CardioSection /> : null}
+        {on.food ? <CaloriesSection /> : null}
       </ScrollView>
     </SafeAreaView>
   );
 }
 
-function LiftingSection({ first }: { first?: boolean }) {
+function LiftingSection() {
   const c = useColors();
   const { state, today } = useTracker();
   const { byId } = useLibrary();
@@ -69,15 +69,16 @@ function LiftingSection({ first }: { first?: boolean }) {
   const ids = [...new Set([...L.routines.flatMap((r) => r.items.map((i) => i.exId)), ...logged])].filter((id) => logged.has(id));
 
   return (
-    <Section title="Lifting" first={first}>
+    <>
+    <Section title="Lifting">
       <StatGrid columns={3}>
         <StatTile value={String(done.length)} label="Workouts" />
-        <StatTile value={String(last28)} label="In the last 4 weeks" />
-        <StatTile value={total >= 1e5 ? `${fmt(+(total / 1000).toFixed(0))}k` : fmtInt(total)} label="Total lb lifted" />
+        <StatTile value={String(last28)} label="Last 4 weeks" />
+        <StatTile value={total >= 1e5 ? `${fmt(+(total / 1000).toFixed(0))}k` : fmtInt(total)} label="Lb lifted" />
       </StatGrid>
-      <H2>Your lifts</H2>
-      <Mute style={{ marginBottom: space.sm }}>Heaviest set each workout, and the weight for next time.</Mute>
-      {ids.length ? null : <Mute>Finish a workout to see this.</Mute>}
+    </Section>
+    {ids.length ? (
+    <Section title="Your lifts" action={<Text style={{ color: c.mute, fontSize: 13, fontWeight: '600' }}>Next</Text>}>
       {ids.map((id, i) => {
         const ex = byId(id);
         const pts = weightHistory(L, id).map((p) => p.w);
@@ -97,10 +98,13 @@ function LiftingSection({ first }: { first?: boolean }) {
         );
       })}
     </Section>
+    ) : null}
+    </>
   );
 }
 
-function CardioSection({ first }: { first?: boolean }) {
+function CardioSection() {
+  const c = useColors();
   const { state, today } = useTracker();
   const cardio = state.cardio;
   const s = cardioStats(cardio, today);
@@ -111,41 +115,45 @@ function CardioSection({ first }: { first?: boolean }) {
   const unit = (sport: Sport) => (sport === 'swim' ? 'meters' : 'miles');
   const weeks = weeklyTotals(cardio, today, 8);
   return (
-    <Section title="Cardio" first={first}>
-      <StatGrid columns={3}>
-        <StatTile value={String(s.sessions)} label="Sessions" />
-        <StatTile value={fmt(+s.miles.toFixed(1))} label="Miles" />
-        <StatTile value={s.secs ? fmtTime(s.secs) : '–'} label="Time" />
-        <StatTile value={s.longestRun ? fmt(s.longestRun) : '–'} label="Longest run (mi)" />
-        <StatTile value={s.paceMiles > 0 ? paceText(s.paceMiles, s.paceSecs).replace(' /mi', '') : '–'} label="Average run pace" />
-        {cardio.plan ? <StatTile value={String(s.planDone)} sub={`/${s.planDue}`} label={s.planSkipped ? `Planned workouts done, ${s.planSkipped} skipped` : 'Planned workouts done'} /> : <StatTile value="–" label="No plan" />}
-      </StatGrid>
+    <>
+      <Section title="Cardio">
+        <StatGrid columns={3}>
+          <StatTile value={String(s.sessions)} label="Sessions" />
+          <StatTile value={fmt(+s.miles.toFixed(1))} label="Miles" />
+          <StatTile value={s.secs ? fmtTime(s.secs) : '–'} label="Time" />
+          <StatTile value={s.longestRun ? fmt(s.longestRun) : '–'} label="Longest run" />
+          <StatTile value={s.paceMiles > 0 ? paceText(s.paceMiles, s.paceSecs).replace(' /mi', '') : '–'} label="Pace /mi" />
+          {cardio.plan ? <StatTile value={String(s.planDone)} sub={`/${s.planDue}`} label="Plan done" /> : <StatTile value="–" label="No plan" />}
+        </StatGrid>
+      </Section>
 
-      <H2>Last 8 weeks</H2>
-      <PlanBars rows={weeks.map((w) => ({ label: weekLabel(w.start).replace(/^(\w{3}) /, '$1 '), planned: 0, actual: w.miles }))} label="Miles per week, last 8 weeks" />
+      {s.sessions ? (
+        <Section title="Miles per week">
+          <PlanBars rows={weeks.map((w) => ({ label: weekLabel(w.start), planned: 0, actual: w.miles }))} label="Miles per week, last 8 weeks" />
+        </Section>
+      ) : null}
 
       {cardio.plan && sports.length ? (
         <>
           {long.length ? (
-            <>
-              <H2 style={{ marginTop: space.xl }}>{`${planTitle(cardio.plan.id)}: long ${SPORT_LABEL[sports[0].sport].toLowerCase()}`}</H2>
+            <Section title={`Long ${SPORT_LABEL[sports[0].sport].toLowerCase()}`} action={<Text style={{ color: c.mute, fontSize: 13 }}>{planTitle(cardio.plan.id)}</Text>}>
               <PlanBars rows={unitRows(sports[0].sport, long)} label={`Long session ${unit(sports[0].sport)} by plan week`} />
-            </>
+              <ChartKey items={['planned', 'logged']} />
+            </Section>
           ) : null}
           {sports.map((x) => (
-            <View key={x.sport}>
-              <H2 style={{ marginTop: space.xl }}>{`Plan: weekly ${SPORT_LABEL[x.sport].toLowerCase()} ${unit(x.sport)}`}</H2>
+            <Section key={x.sport} title={`Weekly ${SPORT_LABEL[x.sport].toLowerCase()} ${unit(x.sport)}`}>
               <PlanBars rows={unitRows(x.sport, x.rows)} label={`${SPORT_LABEL[x.sport]} ${unit(x.sport)} by plan week`} />
-            </View>
+              <ChartKey items={['planned', 'logged']} />
+            </Section>
           ))}
-          <ChartKey items={['planned', 'logged']} />
         </>
       ) : null}
-    </Section>
+    </>
   );
 }
 
-function CaloriesSection({ first }: { first?: boolean }) {
+function CaloriesSection() {
   const c = useColors();
   const { state, today } = useTracker();
   const goal = state.goal;
@@ -156,39 +164,41 @@ function CaloriesSection({ first }: { first?: boolean }) {
   const weeks = byWeek(state);
 
   return (
-    <Section title="Calories" first={first} note={goal ? `Daily deficit goal: ${fmtInt(goal)} kcal (change it on the You tab).` : 'Set a daily deficit goal on the You tab.'}>
-      <StatGrid>
-        <StatTile value={n ? sgn(sum.avg) : '–'} color={n ? col(sum.avg) : undefined} label="Avg daily deficit (kcal, − = surplus)" />
-        <StatTile value={n ? sgn(sum.total) : '–'} color={n ? col(sum.total) : undefined} label="Total deficit so far (kcal)" />
-        <StatTile value={String(n)} label="Days logged" />
-        <StatTile value={String(sum.hit)} sub={`/${n}`} label={goal ? 'Days at or above goal' : 'Days in a deficit'} />
-      </StatGrid>
+    <>
+      <Section title="Calories" action={goal ? <Text style={{ color: c.mute, fontSize: 13 }}>{`Goal ${fmtInt(goal)}/day`}</Text> : undefined}>
+        <StatGrid>
+          <StatTile value={n ? sgn(sum.avg) : '–'} color={n ? col(sum.avg) : undefined} label="Avg daily deficit" />
+          <StatTile value={n ? sgn(sum.total) : '–'} color={n ? col(sum.total) : undefined} label="Total deficit" />
+          <StatTile value={String(n)} label="Days logged" />
+          <StatTile value={String(sum.hit)} sub={`/${n}`} label={goal ? 'Days at goal' : 'Days in a deficit'} />
+        </StatGrid>
+        {!n ? <Mute>Add calories in and burned on the Food tab.</Mute> : null}
+      </Section>
 
-      <H2 style={{ marginTop: space.md }}>Daily deficit, last 3 weeks</H2>
       {n ? (
-        <>
+        <Section title="Daily deficit">
           <DeficitBars vals={dailyWindow(state, today)} goal={goal} />
           <ChartKey items={goal ? ['deficit', 'surplus', 'goal'] : ['deficit', 'surplus']} />
-        </>
-      ) : (
-        <Mute>Enter calories in and burned on the Food tab to see this.</Mute>
-      )}
+        </Section>
+      ) : null}
 
-      <H2 style={{ marginTop: space.xl }}>Cumulative deficit</H2>
-      {cum.length >= 2 ? <CumulativeLine pts={cum} /> : <Mute>Needs at least 2 logged days.</Mute>}
+      {cum.length >= 2 ? (
+        <Section title="Total over time">
+          <CumulativeLine pts={cum} />
+        </Section>
+      ) : null}
 
-      <H2 style={{ marginTop: space.xl }}>By week</H2>
       {weeks.length ? (
-        <View>
+        <Section title="By week">
           <View style={[st.krow, { borderBottomColor: c.line }]}>
-            {['Week of', 'Days', 'Avg in', 'Avg out', 'Avg deficit'].map((h, i) => (
+            {['Week of', 'Days', 'Avg in', 'Avg out', 'Deficit'].map((h, i) => (
               <Text key={h} style={[st.kcell, i === 0 && st.kfirst, { color: c.mute, fontSize: 12.5, fontWeight: '600' }]}>
                 {h}
               </Text>
             ))}
           </View>
-          {weeks.map((w) => (
-            <View key={w.start} style={[st.krow, { borderBottomColor: c.line }]}>
+          {weeks.map((w, i) => (
+            <View key={w.start} style={[st.krow, { borderBottomColor: c.line }, i === weeks.length - 1 && { borderBottomWidth: 0 }]}>
               <Text style={[st.kcell, st.kfirst, { color: c.ink, fontWeight: '700' }]}>{weekLabel(w.start)}</Text>
               <Text style={[st.kcell, { color: c.ink }]}>{w.days}/7</Text>
               <Text style={[st.kcell, { color: c.ink }]}>{fmtInt(w.avgIn)}</Text>
@@ -196,11 +206,9 @@ function CaloriesSection({ first }: { first?: boolean }) {
               <Text style={[st.kcell, { color: col(w.avgNet), fontWeight: '700' }]}>{sgn(w.avgNet)}</Text>
             </View>
           ))}
-        </View>
-      ) : (
-        <Mute>No weeks logged yet.</Mute>
-      )}
-    </Section>
+        </Section>
+      ) : null}
+    </>
   );
 }
 

@@ -70,8 +70,7 @@ export function RoutineSheet({ visible, id, onClose }: { visible: boolean; id: s
             }
             placeholder="Not scheduled"
           />
-          <Mute style={{ fontSize: 13, marginTop: 4 }}>One routine per day. Picking a day that has another routine replaces it.</Mute>
-
+          
           <Text style={[st.h, { color: c.ink }]}>Exercises</Text>
           {r.items.length ? null : <Mute>No exercises yet.</Mute>}
           {r.items.map((it, i) => {
@@ -109,14 +108,10 @@ export function RoutineSheet({ visible, id, onClose }: { visible: boolean; id: s
             );
           })}
           <Button label="Add exercise" onPress={() => setAdding(true)} style={{ marginTop: space.md }} />
-          <Mute style={{ fontSize: 13, marginTop: space.md }}>
-            When you get the top of the rep range on every set, the weight goes up by the step. Three sessions under the bottom
-            of the range drops it about 10%.
-          </Mute>
 
           {confirmDelete ? (
             <View style={{ marginTop: space.xl, gap: space.sm }}>
-              <Mute>Delete this routine? Workouts you logged with it stay in your history.</Mute>
+              <Mute>Delete this routine? Your history stays.</Mute>
               <Button
                 label="Delete routine"
                 danger

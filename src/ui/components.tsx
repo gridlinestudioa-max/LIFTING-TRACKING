@@ -4,10 +4,10 @@ import { Platform, StyleSheet, Text, TextInput, View, type StyleProp, type TextI
 import { useTracker, type SyncStatus } from './store';
 import { fonts, radius, space, tabular, useColors } from './theme';
 
-/** A raised panel. Used sparingly: the day detail and nothing that can sit open on the page. */
+/** A card with no title. Same surface as `Section`. */
 export function Card({ children, style }: { children: ReactNode; style?: StyleProp<ViewStyle> }) {
   const c = useColors();
-  return <View style={[styles.card, { backgroundColor: c.card, borderColor: c.line }, style]}>{children}</View>;
+  return <View style={[styles.panel, { backgroundColor: c.card }, style]}>{children}</View>;
 }
 
 /** Sub-heading inside a section (a chart or a table title). */
@@ -28,16 +28,34 @@ export function Mute({ children, style }: { children: ReactNode; style?: StylePr
 }
 
 /**
- * A page section on the Progress tab: a big heading, optional one-line note, and content that
- * sits directly on the page. A hairline separates it from the section above.
+ * A page section: a card with a title, an optional action at the top right, and its content.
+ * Cards sit on the page background with a clear gap between them, so each section reads as one block.
  */
-export function Section({ title, note, first, children }: { title: string; note?: string; first?: boolean; children: ReactNode }) {
+export function Section({
+  title,
+  action,
+  children,
+  style,
+}: {
+  title?: string;
+  /** A small control on the title row, e.g. Edit. */
+  action?: ReactNode;
+  children: ReactNode;
+  style?: StyleProp<ViewStyle>;
+  /** Kept so older call sites compile; sections no longer carry notes or a first-section style. */
+  note?: string;
+  first?: boolean;
+}) {
   const c = useColors();
   return (
-    <View style={first ? undefined : { marginTop: space.xxl, paddingTop: space.xl, borderTopWidth: 1, borderTopColor: c.line }}>
-      <Text style={[styles.section, { color: c.ink }]}>{title}</Text>
-      {note ? <Mute style={{ marginTop: 2 }}>{note}</Mute> : null}
-      <View style={{ marginTop: space.md }}>{children}</View>
+    <View style={[styles.panel, { backgroundColor: c.card }, style]}>
+      {title || action ? (
+        <View style={styles.panelHead}>
+          {title ? <Text style={[styles.section, { color: c.ink }]}>{title}</Text> : <View />}
+          {action}
+        </View>
+      ) : null}
+      {children}
     </View>
   );
 }
@@ -71,15 +89,16 @@ const SYNC_TEXT: Record<SyncStatus, string> = {
   offline: 'Offline: saved on this device',
 };
 
-/** Screen header: title, where data is saved, and anything extra below. */
-export function Header({ title, children }: { title: string; children?: ReactNode }) {
+/** Screen header: the title, and the save state only when it needs attention (saving or offline). */
+export function Header({ title, right, children }: { title: string; right?: ReactNode; children?: ReactNode }) {
   const c = useColors();
   const { loaded, sync } = useTracker();
+  const status = !loaded ? 'Loading…' : sync === 'syncing' || sync === 'offline' ? SYNC_TEXT[sync] : null;
   return (
-    <View style={{ marginBottom: space.xl }}>
+    <View style={{ marginBottom: space.lg }}>
       <View style={styles.titlerow}>
         <Text style={[styles.h1, { color: c.ink }]}>{title}</Text>
-        <Text style={{ color: sync === 'offline' ? c.warn : c.mute, fontSize: 12 }}>{loaded ? SYNC_TEXT[sync] : 'Loading…'}</Text>
+        {right ?? (status ? <Text style={{ color: sync === 'offline' ? c.warn : c.mute, fontSize: 12 }}>{status}</Text> : null)}
       </View>
       {children}
     </View>
@@ -101,7 +120,7 @@ export function StatTile({ value, sub, label, color }: { value: string; sub?: st
   const c = useColors();
   const columns = useContext(Columns);
   return (
-    <View style={[styles.stat, { width: columns === 3 ? '33.333%' : '50%', borderTopColor: c.line }]}>
+    <View style={[styles.stat, { width: columns === 3 ? '33.333%' : '50%' }]}>
       <Text style={[styles.statValue, { color: color ?? c.ink }]} numberOfLines={1} adjustsFontSizeToFit>
         {value}
         {sub ? <Text style={[styles.statSub, { color: c.mute }]}>{sub}</Text> : null}
@@ -173,14 +192,15 @@ export function CommitNumberField({
 const styles = StyleSheet.create({
   h1: { fontFamily: fonts.display, fontSize: 40, lineHeight: 44, letterSpacing: -0.2 },
   h2: { fontFamily: fonts.semi, fontSize: 21, lineHeight: 26, marginBottom: space.xs },
-  section: { fontFamily: fonts.display, fontSize: 30, lineHeight: 34 },
+  section: { fontFamily: fonts.display, fontSize: 24, lineHeight: 28 },
+  panel: { borderRadius: radius.lg, padding: space.lg, marginBottom: space.lg },
+  panelHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: space.md, minHeight: 28 },
   lbl: { fontSize: 13, fontWeight: '600', marginTop: space.md, marginBottom: space.xs },
-  card: { borderWidth: 1, borderRadius: radius.lg + 2, padding: space.lg + 2, marginBottom: space.md },
   titlerow: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: space.sm },
   weekbar: { flexDirection: 'row', alignItems: 'center', gap: 3, height: 12 },
   weekline: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', flexWrap: 'wrap', columnGap: space.md, marginTop: space.sm },
-  stats: { flexDirection: 'row', flexWrap: 'wrap', marginBottom: space.md },
-  stat: { borderTopWidth: 1, paddingTop: space.md, paddingBottom: space.md, paddingRight: space.sm },
+  stats: { flexDirection: 'row', flexWrap: 'wrap', rowGap: space.md, marginBottom: space.md },
+  stat: { paddingRight: space.sm },
   statValue: { fontFamily: fonts.display, fontSize: 36, lineHeight: 40, ...tabular },
   statSub: { fontFamily: fonts.semi, fontSize: 20 },
   input: {

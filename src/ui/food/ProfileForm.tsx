@@ -74,8 +74,6 @@ export function ProfileForm({
 
   return (
     <View>
-      <Mute style={{ marginBottom: space.md }}>Everything here is optional. Fill in what you like.</Mute>
-
       <Text style={[st.lbl, { color: c.mute }]}>Sex</Text>
       <Select label="Sex" value={sex} options={SEXES} onChange={setSex} placeholder="Not set" />
 
@@ -111,17 +109,11 @@ export function ProfileForm({
         onChange={setActivity}
         placeholder="Not set"
       />
-      {activity ? <Mute style={{ marginTop: space.xs }}>{ACTIVITY.find((a) => a.id === activity)!.blurb}</Mute> : null}
 
       <Text style={[st.lbl, { color: c.mute, marginTop: space.lg }]}>Goal</Text>
       <Select label="Goal" value={goal} options={GOALS.map((g) => ({ value: g.id, label: g.label, hint: g.blurb }))} onChange={setGoal} placeholder="Not set" />
-      {goal ? <Mute style={{ marginTop: space.xs }}>{GOALS.find((g) => g.id === goal)!.blurb}</Mute> : null}
 
-      <Mute style={{ marginTop: space.lg, fontSize: 13 }}>
-        {missing
-          ? `For suggested daily calories, protein, carbs, sugar and fat, add ${missing}.`
-          : 'Suggested daily calories, protein, carbs, sugar and fat come from these stats.'}
-      </Mute>
+      {missing ? <Mute style={{ marginTop: space.lg, fontSize: 13 }}>{`Add ${missing} for suggested daily targets.`}</Mute> : null}
 
       {err ? <Text style={{ color: c.bad, fontWeight: '700', marginTop: space.md }}>{err}</Text> : null}
       <Button

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ScrollView, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { type Sections } from '@/logic';
@@ -8,7 +8,7 @@ import { CommitNumberField, Field, Header, Mute, Section } from '@/ui/components
 import { Button, LinkButton } from '@/ui/food/kit';
 import { ProfileForm } from '@/ui/food/ProfileForm';
 import { ProfileLines } from '@/ui/food/ProfileLines';
-import { SECTION_INFO, SectionToggle } from '@/ui/Onboarding';
+import { SECTION_INFO } from '@/ui/Onboarding';
 import { PlanPicker } from '@/ui/cardio/PlanPicker';
 import { useTracker } from '@/ui/store';
 import { space, useColors } from '@/ui/theme';
@@ -34,27 +34,23 @@ export default function YouScreen() {
       <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 48 }} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets>
         <Header title={state.settings.name ? state.settings.name : 'You'} />
 
-        <Section title="Account" first>
+        <Section title="Account">
           {mode === 'account' ? (
             <>
               <Text style={{ color: c.ink, fontSize: 16, fontWeight: '600' }}>{user?.email}</Text>
-              <Mute>Saved to your account, so it’s on every phone and browser you sign in on.</Mute>
+              <Mute>Synced to your account</Mute>
               <Button label="Sign out" onPress={signOut} style={{ marginTop: space.md }} />
             </>
           ) : (
             <>
-              <Text style={{ color: c.ink, fontSize: 16, fontWeight: '600' }}>Using this device only</Text>
-              <Mute>
-                {cloud
-                  ? 'Create an account or sign in to save your data online and use it on other devices. What’s on this device comes with you.'
-                  : 'Your data is saved in this browser or phone.'}
-              </Mute>
-              {cloud ? <Button label="Sign in or create an account" primary onPress={signOut} style={{ marginTop: space.md }} /> : null}
+              <Text style={{ color: c.ink, fontSize: 16, fontWeight: '600' }}>Saved on this device only</Text>
+              {cloud ? <Button label="Sign in to sync" primary onPress={signOut} style={{ marginTop: space.md }} /> : null}
             </>
           )}
         </Section>
 
-        <Section title="Your name">
+        <Section title="Profile" action={p && !editStats ? <LinkButton label="Edit" onPress={() => setEditStats(true)} /> : undefined}>
+          <Text style={[st.lbl, { color: c.mute }]}>Name</Text>
           <Field
             value={state.settings.name}
             onChangeText={(name) => setSettings({ name })}
@@ -62,60 +58,63 @@ export default function YouScreen() {
             autoCapitalize="words"
             accessibilityLabel="Your name"
           />
+          <View style={{ marginTop: space.lg }}>
+            {p && !editStats ? (
+              <ProfileLines profile={p} />
+            ) : (
+              <ProfileForm
+                initial={p}
+                onSave={(np) => {
+                  setProfile(np);
+                  setEditStats(false);
+                }}
+                onCancel={p ? () => setEditStats(false) : undefined}
+              />
+            )}
+          </View>
         </Section>
 
-        <Section title="What you track" note="Each one is a tab. Turning one off hides it; nothing you logged is deleted.">
-          <View style={{ gap: space.sm }}>
-            {SECTION_INFO.map((x) => (
-              <SectionToggle key={x.id} title={x.title} blurb={x.blurb} on={on[x.id]} onPress={() => toggle(x.id)} />
-            ))}
-          </View>
+        <Section title="Tabs">
+          {SECTION_INFO.map((x, i) => (
+            <View key={x.id} style={[st.switchRow, i > 0 && { borderTopWidth: 1, borderTopColor: c.line }]}>
+              <Text style={{ flex: 1, color: c.ink, fontSize: 16, fontWeight: '600' }}>{x.title}</Text>
+              <Switch
+                value={on[x.id]}
+                onValueChange={() => toggle(x.id)}
+                accessibilityLabel={`Show the ${x.title} tab`}
+                trackColor={{ true: c.ok, false: c.line }}
+                thumbColor="#ffffff"
+                {...({ activeThumbColor: '#ffffff' } as object)}
+              />
+            </View>
+          ))}
           {err ? <Text style={{ color: c.bad, fontWeight: '700', marginTop: space.sm }}>{err}</Text> : null}
         </Section>
 
-        <Section title="Body stats" note="Optional. Used for suggested calories and macros on the Food tab.">
-          {p && !editStats ? (
-            <View style={{ gap: 4 }}>
-              <ProfileLines profile={p} />
-              <View style={{ flexDirection: 'row', marginTop: space.xs }}>
-                <LinkButton label="Edit" onPress={() => setEditStats(true)} />
-              </View>
-            </View>
-          ) : (
-            <ProfileForm
-              initial={p}
-              onSave={(np) => {
-                setProfile(np);
-                setEditStats(false);
-              }}
-              onCancel={p ? () => setEditStats(false) : undefined}
-            />
-          )}
-        </Section>
-
         {on.cardio ? (
-          <Section title="Cardio plan" note="Planned workouts show on the Cardio tab. Changing plans keeps everything you logged.">
+          <Section title="Cardio plan">
             <PlanPicker plan={state.cardio.plan} today={today} onChange={(plan) => update((s) => ({ ...s, cardio: { ...s.cardio, plan } }))} />
           </Section>
         ) : null}
 
         {on.food ? (
-          <Section title="Daily deficit goal" note="Optional. Progress shows how many days you reach it.">
+          <Section title="Deficit goal">
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.sm }}>
-              <CommitNumberField value={state.goal} onCommit={setGoal} accessibilityLabel="Daily deficit goal" style={{ width: 120, textAlign: 'right' }} />
-              <Text style={{ color: c.mute, fontSize: 14 }}>kcal a day</Text>
+              <CommitNumberField value={state.goal} onCommit={setGoal} accessibilityLabel="Daily deficit goal" placeholder="None" style={{ width: 120, textAlign: 'right' }} />
+              <Text style={{ color: c.mute, fontSize: 15 }}>kcal a day</Text>
             </View>
           </Section>
         ) : null}
 
-        <Section title="About the data">
-          <Mute>
-            Foods: USDA FoodData Central (public domain) and Open Food Facts (Open Database License). Exercises: free-exercise-db
-            (public domain). Suggested targets are general guidance for healthy adults, not medical advice.
-          </Mute>
-        </Section>
+        <Text style={{ color: c.mute, fontSize: 12, lineHeight: 17, marginTop: space.sm, paddingHorizontal: space.xs }}>
+          Food data: USDA FoodData Central and Open Food Facts (ODbL). Exercises: free-exercise-db. Targets are general guidance, not medical advice.
+        </Text>
       </ScrollView>
     </SafeAreaView>
   );
 }
 
+const st = StyleSheet.create({
+  lbl: { fontSize: 13, fontWeight: '600', marginBottom: 6 },
+  switchRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: space.sm + 2 },
+});

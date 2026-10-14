@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { router } from 'expo-router';
 
 import {
   CARDIO_LABEL,
@@ -75,31 +76,41 @@ export default function CardioScreen() {
   return (
     <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: c.bg }}>
       <ScrollView ref={scroll} contentContainerStyle={{ padding: 16, paddingBottom: 48 }}>
-        <Header title="Cardio">
+        <Header title="Cardio" />
+
+        <Card>
           {plan ? (
             <>
-              <Text style={{ color: c.ink, fontSize: 16, fontWeight: '700', marginBottom: space.sm }}>{planTitle(plan.id)}</Text>
-              {weeks != null ? <WeekBar weeks={weeks} current={w ?? (today < plan.start ? -1 : weeks)} /> : null}
               <View style={st.weekline}>
+                <Text style={[st.planName, { color: c.ink }]}>{planTitle(plan.id)}</Text>
                 <Text style={{ color: c.ink, fontSize: 15, fontWeight: '700' }}>
                   {today < plan.start
-                    ? `Plan starts ${shortDayLabel(plan.start)}`
+                    ? `Starts ${shortDayLabel(plan.start)}`
                     : w == null
-                      ? 'Plan complete'
+                      ? 'Complete'
                       : weeks != null
                         ? `Week ${w + 1} of ${weeks}`
                         : `Week ${w + 1}`}
                 </Text>
-                {race && today <= race ? <Text style={{ color: c.mute, fontSize: 14 }}>Race day: {shortDayLabel(race)}</Text> : null}
               </View>
+              {weeks != null ? (
+                <View style={{ marginTop: space.md }}>
+                  <WeekBar weeks={weeks} current={w ?? (today < plan.start ? -1 : weeks)} />
+                </View>
+              ) : null}
             </>
           ) : (
-            <Mute>No plan. Choose one on the You tab, or just log what you do.</Mute>
+            <View style={st.weekline}>
+              <Text style={[st.planName, { color: c.ink }]}>No plan</Text>
+              <LinkButton label="Choose a plan" onPress={() => router.navigate('/you')} />
+            </View>
           )}
-          <Text style={{ color: c.mute, fontSize: 14, marginTop: space.sm, ...tabular }}>
-            This week: {fmt(+thisWeek.miles.toFixed(1))} mi{thisWeek.secs ? ` · ${fmtTime(thisWeek.secs)}` : ''}
-          </Text>
-        </Header>
+          <View style={[st.stats, { borderTopColor: c.line }]}>
+            <Stat label="This week" value={`${fmt(+thisWeek.miles.toFixed(1))} mi`} c={c} />
+            {thisWeek.secs ? <Stat label="Time" value={fmtTime(thisWeek.secs)} c={c} /> : null}
+            {race && today <= race ? <Stat label="Race day" value={shortDayLabel(race).replace(/^\w+, /, '')} c={c} /> : null}
+          </View>
+        </Card>
 
         <CardioCalendar
           cardio={cardio}
@@ -115,13 +126,12 @@ export default function CardioScreen() {
           onNext={() => shift(1)}
         />
 
-        <View style={{ marginTop: 20 }} onLayout={(e) => (detailY.current = e.nativeEvent.layout.y)}>
+        <View style={{ marginTop: space.lg }} onLayout={(e) => (detailY.current = e.nativeEvent.layout.y)}>
           <Card>
             <View style={st.dtitle}>
               <Text style={[st.title, { color: c.ink }]}>{selected === today ? 'Today' : shortDayLabel(selected)}</Text>
               {planned[0]?.race ? <Text style={[st.chip, { backgroundColor: kindColor(c, 'race'), color: c.onType }]}>Race day</Text> : null}
             </View>
-            {selected === today ? <Mute>{shortDayLabel(selected)}</Mute> : null}
 
             {planned.map((wk) => (
               <PlannedBlock key={wk.sport} wk={wk} status={workoutStatus(cardio, wk, today)} movedTo={sessionsToward(cardio, wk).find((x) => x.date !== wk.date)?.date ?? null} onSkip={() => toggleSkip(wk)} c={c} />
@@ -133,9 +143,9 @@ export default function CardioScreen() {
                   <SessionRow key={x.id} x={x} first={i === 0} onPress={() => open(x)} c={c} />
                 ))}
               </View>
-            ) : (
-              <Mute style={{ marginTop: space.md }}>{planned.length ? 'Nothing logged yet.' : 'No cardio logged this day.'}</Mute>
-            )}
+            ) : !planned.length ? (
+              <Mute style={{ marginTop: space.xs }}>Rest day</Mute>
+            ) : null}
 
             <Button label="Log cardio" primary onPress={() => open(null)} style={{ marginTop: space.lg }} />
           </Card>
@@ -154,7 +164,6 @@ function PlannedBlock({ wk, status, movedTo, onSkip, c }: { wk: PlannedWorkout; 
     <View style={[st.plan, { backgroundColor: c.bg, borderColor: c.line }]}>
       <View style={[st.rail, { backgroundColor: kindColor(c, wk.kind) }]} />
       <View style={st.planBody}>
-        <Text style={{ color: c.mute, fontSize: 13 }}>Planned · week {wk.w + 1}</Text>
         <View style={st.planRow}>
           <Text style={[st.planTitle, { color: c.ink, flex: 1 }]}>{title}</Text>
           <Text style={[st.planMiles, { color: c.ink }]}>
@@ -167,7 +176,6 @@ function PlannedBlock({ wk, status, movedTo, onSkip, c }: { wk: PlannedWorkout; 
           <StatusBadge st={status} movedTo={movedTo} c={c} />
           {status !== 'done' && status !== 'moved' ? <LinkButton label={status === 'skipped' ? 'Undo skip' : 'Skip'} onPress={onSkip} color={c.mute} /> : null}
         </View>
-        {status === 'skipped' ? <Mute style={{ fontSize: 13 }}>You can make it up within a week: log it and pick this one.</Mute> : null}
       </View>
     </View>
   );
@@ -188,8 +196,17 @@ function SessionRow({ x, first, onPress, c }: { x: CardioSession; first: boolean
         {x.planDay && x.planDay !== x.date ? <Text style={{ color: c.mute, fontSize: 13 }}>Counts toward {shortDayLabel(x.planDay)}’s plan</Text> : null}
         {x.note ? <Text style={{ color: c.ink, fontSize: 14, marginTop: 2 }}>{x.note}</Text> : null}
       </View>
-      <Text style={{ color: c.mute, fontSize: 13 }}>Edit</Text>
+      <Text style={{ color: c.mute, fontSize: 22 }}>›</Text>
     </Pressable>
+  );
+}
+
+function Stat({ label, value, c }: { label: string; value: string; c: Palette }) {
+  return (
+    <View style={{ flex: 1 }}>
+      <Text style={{ color: c.ink, fontFamily: fonts.display, fontSize: 24, lineHeight: 28, ...tabular }}>{value}</Text>
+      <Text style={{ color: c.mute, fontSize: 13 }}>{label}</Text>
+    </View>
   );
 }
 
@@ -213,9 +230,11 @@ function StatusBadge({ st: status, movedTo, c }: { st: RunStatus; movedTo: strin
 }
 
 const st = StyleSheet.create({
-  weekline: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', flexWrap: 'wrap', columnGap: space.md, marginTop: space.sm },
+  weekline: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', flexWrap: 'wrap', columnGap: space.md },
+  planName: { fontFamily: fonts.display, fontSize: 24, lineHeight: 28 },
+  stats: { flexDirection: 'row', gap: space.md, marginTop: space.lg, paddingTop: space.md, borderTopWidth: 1 },
   dtitle: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: space.sm },
-  title: { fontFamily: fonts.display, fontSize: 32, lineHeight: 36 },
+  title: { fontFamily: fonts.display, fontSize: 24, lineHeight: 28 },
   chip: { fontSize: 13, fontWeight: '700', borderRadius: radius.pill, overflow: 'hidden', paddingHorizontal: space.md, paddingVertical: 5, marginTop: 4 },
   badge: { flexDirection: 'row', alignItems: 'center', gap: 5, borderRadius: radius.pill, paddingHorizontal: space.md, paddingVertical: 5 },
   plan: { flexDirection: 'row', borderWidth: 1, borderRadius: radius.md, overflow: 'hidden', marginTop: space.md },

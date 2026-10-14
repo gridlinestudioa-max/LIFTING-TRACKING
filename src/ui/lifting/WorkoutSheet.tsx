@@ -67,7 +67,6 @@ export function WorkoutSheet({ visible, id, onClose }: { visible: boolean; id: s
       ) : mode === 'summary' ? (
         <View>
           <Text style={[st.big, { color: c.ink }]}>{w.name} done</Text>
-          <Mute>Here’s what changes next time.</Mute>
           {summary.map((s, i) => (
             <View key={i} style={[st.sumRow, i > 0 && { borderTopWidth: 1, borderTopColor: c.line }]}>
               <View style={{ flex: 1 }}>

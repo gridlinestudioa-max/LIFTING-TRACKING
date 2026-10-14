@@ -96,7 +96,6 @@ export function ExercisePicker({ onPick, pickLabel = 'Add' }: { onPick?: (e: Exe
         ))}
         {!loading && !results.length ? <Mute style={{ marginTop: space.md }}>{`No exercises match “${q.trim()}”.`}</Mute> : null}
       </View>
-      <Mute style={{ marginTop: space.lg, fontSize: 12.5 }}>Exercises and pictures: free-exercise-db (public domain).</Mute>
     </View>
   );
 }

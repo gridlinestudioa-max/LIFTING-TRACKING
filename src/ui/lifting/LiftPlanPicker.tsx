@@ -49,11 +49,6 @@ export function LiftPlanPicker({ value, onChange }: { value: LiftChoice; onChang
           );
         })}
       </View>
-      <Mute style={{ fontSize: 13 }}>
-        {value.split === 'custom'
-          ? 'You’ll add exercises to each day on the Lifting tab. You can rename the days too.'
-          : 'You can change exercises, sets and rep ranges any time. When you hit the top of the rep range on every set, the weight goes up.'}
-      </Mute>
     </View>
   );
 }

@@ -123,7 +123,7 @@ export function SignIn() {
           <View style={[st.local, { borderTopColor: c.line }]}>
             <Button label="Use without an account" onPress={useWithoutAccount} />
             <Mute style={{ marginTop: space.sm, fontSize: 13 }}>
-              Your data stays on this device only. You can create an account later and bring it with you.
+              Saved on this device. You can add an account later.
             </Mute>
           </View>
         </ScrollView>

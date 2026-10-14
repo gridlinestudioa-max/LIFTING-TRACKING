@@ -56,18 +56,13 @@ export function DietSheet({ visible, onClose }: { visible: boolean; onClose: () 
 
   return (
     <Sheet visible={visible} title="Your diet" onClose={onClose}>
-      <Mute>
-        Pick an eating window, a food style, or both (for example 16:8 fasting with keto). The Food tab checks everything you log
-        against these rules.
-      </Mute>
-
       <Heading>About you</Heading>
       {profile && !editingProfile ? (
         <View style={{ gap: 4 }}>
           <ProfileLines profile={profile} />
           {stats ? (
             <Mute>
-              {`You burn about ${fmtInt(Math.round(tdee(stats) / 10) * 10)} kcal a day. Suggested intake: ${fmtInt(calorieTarget(stats))} kcal.`}
+              {`Burn about ${fmtInt(Math.round(tdee(stats) / 10) * 10)} kcal a day · suggested ${fmtInt(calorieTarget(stats))} kcal`}
             </Mute>
           ) : (
             <Mute>{`For suggested targets, add your ${missingForSuggestions(profile)}.`}</Mute>
@@ -77,21 +72,14 @@ export function DietSheet({ visible, onClose }: { visible: boolean; onClose: () 
           </View>
         </View>
       ) : (
-        <>
-          {!profile ? (
-            <Mute style={{ marginBottom: space.md }}>
-              Add your body stats and the app suggests healthy daily calories, protein, carbs, sugar and fat for your diet.
-            </Mute>
-          ) : null}
-          <ProfileForm
-            initial={profile}
-            onSave={(p) => {
-              setProfile(p);
-              setEditingProfile(false);
-            }}
-            onCancel={profile ? () => setEditingProfile(false) : undefined}
-          />
-        </>
+        <ProfileForm
+          initial={profile}
+          onSave={(p) => {
+            setProfile(p);
+            setEditingProfile(false);
+          }}
+          onCancel={profile ? () => setEditingProfile(false) : undefined}
+        />
       )}
 
       <Heading>Fasting</Heading>
@@ -149,7 +137,6 @@ export function DietSheet({ visible, onClose }: { visible: boolean; onClose: () 
           <Text style={{ color: c.ink, fontSize: 15, fontWeight: '600' }}>
             Eat between {windowText(f)}. Fast the other {24 - f.eatHours} hours.
           </Text>
-          <Mute style={{ fontSize: 13 }}>Black coffee, tea and water (under 10 kcal) don’t break a fast.</Mute>
         </View>
       ) : null}
 
@@ -175,7 +162,7 @@ export function DietSheet({ visible, onClose }: { visible: boolean; onClose: () 
               </View>
             </Notice>
           ) : (
-            <Mute>Leave a box empty to turn that rule off. Add your stats above for suggested numbers.</Mute>
+            <Mute>Leave a box empty to turn it off.</Mute>
           )}
           {LIMIT_ROWS.map((r) => {
             const sug = stats ? suggestTargets(stats, d.style).limits[r.key] : undefined;
@@ -222,7 +209,6 @@ function SuggestedTargets({ onEdit }: { onEdit: () => void }) {
   const active = activeDiet(state.diet, state.profile).limits;
   return (
     <View>
-      <Mute>Suggested for you and your {STYLE_BY_ID[state.diet.style].name.toLowerCase()} diet. These are what the Food tab checks.</Mute>
       {LIMIT_ROWS.map((r) => {
         const v = active[r.key];
         return (
@@ -239,12 +225,10 @@ function SuggestedTargets({ onEdit }: { onEdit: () => void }) {
       })}
       <Notice tone="mute" style={{ marginTop: space.md }}>
         <Text style={{ color: c.ink, fontSize: 15, fontWeight: '600' }}>Want to use different numbers?</Text>
-        <Mute style={{ fontSize: 13 }}>You can change any of these. You can always switch back to the suggestions.</Mute>
         <Button label="Edit these numbers" onPress={onEdit} style={{ marginTop: space.sm, minHeight: 44 }} />
       </Notice>
       <Mute style={{ marginTop: space.sm, fontSize: 12.5, lineHeight: 18 }}>
-        General guidance for healthy adults, not medical advice. If you’re pregnant, have a medical condition, or are under a
-        doctor’s care, check with them first.
+        General guidance for healthy adults, not medical advice.
       </Mute>
     </View>
   );
