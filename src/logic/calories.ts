@@ -37,15 +37,20 @@ export interface KDay {
   net: number;
 }
 
-/** Calories eaten from the food log, or null when nothing is logged for that day. */
+/** Calories eaten from the food log, or null when the food log is off or nothing is logged that day. */
 export function foodKcal(state: TrackerState, s: string): number | null {
   const m = state.meals[s];
-  return m && m.length ? Math.round(sumTotals(m).kcal) : null;
+  return state.foodLog && m && m.length ? Math.round(sumTotals(m).kcal) : null;
 }
 
-/** Calories in for a day: the food log total when there is one, else the number typed on the day. */
+/** Total calories in: the number typed on the day plus the food log (when on). Null when neither has anything. */
+export function totalIn(typed: number | null | undefined, food: number | null): number | null {
+  return typed == null && food == null ? null : (typed ?? 0) + (food ?? 0);
+}
+
+/** Calories in for a day: the number typed on the day plus the food log total. */
 export function cinFor(state: TrackerState, s: string): number | null {
-  return foodKcal(state, s) ?? state.logs[s]?.cin ?? null;
+  return totalIn(state.logs[s]?.cin, foodKcal(state, s));
 }
 
 /** Logged days with both calorie numbers, sorted by date. */

@@ -10,7 +10,7 @@ export function defaultState(): TrackerState {
   ALL_EXERCISES.forEach((e) => {
     base[e.id] = e.w;
   });
-  return { start: START_DEFAULT, base, goal: null, logs: {}, foods: [], meals: {}, diet: { ...DEFAULT_DIET, limits: {}, exclude: [] } };
+  return { start: START_DEFAULT, base, goal: null, logs: {}, foods: [], meals: {}, diet: { ...DEFAULT_DIET, limits: {}, exclude: [] }, foodLog: true };
 }
 
 /** Accepts anything (parsed JSON) and returns a valid state, migrating old fields. */
@@ -75,6 +75,7 @@ export function normalize(s: unknown): TrackerState {
     });
   }
   d.diet = normalizeDiet(src.diet);
+  d.foodLog = src.foodLog !== false;
   return d;
 }
 

@@ -45,7 +45,9 @@ export default function FoodScreen() {
 
   const isToday = day === today;
   const entries = byTime(state.meals[day] ?? []);
-  const ev = evaluateDay(state.diet, entries, day < today);
+  // Calories typed on the Calendar for this day, outside the food log.
+  const typed = state.logs[day]?.cin ?? null;
+  const ev = evaluateDay(state.diet, entries, day < today, typed ?? 0);
   const openSheet = (editing: FoodEntry | null) => setSheet((s) => ({ n: s.n + 1, open: true, editing }));
 
   return (
@@ -72,6 +74,11 @@ export default function FoodScreen() {
             ) : null}
           </View>
           <NutritionSummary t={ev.totals} />
+          {typed ? (
+            <Mute style={{ marginTop: space.sm }}>
+              {`Plus ${fmtInt(typed)} kcal entered on the Calendar = ${fmtInt(ev.totals.kcal + typed)} kcal in.`}
+            </Mute>
+          ) : null}
           <Button label="Add food" primary onPress={() => openSheet(null)} style={{ marginTop: space.lg }} />
 
           {entries.length ? (

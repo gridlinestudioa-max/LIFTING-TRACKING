@@ -12,6 +12,7 @@ import {
   formFromLog,
   formPlan,
   kcalInfo,
+  totalIn,
   madeUpBy,
   makeupCandidates,
   normalizeTimeInput,
@@ -78,9 +79,10 @@ export function DayDetail() {
   else if (flash === s) { msg = 'Submitted ✓'; msgColor = c.ok; msgBold = true; }
   else if (sub) { msg = 'Submitted'; }
 
-  // Food logged on the Food tab is the day's calories in; the typed number is only used without it.
+  // Calories in = the number typed here plus anything logged on the Food tab (when the food log is on).
   const fromFood = foodKcal(state, s);
-  const k = kcalInfo(fromFood ?? num(f.cin), num(f.cout), state.goal);
+  const cinTotal = totalIn(num(f.cin), fromFood);
+  const k = kcalInfo(cinTotal, num(f.cout), state.goal);
   const pace = paceText(parseFloat(f.miles), parseTime(f.time));
 
   return (
@@ -195,20 +197,14 @@ export function DayDetail() {
 
       <Block title="Calories" c={c}>
         <View style={st.pair}>
-          <LabeledField label={fromFood != null ? 'In (from Food tab)' : 'In (eaten)'} c={c}>
-            {fromFood != null ? (
-              <View style={[st.fromFood, { backgroundColor: c.soft, borderColor: c.line }]} accessibilityLabel={`Calories in from food log: ${fromFood}`}>
-                <Text style={{ color: c.ink, fontSize: 17, fontWeight: '700', ...tabular }}>{fmtInt(fromFood)}</Text>
-              </View>
-            ) : (
-              <Field
-                value={f.cin}
-                onChangeText={(cin) => edit({ cin })}
-                keyboardType="number-pad"
-                placeholder="0"
-                accessibilityLabel="Calories in"
-              />
-            )}
+          <LabeledField label={fromFood != null ? 'In (not in food log)' : 'In (eaten)'} c={c}>
+            <Field
+              value={f.cin}
+              onChangeText={(cin) => edit({ cin })}
+              keyboardType="number-pad"
+              placeholder="0"
+              accessibilityLabel={fromFood != null ? 'Calories in, not in food log' : 'Calories in'}
+            />
           </LabeledField>
           <LabeledField label="Out (total burned)" c={c}>
             <Field
@@ -220,6 +216,11 @@ export function DayDetail() {
             />
           </LabeledField>
         </View>
+        {fromFood != null ? (
+          <Text style={{ color: c.mute, fontSize: 14, marginTop: space.sm, ...tabular }}>
+            + {fmtInt(fromFood)} from the food log = <Text style={{ color: c.ink, fontWeight: '700' }}>{fmtInt(cinTotal ?? 0)} kcal in</Text>
+          </Text>
+        ) : null}
         <View style={[st.result, { backgroundColor: toneBg(c, k.tone) }]} accessibilityLiveRegion="polite">
           <Text
             style={
@@ -500,7 +501,6 @@ const st = StyleSheet.create({
     borderRadius: radius.md - 2, paddingVertical: space.sm + 2, paddingHorizontal: space.md,
   },
   readoutValue: { fontFamily: fonts.display, fontSize: 30, lineHeight: 34, ...tabular },
-  fromFood: { minHeight: 46, borderWidth: 1.5, borderRadius: radius.md - 2, paddingHorizontal: space.md, justifyContent: 'center' },
   result: { marginTop: space.md, borderRadius: radius.md - 2, paddingVertical: space.md, paddingHorizontal: space.md },
   submit: {
     marginTop: space.xl, minHeight: 54, borderRadius: radius.md + 2,

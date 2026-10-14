@@ -258,13 +258,40 @@ describe('food styles', () => {
 describe('food log and calories in', () => {
   const S = '2026-10-14';
 
-  it('food log total is calories in for the day', () => {
+  it('calories in = typed on the day + food log', () => {
     const st = defaultState();
-    st.logs[S] = { submitted: true, cin: 9999, cout: 2800 };
-    expect(cinFor(st, S)).toBe(9999);
+    st.logs[S] = { submitted: true, cout: 2800 };
+    expect(cinFor(st, S)).toBeNull();
+    st.logs[S].cin = 500;
+    expect(cinFor(st, S)).toBe(500);
     st.meals[S] = [eat('chicken', at(12), 2), quickEntry('Lunch out', { kcal: 900, protein: 0, carbs: 0, fat: 0 }, at(13), 'q')];
-    expect(cinFor(st, S)).toBe(370 + 900);
+    expect(cinFor(st, S)).toBe(500 + 370 + 900);
+    delete st.logs[S].cin;
+    expect(cinFor(st, S)).toBe(1270);
     expect(calorieSummary(st).total).toBe(2800 - 1270);
+  });
+
+  it('food log off: only the typed number counts, logged food is kept', () => {
+    const st = defaultState();
+    st.logs[S] = { submitted: true, cin: 2000, cout: 2800 };
+    st.meals[S] = [eat('chicken', at(12), 2)];
+    st.foodLog = false;
+    expect(cinFor(st, S)).toBe(2000);
+    expect(st.meals[S]).toHaveLength(1);
+    // A day with only food logged has no calories in while the food log is off.
+    delete st.logs[S].cin;
+    expect(cinFor(st, S)).toBeNull();
+    expect(normalize(JSON.parse(JSON.stringify(st))).foodLog).toBe(false);
+    expect(normalize({}).foodLog).toBe(true);
+  });
+
+  it('typed calories count toward the diet calorie limit', () => {
+    const d: DietSettings = { ...DEFAULT_DIET, limits: { kcalMax: 1000 } };
+    const entries = [eat('chicken', at(12), 2)]; // 370
+    expect(evaluateDay(d, entries, false).verdict).toBe('on');
+    expect(evaluateDay(d, entries, false, 700).verdict).toBe('off');
+    expect(evaluateDay(d, [], false, 1200).checks[0].tone).toBe('bad');
+    expect(previewEntry(d, [], eat('chicken', at(12), 2), null, 700)!.tone).toBe('bad');
   });
 
   it('food logged counts as calories when submitting a rest day', () => {

@@ -56,6 +56,7 @@ export function AddFoodSheet({
   const all = useMemo(() => [...STARTER_FOODS, ...state.foods], [state.foods]);
   const dayEntries = state.meals[day] ?? [];
   const others = editing ? dayEntries.filter((e) => e.id !== editing.id) : dayEntries;
+  const extra = state.logs[day]?.cin ?? 0;
   const lastAt = dayEntries.length ? Math.max(...dayEntries.map((e) => e.at)) : null;
   const defaultAt = editing ? editing.at : isToday ? now : (lastAt ?? 12 * 60);
 
@@ -116,7 +117,7 @@ export function AddFoodSheet({
           setTime={setTime}
           isToday={isToday}
           now={now}
-          preview={(q) => (timeOk ? previewEntry(state.diet, others, entryFromFood(food, q, at!), isToday ? now : null) : null)}
+          preview={(q) => (timeOk ? previewEntry(state.diet, others, entryFromFood(food, q, at!), isToday ? now : null, extra) : null)}
           submitLabel={editing ? 'Save' : 'Add to log'}
           onSubmit={(q) => {
             if (!timeOk || !(q > 0)) return;
@@ -150,7 +151,7 @@ export function AddFoodSheet({
           setTime={setTime}
           isToday={isToday}
           now={now}
-          preview={(name, n) => (timeOk ? previewEntry(state.diet, others, quickEntry(name, n, at!), isToday ? now : null) : null)}
+          preview={(name, n) => (timeOk ? previewEntry(state.diet, others, quickEntry(name, n, at!), isToday ? now : null, extra) : null)}
           onSubmit={(name, n) => timeOk && add(quickEntry(name, n, at!))}
         />
       ) : null}

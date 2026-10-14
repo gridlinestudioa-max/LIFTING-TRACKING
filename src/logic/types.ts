@@ -34,4 +34,9 @@ export interface TrackerState {
   /** Food log by date. Saved as soon as it changes (no Submit step). */
   meals: Record<string, FoodEntry[]>;
   diet: DietSettings;
+  /**
+   * Food log on: food logged on the Food tab counts as calories in, on top of any number typed on the day.
+   * Off: the Food tab is hidden and calories in is only the typed number. Logged food is kept either way.
+   */
+  foodLog: boolean;
 }

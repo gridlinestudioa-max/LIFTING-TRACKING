@@ -11,7 +11,7 @@ import { useEffect } from 'react';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import Svg, { Path, Rect } from 'react-native-svg';
 
-import { TrackerProvider } from '@/ui/store';
+import { TrackerProvider, useTracker } from '@/ui/store';
 import { useColors, useIsDark } from '@/ui/theme';
 
 // Keep the splash screen up until the display font is ready, so headings never flash in a fallback font.
@@ -45,6 +45,7 @@ function ChartIcon({ color, focused }: { color: string; focused: boolean }) {
 function AppTabs() {
   const c = useColors();
   const dark = useIsDark();
+  const { state } = useTracker();
   return (
     <>
       <StatusBar style={dark ? 'light' : 'dark'} />
@@ -63,7 +64,8 @@ function AppTabs() {
         />
         <Tabs.Screen
           name="food"
-          options={{ title: 'Food', tabBarIcon: ({ color, focused }) => <FoodIcon color={String(color)} focused={focused} /> }}
+          // Hidden when the food log is turned off (Progress tab).
+          options={{ href: state.foodLog ? undefined : null, title: 'Food', tabBarIcon: ({ color, focused }) => <FoodIcon color={String(color)} focused={focused} /> }}
         />
         <Tabs.Screen
           name="progress"

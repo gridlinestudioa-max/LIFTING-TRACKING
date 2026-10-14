@@ -1,4 +1,4 @@
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import {
@@ -25,7 +25,7 @@ import { space, tabular, useColors } from '@/ui/theme';
 
 export default function ProgressScreen() {
   const c = useColors();
-  const { state, today, setBase, setGoal, setStart } = useTracker();
+  const { state, today, setBase, setGoal, setStart, setFoodLog } = useTracker();
 
   const st = progressStats(state, today);
   const { long, week } = weeklyRunRows(state);
@@ -61,6 +61,27 @@ export default function ProgressScreen() {
         </Section>
 
         <CaloriesSection goal={state.goal} onGoal={setGoal} />
+
+        <Section title="Food log">
+          <View style={s.goal}>
+            <View style={{ flex: 1 }}>
+              <Text style={{ color: c.ink, fontSize: 15, fontWeight: '600' }}>Use the food log</Text>
+              <Mute style={{ fontSize: 13 }}>
+                {state.foodLog
+                  ? 'On: food logged on the Food tab counts as calories in, plus anything you type on a day.'
+                  : 'Off: the Food tab is hidden and calories in is only what you type on each day. Food you logged is kept.'}
+              </Mute>
+            </View>
+            <Switch
+              value={state.foodLog}
+              onValueChange={setFoodLog}
+              accessibilityLabel="Use the food log"
+              trackColor={{ true: c.ink, false: c.line }}
+              thumbColor={c.card}
+              ios_backgroundColor={c.line}
+            />
+          </View>
+        </Section>
 
         <Section
           title="Lifting"

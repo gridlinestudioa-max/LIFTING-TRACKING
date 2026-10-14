@@ -221,14 +221,15 @@ const amount = (v: number, unit: string) => (unit === 'kcal' ? `${fmtInt(v)} kca
 /**
  * Check a day's food against the diet.
  * `finished`: the day is over, so a minimum not reached (protein) counts as missed instead of "to go".
+ * `extraKcal`: calories typed on the day outside the food log. They count toward the calorie limit only.
  */
-export function evaluateDay(d: DietSettings, entries: readonly FoodEntry[], finished: boolean): DayEval {
+export function evaluateDay(d: DietSettings, entries: readonly FoodEntry[], finished: boolean, extraKcal = 0): DayEval {
   const sorted = byTime(entries);
   const totals = sumTotals(sorted);
   const checks: Check[] = [];
   const flags: Record<string, string[]> = {};
   const flag = (id: string, why: string) => (flags[id] ??= []).push(why);
-  const any = sorted.length > 0;
+  const any = sorted.length > 0 || extraKcal > 0;
 
   if (d.fasting) {
     const f = d.fasting;
@@ -246,9 +247,10 @@ export function evaluateDay(d: DietSettings, entries: readonly FoodEntry[], fini
   for (const r of MAX_RULES) {
     const max = d.limits[r.key];
     if (max == null) continue;
-    const v = totals[r.total];
+    const extra = r.total === 'kcal' ? extraKcal : 0;
+    const v = totals[r.total] + extra;
     // Flag the food that took the day over the limit, and everything after it.
-    let run = 0;
+    let run = extra;
     for (const e of sorted) {
       run += entryTotals(e)[r.total];
       if (run > max + 1e-9) flag(e.id, `Over your ${r.label.toLowerCase()} limit`);
@@ -321,10 +323,12 @@ export function previewEntry(
   entries: readonly FoodEntry[],
   e: FoodEntry,
   nowMin: number | null,
+  extraKcal = 0,
 ): Preview | null {
   if (!hasRules(d)) return null;
-  const before = sumTotals(entries);
-  const after = sumTotals([...entries, e]);
+  const withExtra = (t: Totals): Totals => ({ ...t, kcal: t.kcal + extraKcal });
+  const before = withExtra(sumTotals(entries));
+  const after = withExtra(sumTotals([...entries, e]));
   const t = entryTotals(e);
   const bad: string[] = [];
   const warn: string[] = [];

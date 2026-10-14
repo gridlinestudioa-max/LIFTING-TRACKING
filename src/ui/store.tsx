@@ -5,6 +5,7 @@ import { AppState } from 'react-native';
 import {
   STORAGE_KEY,
   defaultState,
+  foodKcal,
   logFromForm,
   normalize,
   planFor,
@@ -41,6 +42,7 @@ interface Tracker {
   saveFood: (f: Food) => void;
   deleteFood: (id: string) => void;
   setDiet: (d: DietSettings) => void;
+  setFoodLog: (on: boolean) => void;
 }
 
 const Ctx = createContext<Tracker | null>(null);
@@ -99,7 +101,7 @@ export function TrackerProvider({ children }: { children: ReactNode }) {
       const p = planFor(state.start, s);
       if (!p) return null;
       const log = logFromForm(state, p, f);
-      const err = submitError(p, log, !!state.meals[s]?.length);
+      const err = submitError(p, log, foodKcal(state, s) != null);
       if (err) return err;
       update((st) => ({ ...st, logs: { ...st.logs, [s]: { ...log, submitted: true } } }));
       setDrafts((d) => {
@@ -148,15 +150,16 @@ export function TrackerProvider({ children }: { children: ReactNode }) {
   );
   const deleteFood = useCallback((id: string) => update((st) => ({ ...st, foods: st.foods.filter((x) => x.id !== id) })), [update]);
   const setDiet = useCallback((d: DietSettings) => update((st) => ({ ...st, diet: d })), [update]);
+  const setFoodLog = useCallback((on: boolean) => update((st) => ({ ...st, foodLog: on })), [update]);
 
   const value = useMemo(
     () => ({
       loaded, state, today, selected, select, drafts, setDraft, flash, submit, setBase, setGoal, setStart,
-      saveEntry, removeEntry, saveFood, deleteFood, setDiet,
+      saveEntry, removeEntry, saveFood, deleteFood, setDiet, setFoodLog,
     }),
     [
       loaded, state, today, selected, select, drafts, setDraft, flash, submit, setBase, setGoal, setStart,
-      saveEntry, removeEntry, saveFood, deleteFood, setDiet,
+      saveEntry, removeEntry, saveFood, deleteFood, setDiet, setFoodLog,
     ],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
