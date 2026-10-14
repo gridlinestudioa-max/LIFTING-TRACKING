@@ -28,17 +28,17 @@ export function ProgressionTable({
   return (
     <View style={{ flexDirection: 'row', marginTop: 6 }}>
       {/* Pinned lift-name column */}
-      <View style={{ width: 132, borderRightWidth: 1, borderRightColor: c.line }}>
+      <View style={{ width: 136, borderRightWidth: 1, borderRightColor: c.line }}>
         <View style={[s.cell, s.left, { borderBottomColor: c.line }]}>
           <Text style={[s.th, { color: c.mute }]}>Lift</Text>
         </View>
         {LIFT_GROUPS.map((g) => [
-          <View key={g} style={[s.cell, s.left, { borderBottomColor: c.line, backgroundColor: c.bg }]}>
+          <View key={g} style={[s.cell, s.left, { borderBottomColor: c.line, backgroundColor: c.soft }]}>
             <Text style={[s.group, { color: c.mute }]}>{TYPES[g].label}</Text>
           </View>,
           ...LIFTS[g].map((e) => (
             <View key={e.id} style={[s.cell, s.left, { borderBottomColor: c.line }]}>
-              <Text numberOfLines={2} style={{ fontSize: 12, color: c.ink }}>
+              <Text numberOfLines={2} style={{ fontSize: 13, color: c.ink }}>
                 {e.name} <Text style={{ color: c.mute }}>({e.unit})</Text>
               </Text>
             </View>
@@ -59,7 +59,7 @@ export function ProgressionTable({
             ))}
           </View>
           {LIFT_GROUPS.map((g) => [
-            <View key={g} style={[s.cell, { width: COL_W * PLAN_WEEKS, borderBottomColor: c.line, backgroundColor: c.bg }]} />,
+            <View key={g} style={[s.cell, { width: COL_W * PLAN_WEEKS, borderBottomColor: c.line, backgroundColor: c.soft }]} />,
             ...LIFTS[g].map((e) => (
               <View key={e.id} style={{ flexDirection: 'row' }}>
                 {weeks.map((w) => (
@@ -69,10 +69,10 @@ export function ProgressionTable({
                         value={state.base[e.id]}
                         onCommit={(v) => v != null && onBase(e.id, v)}
                         accessibilityLabel={`${e.name} week 1 weight`}
-                        style={{ width: 52, minHeight: 30, paddingVertical: 3, paddingHorizontal: 4, fontSize: 12, textAlign: 'center' }}
+                        style={{ width: 52, minHeight: 32, paddingVertical: 3, paddingHorizontal: 4, fontSize: 14, textAlign: 'center' }}
                       />
                     ) : (
-                      <Text style={{ fontSize: 12, color: cellColor(w), fontWeight: cellWeight(w) }}>
+                      <Text style={{ fontSize: 14, color: cellColor(w), fontWeight: cellWeight(w), fontVariant: ['tabular-nums'] }}>
                         {fmt(targetFor(state.base, e.id, w))}
                       </Text>
                     )}
@@ -90,6 +90,6 @@ export function ProgressionTable({
 const s = StyleSheet.create({
   cell: { height: ROW_H, borderBottomWidth: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4 },
   left: { alignItems: 'flex-start', paddingHorizontal: 6 },
-  th: { fontSize: 11, fontWeight: '700' },
-  group: { fontSize: 11, fontWeight: '700', letterSpacing: 0.5, textTransform: 'uppercase' },
+  th: { fontSize: 12.5, fontWeight: '700' },
+  group: { fontSize: 13, fontWeight: '700' },
 });

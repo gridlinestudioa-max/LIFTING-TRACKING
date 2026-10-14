@@ -34,7 +34,7 @@ export function StartPicker({ start, onChange }: { start: string; onChange: (s: 
             onChange: (e, d) => e.type === 'set' && d && onChange(toS(d)),
           })
         }
-        style={{ borderWidth: 1, borderColor: c.line, backgroundColor: c.bg, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 9 }}>
+        style={{ borderWidth: 1, borderColor: c.line, backgroundColor: c.card, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 11 }}>
         <Text style={{ color: c.ink, fontSize: 15 }}>{start}</Text>
       </Pressable>
     );
@@ -46,8 +46,8 @@ export function StartPicker({ start, onChange }: { start: string; onChange: (s: 
       'aria-label': 'Plan start date',
       onChange: (e: { target: { value: string } }) => e.target.value && onChange(e.target.value),
       style: {
-        font: 'inherit', fontSize: 16, color: c.ink, backgroundColor: c.bg, border: `1px solid ${c.line}`,
-        borderRadius: 8, padding: '7px 8px', colorScheme: isDark ? 'dark' : 'light',
+        font: 'inherit', fontSize: 16, color: c.ink, backgroundColor: c.card, border: `1.5px solid ${c.line}`,
+        borderRadius: 10, padding: '9px 10px', colorScheme: isDark ? 'dark' : 'light',
       },
     });
   }
