@@ -13,8 +13,9 @@ Data is stored only on the phone (AsyncStorage, key `mm_tracker_v1`). There's no
 | `src/logic/config.ts` | **Plan constants**: start date, long runs, weekly layout, tempo/easy mile rules, lifts. Edit the plan here. |
 | `src/logic/` | Pure TypeScript logic with no React: plan mapping, target weights, day status, time/pace, calories, progress stats, form/submit rules. |
 | `src/logic/__tests__/` | Unit tests (covers the HANDOFF test checklist). |
-| `src/app/` | Screens (expo-router): `index.tsx` = Calendar tab, `progress.tsx` = Progress tab. |
-| `src/ui/` | UI components, theme (light/dark follows the system), and the on-device store. |
+| `src/logic/nutrition.ts`, `foods.ts`, `diet.ts` | Food log and totals, the starter food list (placeholder until the full database), and diets: fasting windows, presets (keto, vegan, ...) and the on-track checks. |
+| `src/app/` | Screens (expo-router): `index.tsx` = Calendar tab, `food.tsx` = Food tab, `progress.tsx` = Progress tab. |
+| `src/ui/` | UI components, theme (light/dark follows the system), and the on-device store. `src/ui/food/` = Food tab sheets. |
 
 ## Develop
 

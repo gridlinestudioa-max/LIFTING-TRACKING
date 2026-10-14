@@ -26,6 +26,14 @@ function CalendarIcon({ color, focused }: { color: string; focused: boolean }) {
   );
 }
 
+function FoodIcon({ color, focused }: { color: string; focused: boolean }) {
+  return (
+    <Svg width={24} height={24} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={focused ? 2.5 : 1.75} strokeLinecap="round" strokeLinejoin="round">
+      <Path d="M5 3v6a2 2 0 0 0 4 0V3M7 11v10M17 21V3c-2.2 0-3.5 2.6-3.5 6.5S15 14 17 14" />
+    </Svg>
+  );
+}
+
 function ChartIcon({ color, focused }: { color: string; focused: boolean }) {
   return (
     <Svg width={24} height={24} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={focused ? 2.5 : 1.75} strokeLinecap="round">
@@ -52,6 +60,10 @@ function AppTabs() {
         <Tabs.Screen
           name="index"
           options={{ title: 'Calendar', tabBarIcon: ({ color, focused }) => <CalendarIcon color={String(color)} focused={focused} /> }}
+        />
+        <Tabs.Screen
+          name="food"
+          options={{ title: 'Food', tabBarIcon: ({ color, focused }) => <FoodIcon color={String(color)} focused={focused} /> }}
         />
         <Tabs.Screen
           name="progress"

@@ -1,4 +1,6 @@
 import type { DayType } from './config';
+import type { DietSettings } from './diet';
+import type { Food, FoodEntry } from './nutrition';
 
 export interface LiftEntry {
   w: number;
@@ -27,4 +29,9 @@ export interface TrackerState {
   goal: number | null;
   base: Record<string, number>;
   logs: Record<string, DayLog>;
+  /** Foods the user created. The starter/built-in list is not stored. */
+  foods: Food[];
+  /** Food log by date. Saved as soon as it changes (no Submit step). */
+  meals: Record<string, FoodEntry[]>;
+  diet: DietSettings;
 }

@@ -89,11 +89,12 @@ export function logFromForm(state: TrackerState, base: PlanDay, f: DayForm): Day
 
 /**
  * Validation: run day needs miles or calories; rest day needs calories;
- * lift day can be submitted with anything. Returns an error message or null.
+ * lift day can be submitted with anything. Food logged that day counts as calories.
+ * Returns an error message or null.
  */
-export function submitError(base: PlanDay, log: DayLog): string | null {
+export function submitError(base: PlanDay, log: DayLog, hasFood = false): string | null {
   const kind = TYPES[log.swap ?? base.type].kind;
-  const hasK = log.cin != null || log.cout != null;
+  const hasK = hasFood || log.cin != null || log.cout != null;
   if (log.skipped) return null; // a skip can be saved on its own
   if (kind === 'run' && !(log.miles! > 0) && !hasK) return 'Enter your miles or calories first.';
   if (kind === 'rest' && !hasK) return 'Enter your calories first.';

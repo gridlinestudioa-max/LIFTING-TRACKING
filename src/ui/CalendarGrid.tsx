@@ -6,6 +6,7 @@ import {
   LIFTS,
   MONTHS,
   TYPES,
+  cinFor,
   daysInMonth,
   fmt,
   liftsDone,
@@ -133,7 +134,8 @@ const DayCell = memo(function DayCell({
     else if (st === 'missed') mark = { kind: 'missed', color: c.bad };
     else if (st === 'partial') mark = { kind: 'partial', color: c.warn };
   }
-  const hasK = l && l.cin != null && l.cout != null;
+  const cin = cinFor(state, date);
+  const hasK = l && cin != null && l.cout != null;
   const isRest = p ? TYPES[p.type].kind === 'rest' : false;
 
   return (
@@ -165,7 +167,7 @@ const DayCell = memo(function DayCell({
             {meta.text}
           </Text>
         ) : null}
-        {hasK ? <View style={[s.kbar, { backgroundColor: l!.cout! - l!.cin! >= 0 ? c.ok : c.bad }]} /> : null}
+        {hasK ? <View style={[s.kbar, { backgroundColor: l!.cout! - cin! >= 0 ? c.ok : c.bad }]} /> : null}
         {selected ? <View pointerEvents="none" style={[s.ring, { borderColor: c.accent }]} /> : null}
       </Pressable>
     </View>
