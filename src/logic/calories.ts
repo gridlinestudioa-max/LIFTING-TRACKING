@@ -1,8 +1,6 @@
-import { PLAN_WEEKS } from './config';
-import { addDays, dayDiff } from './dates';
+import { addDays, dayDiff, mondayOf } from './dates';
 import { fmtInt } from './format';
 import { sumTotals } from './nutrition';
-import { planEnd } from './plan';
 import type { TrackerState } from './types';
 
 export type Tone = 'ok' | 'bad' | 'warn' | 'mute';
@@ -30,6 +28,22 @@ export function kcalInfo(
   return { text, tone: n >= 0 ? 'ok' : 'bad' };
 }
 
+/** Calories eaten from the food log, or null when food tracking is off or nothing is logged that day. */
+export function foodKcal(state: TrackerState, s: string): number | null {
+  const m = state.meals[s];
+  return state.settings.sections.food && m && m.length ? Math.round(sumTotals(m).kcal) : null;
+}
+
+/** Total calories in: the number typed plus the food log. Null when neither has anything. */
+export function totalIn(typed: number | null | undefined, food: number | null): number | null {
+  return typed == null && food == null ? null : (typed ?? 0) + (food ?? 0);
+}
+
+/** Calories in for a day: the number typed for the day plus the food log total. */
+export function cinFor(state: TrackerState, s: string): number | null {
+  return totalIn(state.days[s]?.cin, foodKcal(state, s));
+}
+
 export interface KDay {
   s: string;
   cin: number;
@@ -37,32 +51,15 @@ export interface KDay {
   net: number;
 }
 
-/** Calories eaten from the food log, or null when the food log is off or nothing is logged that day. */
-export function foodKcal(state: TrackerState, s: string): number | null {
-  const m = state.meals[s];
-  return state.foodLog && m && m.length ? Math.round(sumTotals(m).kcal) : null;
-}
-
-/** Total calories in: the number typed on the day plus the food log (when on). Null when neither has anything. */
-export function totalIn(typed: number | null | undefined, food: number | null): number | null {
-  return typed == null && food == null ? null : (typed ?? 0) + (food ?? 0);
-}
-
-/** Calories in for a day: the number typed on the day plus the food log total. */
-export function cinFor(state: TrackerState, s: string): number | null {
-  return totalIn(state.logs[s]?.cin, foodKcal(state, s));
-}
-
-/** Logged days with both calorie numbers, sorted by date. */
+/** Days with both calories in and out, sorted by date. */
 export function kDays(state: TrackerState): KDay[] {
-  return Object.keys(state.logs)
+  const keys = new Set([...Object.keys(state.days), ...Object.keys(state.meals)]);
+  return [...keys]
     .sort()
     .map((k) => {
-      const l = state.logs[k];
+      const cout = state.days[k]?.cout;
       const cin = cinFor(state, k);
-      return l && cin != null && l.cout != null
-        ? { s: k, cin, cout: l.cout, net: net(cin, l.cout) }
-        : null;
+      return cin != null && cout != null ? { s: k, cin, cout, net: net(cin, cout) } : null;
     })
     .filter((d): d is KDay => d !== null);
 }
@@ -80,33 +77,19 @@ export function calorieSummary(state: TrackerState): CalorieSummary {
   const n = ds.length;
   const total = ds.reduce((a, d) => a + d.net, 0);
   const goal = state.goal;
-  const hit =
-    goal != null && goal > 0
-      ? ds.filter((d) => d.net >= goal).length
-      : ds.filter((d) => d.net > 0).length;
+  const hit = goal != null && goal > 0 ? ds.filter((d) => d.net >= goal).length : ds.filter((d) => d.net > 0).length;
   return { days: n, total, avg: n ? total / n : 0, hit };
 }
 
-/**
- * Daily deficit bar window: ~last 3 weeks ending today.
- * If fewer than 14 days since start, show start + 14 days. Clamped to plan end.
- * (Unlike the prototype, a date long after the plan shows the plan's last 3 weeks, not nothing.)
- */
+/** Daily deficit bars for the 21 days ending today (or ending the last logged day, if that's later). */
 export function dailyWindow(state: TrackerState, today: string): { s: string; v: number | null }[] {
-  const pe = planEnd(state.start);
-  let endS = today > pe ? pe : today;
-  let stS = addDays(endS, -20);
-  if (stS < state.start) stS = state.start;
-  if (dayDiff(endS, stS) < 13) endS = addDays(stS, 13);
-  if (endS > pe) endS = pe;
   const byDate: Record<string, number> = {};
   kDays(state).forEach((d) => {
     byDate[d.s] = d.net;
   });
-  const n = dayDiff(endS, stS) + 1;
   const out: { s: string; v: number | null }[] = [];
-  for (let i = 0; i < n; i++) {
-    const key = addDays(stS, i);
+  for (let i = 20; i >= 0; i--) {
+    const key = addDays(today, -i);
     out.push({ s: key, v: byDate[key] ?? null });
   }
   return out;
@@ -122,25 +105,25 @@ export function cumulative(state: TrackerState): { s: string; v: number }[] {
 }
 
 export interface WeekCalories {
-  week: number; // 1-based
+  /** Monday of the week. */
+  start: string;
   days: number;
   avgIn: number;
   avgOut: number;
   avgNet: number;
 }
 
-/** Per plan week averages, only weeks with data. */
+/** Averages per calendar week (Mon–Sun), newest first, only weeks with data. */
 export function byWeek(state: TrackerState): WeekCalories[] {
-  const ds = kDays(state);
-  const rows: WeekCalories[] = [];
-  for (let w = 0; w < PLAN_WEEKS; w++) {
-    const wk = ds.filter((d) => {
-      const df = dayDiff(d.s, state.start);
-      return df >= w * 7 && df < w * 7 + 7;
-    });
-    if (!wk.length) continue;
-    const avg = (f: 'cin' | 'cout' | 'net') => wk.reduce((t, d) => t + d[f], 0) / wk.length;
-    rows.push({ week: w + 1, days: wk.length, avgIn: avg('cin'), avgOut: avg('cout'), avgNet: avg('net') });
+  const groups = new Map<string, KDay[]>();
+  for (const d of kDays(state)) {
+    const m = mondayOf(d.s);
+    groups.set(m, [...(groups.get(m) ?? []), d]);
   }
-  return rows;
+  return [...groups.entries()]
+    .sort((a, b) => dayDiff(b[0], a[0]))
+    .map(([start, wk]) => {
+      const avg = (f: 'cin' | 'cout' | 'net') => wk.reduce((t, d) => t + d[f], 0) / wk.length;
+      return { start, days: wk.length, avgIn: avg('cin'), avgOut: avg('cout'), avgNet: avg('net') };
+    });
 }

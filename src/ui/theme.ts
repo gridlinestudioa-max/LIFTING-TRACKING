@@ -1,6 +1,7 @@
 import { useColorScheme } from 'react-native';
 
-import type { DayType } from '@/logic';
+/** Colors for workout kinds: plan runs, lifting, other cardio, rest. */
+export type Kind = 'push' | 'pull' | 'legs' | 'tempo' | 'easy' | 'long' | 'rest';
 
 export interface Palette {
   /** Screen background (chalk). */
@@ -26,7 +27,7 @@ export interface Palette {
   warnbg: string;
   /** Text on top of a workout-type color. */
   onType: string;
-  types: Record<DayType, string>;
+  types: Record<Kind, string>;
 }
 
 const light: Palette = {

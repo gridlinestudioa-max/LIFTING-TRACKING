@@ -1,44 +1,62 @@
-import { ALL_EXERCISES, START_DEFAULT } from './config';
-import { mondayOf } from './dates';
+import { EMPTY_CARDIO, normalizeCardio } from './cardio';
 import { DEFAULT_DIET, normalizeDiet } from './diet';
-import { normalizeProfile } from './profile';
+import { EMPTY_LIFTING, normalizeLifting } from './lifting';
+import { isV1, migrateV1 } from './migrate';
 import type { Food, FoodEntry, FoodTag, Nutrients, Portion } from './nutrition';
 import { TAG_LABEL } from './nutrition';
-import type { DayLog, TrackerState } from './types';
+import { normalizeProfile } from './profile';
+import type { DayInfo, Sections, TrackerState } from './types';
+
+export const ALL_SECTIONS: Sections = { food: true, cardio: true, lifting: true };
 
 export function defaultState(): TrackerState {
-  const base: Record<string, number> = {};
-  ALL_EXERCISES.forEach((e) => {
-    base[e.id] = e.w;
-  });
-  return { start: START_DEFAULT, base, goal: null, logs: {}, foods: [], meals: {}, diet: { ...DEFAULT_DIET, limits: {}, exclude: [] }, foodLog: true, profile: null };
+  return {
+    v: 2,
+    updatedAt: 0,
+    settings: { name: '', sections: { ...ALL_SECTIONS }, onboarded: false },
+    goal: null,
+    days: {},
+    foods: [],
+    meals: {},
+    diet: { ...DEFAULT_DIET, limits: {}, exclude: [] },
+    profile: null,
+    cardio: { ...EMPTY_CARDIO, sessions: [], skips: [] },
+    lifting: { ...EMPTY_LIFTING, exercises: [], routines: [], schedule: [...EMPTY_LIFTING.schedule], workouts: [] },
+  };
 }
 
-/** Accepts anything (parsed JSON) and returns a valid state, migrating old fields. */
+const isDate = (k: string) => /^\d{4}-\d{2}-\d{2}$/.test(k);
+
+/** Accepts anything (parsed JSON), including data saved by the first version of the app, and returns valid data. */
 export function normalize(s: unknown): TrackerState {
+  if (isV1(s)) return normalize(migrateV1(s as Record<string, unknown>));
   const d = defaultState();
   if (!s || typeof s !== 'object') return d;
   const src = s as Record<string, any>;
-  if (typeof src.start === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(src.start)) d.start = src.start;
+  if (typeof src.updatedAt === 'number' && Number.isFinite(src.updatedAt)) d.updatedAt = src.updatedAt;
+
+  const st = src.settings ?? {};
+  if (typeof st.name === 'string') d.settings.name = st.name.slice(0, 60);
+  if (st.sections && typeof st.sections === 'object') {
+    (['food', 'cardio', 'lifting'] as const).forEach((k) => {
+      if (typeof st.sections[k] === 'boolean') d.settings.sections[k] = st.sections[k];
+    });
+  }
+  d.settings.onboarded = st.onboarded === true;
+
   if (typeof src.goal === 'number' && src.goal > 0) d.goal = src.goal;
-  if (src.base && typeof src.base === 'object') {
-    Object.keys(d.base).forEach((k) => {
-      if (typeof src.base[k] === 'number') d.base[k] = src.base[k];
+  if (src.days && typeof src.days === 'object') {
+    Object.keys(src.days).forEach((k) => {
+      const x = src.days[k];
+      if (!isDate(k) || !x || typeof x !== 'object') return;
+      const day: DayInfo = {};
+      if (typeof x.cin === 'number' && x.cin >= 0) day.cin = x.cin;
+      if (typeof x.cout === 'number' && x.cout >= 0) day.cout = x.cout;
+      if (typeof x.note === 'string' && x.note) day.note = x.note;
+      if (Object.keys(day).length) d.days[k] = day;
     });
   }
-  if (src.logs && typeof src.logs === 'object') {
-    const logs: Record<string, DayLog> = {};
-    Object.keys(src.logs).forEach((k) => {
-      const l = src.logs[k];
-      if (!l || typeof l !== 'object') return;
-      const copy: Record<string, any> = { ...l };
-      if (copy.mins > 0 && !(copy.secs > 0)) copy.secs = copy.mins * 60;
-      delete copy.mins;
-      if (copy.submitted === undefined) copy.submitted = true;
-      logs[k] = copy as DayLog;
-    });
-    d.logs = logs;
-  }
+
   if (Array.isArray(src.foods)) {
     d.foods = src.foods
       .map((f: any) => {
@@ -63,7 +81,7 @@ export function normalize(s: unknown): TrackerState {
   }
   if (src.meals && typeof src.meals === 'object') {
     Object.keys(src.meals).forEach((k) => {
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(k) || !Array.isArray(src.meals[k])) return;
+      if (!isDate(k) || !Array.isArray(src.meals[k])) return;
       const list = src.meals[k]
         .map((e: any): FoodEntry | null => {
           const n = nutrients(e?.n);
@@ -87,8 +105,9 @@ export function normalize(s: unknown): TrackerState {
     });
   }
   d.diet = normalizeDiet(src.diet);
-  d.foodLog = src.foodLog !== false;
   d.profile = normalizeProfile(src.profile);
+  d.cardio = normalizeCardio(src.cardio);
+  d.lifting = normalizeLifting(src.lifting);
   return d;
 }
 
@@ -105,9 +124,4 @@ function nutrients(n: any): Nutrients | null {
 
 function tags(t: unknown): FoodTag[] {
   return Array.isArray(t) ? (t.filter((x) => typeof x === 'string' && x in TAG_LABEL) as FoodTag[]) : [];
-}
-
-/** Any chosen date snaps back to that week's Monday. */
-export function snapStart(dateStr: string): string {
-  return mondayOf(dateStr);
 }

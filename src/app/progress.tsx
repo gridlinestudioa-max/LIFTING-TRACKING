@@ -1,122 +1,137 @@
-import { ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import {
-  ALL_EXERCISES,
+  MONTHS,
+  addDays,
   byWeek,
   calorieSummary,
+  cardioStats,
   cumulative,
   dailyWindow,
+  defaultIncrement,
   fmt,
   fmtInt,
-  loggedWeights,
+  fmtTime,
+  fmtW,
+  nextTarget,
   paceText,
-  planFor,
-  progressStats,
+  planWeekRows,
   sgn,
-  weeklyRunRows,
+  toD,
+  volume,
+  weeklyTotals,
+  weightHistory,
 } from '@/logic';
 import { ChartKey, CumulativeLine, DeficitBars, PlanBars, Sparkline } from '@/ui/charts';
-import { CommitNumberField, H2, Header, Mute, Section, StatGrid, StatTile } from '@/ui/components';
-import { ProgressionTable } from '@/ui/ProgressionTable';
-import { StartPicker } from '@/ui/StartPicker';
+import { H2, Header, Mute, Section, StatGrid, StatTile } from '@/ui/components';
+import { useLibrary } from '@/ui/lifting/library';
 import { useTracker } from '@/ui/store';
 import { space, tabular, useColors } from '@/ui/theme';
 
+const weekLabel = (s: string) => {
+  const d = toD(s);
+  return `${MONTHS[d.getMonth()].slice(0, 3)} ${d.getDate()}`;
+};
+
 export default function ProgressScreen() {
   const c = useColors();
-  const { state, today, setBase, setGoal, setStart, setFoodLog } = useTracker();
-
-  const st = progressStats(state, today);
-  const { long, week } = weeklyRunRows(state);
-  const cur = planFor(state.start, today);
+  const { state } = useTracker();
+  const on = state.settings.sections;
 
   return (
     <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: c.bg }}>
-      <ScrollView
-        contentContainerStyle={{ padding: 16, paddingBottom: 48 }}
-        keyboardShouldPersistTaps="handled"
-        keyboardDismissMode="on-drag"
-        automaticallyAdjustKeyboardInsets>
+      <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 48 }}>
         <Header title="Progress" />
-
-        <StatGrid columns={3}>
-          <StatTile value={String(st.done)} sub={`/${st.planned}`} label="Sessions completed" />
-          <StatTile value={String(st.missedOrPartial)} label={st.skipped ? `Missed or partial, ${st.skipped} skipped` : 'Missed or partial'} />
-          <StatTile value={fmt(+st.miles.toFixed(1))} label="Miles logged" />
-          <StatTile value={st.longest ? fmt(st.longest) : '–'} label="Longest run (mi)" />
-          <StatTile
-            value={st.paceMiles > 0 ? paceText(st.paceMiles, st.paceSecs).replace(' /mi', '') : '–'}
-            label="Average pace (min/mi)"
-          />
-          <StatTile value={String(st.liftDone)} label="Lifting sessions completed" />
-        </StatGrid>
-
-        <Section title="Running">
-          <ChartKey items={['planned', 'logged']} />
-          <H2 style={{ marginTop: space.lg }}>Long run</H2>
-          <PlanBars rows={long} label="Long run miles by week" />
-          <H2 style={{ marginTop: space.xl }}>Weekly running miles</H2>
-          <PlanBars rows={week} label="Weekly running miles" />
-        </Section>
-
-        <CaloriesSection goal={state.goal} onGoal={setGoal} />
-
-        <Section title="Food log">
-          <View style={s.goal}>
-            <View style={{ flex: 1 }}>
-              <Text style={{ color: c.ink, fontSize: 15, fontWeight: '600' }}>Use the food log</Text>
-              <Mute style={{ fontSize: 13 }}>
-                {state.foodLog
-                  ? 'On: food logged on the Food tab counts as calories in, plus anything you type on a day.'
-                  : 'Off: the Food tab is hidden and calories in is only what you type on each day. Food you logged is kept.'}
-              </Mute>
-            </View>
-            <Switch
-              value={state.foodLog}
-              onValueChange={setFoodLog}
-              accessibilityLabel="Use the food log"
-              trackColor={{ true: c.ink, false: c.line }}
-              thumbColor={c.card}
-              ios_backgroundColor={c.line}
-            />
-          </View>
-        </Section>
-
-        <Section
-          title="Lifting"
-          note="Week 1 is the first bump. Weights go up every 3 weeks (W4, W7, W10), one session per lift per week. Edit the W1 box to rebase a lift.">
-          <H2>Progression</H2>
-          <ProgressionTable state={state} currentWeek={cur ? cur.w : -1} onBase={setBase} />
-
-          <H2 style={{ marginTop: space.xl }}>Logged weights</H2>
-          {ALL_EXERCISES.map((e, i) => {
-            const pts = loggedWeights(state, e.id);
-            return (
-              <View key={e.id} style={[s.srow, i > 0 && { borderTopWidth: 1, borderTopColor: c.line }]}>
-                <Text style={{ flex: 1, fontWeight: '600', fontSize: 15, color: c.ink }}>{e.name}</Text>
-                <View style={{ width: 70, alignItems: 'center' }}>
-                  {pts.length >= 2 ? <Sparkline pts={pts} /> : <Text style={{ color: c.mute }}>–</Text>}
-                </View>
-                <Text style={{ width: 66, textAlign: 'right', color: pts.length ? c.ink : c.mute, fontSize: 15, ...tabular }}>
-                  {pts.length ? `${fmt(pts[pts.length - 1])} ${e.unit}` : '–'}
-                </Text>
-              </View>
-            );
-          })}
-        </Section>
-
-        <Section title="Plan start">
-          <StartPicker start={state.start} onChange={setStart} />
-        </Section>
+        {on.lifting ? <LiftingSection first /> : null}
+        {on.cardio ? <CardioSection first={!on.lifting} /> : null}
+        {on.food ? <CaloriesSection first={!on.lifting && !on.cardio} /> : null}
       </ScrollView>
     </SafeAreaView>
   );
 }
 
-function CaloriesSection({ goal, onGoal }: { goal: number | null; onGoal: (v: number | null) => void }) {
+function LiftingSection({ first }: { first?: boolean }) {
   const c = useColors();
   const { state, today } = useTracker();
+  const { byId } = useLibrary();
+  const L = state.lifting;
+  const done = L.workouts.filter((w) => w.done);
+  const last28 = done.filter((w) => w.date > addDays(today, -28)).length;
+  const total = done.reduce((t, w) => t + volume(w), 0);
+  // Exercises you've done, in routine order first, then the rest.
+  const logged = new Set(done.flatMap((w) => w.exercises.filter((x) => x.sets.some((s) => s.done)).map((x) => x.exId)));
+  const ids = [...new Set([...L.routines.flatMap((r) => r.items.map((i) => i.exId)), ...logged])].filter((id) => logged.has(id));
+
+  return (
+    <Section title="Lifting" first={first}>
+      <StatGrid columns={3}>
+        <StatTile value={String(done.length)} label="Workouts" />
+        <StatTile value={String(last28)} label="In the last 4 weeks" />
+        <StatTile value={total >= 1e5 ? `${fmt(+(total / 1000).toFixed(0))}k` : fmtInt(total)} label="Total lb lifted" />
+      </StatGrid>
+      <H2>Your lifts</H2>
+      <Mute style={{ marginBottom: space.sm }}>Heaviest set each workout, and the weight for next time.</Mute>
+      {ids.length ? null : <Mute>Finish a workout to see this.</Mute>}
+      {ids.map((id, i) => {
+        const ex = byId(id);
+        const pts = weightHistory(L, id).map((p) => p.w);
+        const it = L.routines.flatMap((r) => r.items).find((x) => x.exId === id);
+        const plan = it ? { ...it, inc: it.inc ?? (ex ? defaultIncrement(ex) : 5) } : { sets: 3, repMin: 8, repMax: 12, inc: ex ? defaultIncrement(ex) : 5 };
+        const t = nextTarget(id, L.workouts, plan);
+        const name = ex?.name ?? done.flatMap((w) => w.exercises).find((x) => x.exId === id)?.name ?? 'Exercise';
+        const u = ex?.unit === 'plates' ? 'pl' : 'lb';
+        return (
+          <View key={id} style={[st.srow, i > 0 && { borderTopWidth: 1, borderTopColor: c.line }]}>
+            <Text style={{ flex: 1, fontWeight: '600', fontSize: 15, color: c.ink }}>{name}</Text>
+            <View style={{ width: 70, alignItems: 'center' }}>{pts.length >= 2 ? <Sparkline pts={pts} /> : <Text style={{ color: c.mute }}>–</Text>}</View>
+            <Text style={{ width: 84, textAlign: 'right', color: t.weight != null ? (t.reason === 'up' ? c.ok : c.ink) : c.mute, fontSize: 15, ...tabular }}>
+              {t.weight != null ? `${fmtW(t.weight)} ${u}${t.reason === 'up' ? ' ↑' : ''}` : '–'}
+            </Text>
+          </View>
+        );
+      })}
+    </Section>
+  );
+}
+
+function CardioSection({ first }: { first?: boolean }) {
+  const { state, today } = useTracker();
+  const cardio = state.cardio;
+  const s = cardioStats(cardio, today);
+  const { long, week } = planWeekRows(cardio);
+  const weeks = weeklyTotals(cardio, today, 8);
+  return (
+    <Section title="Cardio" first={first}>
+      <StatGrid columns={3}>
+        <StatTile value={String(s.sessions)} label="Sessions" />
+        <StatTile value={fmt(+s.miles.toFixed(1))} label="Miles" />
+        <StatTile value={s.secs ? fmtTime(s.secs) : '–'} label="Time" />
+        <StatTile value={s.longestRun ? fmt(s.longestRun) : '–'} label="Longest run (mi)" />
+        <StatTile value={s.paceMiles > 0 ? paceText(s.paceMiles, s.paceSecs).replace(' /mi', '') : '–'} label="Average run pace" />
+        {cardio.plan ? <StatTile value={String(s.planDone)} sub={`/${s.planDue}`} label={s.planSkipped ? `Plan runs done, ${s.planSkipped} skipped` : 'Plan runs done'} /> : <StatTile value="–" label="No plan" />}
+      </StatGrid>
+
+      <H2>Last 8 weeks</H2>
+      <PlanBars rows={weeks.map((w) => ({ label: weekLabel(w.start).replace(/^(\w{3}) /, '$1 '), planned: 0, actual: w.miles }))} label="Miles per week, last 8 weeks" />
+
+      {cardio.plan ? (
+        <>
+          <H2 style={{ marginTop: space.xl }}>Half-marathon plan: long run</H2>
+          <PlanBars rows={long} label="Long run miles by plan week" />
+          <H2 style={{ marginTop: space.xl }}>Plan: weekly running miles</H2>
+          <PlanBars rows={week} label="Running miles by plan week" />
+          <ChartKey items={['planned', 'logged']} />
+        </>
+      ) : null}
+    </Section>
+  );
+}
+
+function CaloriesSection({ first }: { first?: boolean }) {
+  const c = useColors();
+  const { state, today } = useTracker();
+  const goal = state.goal;
   const sum = calorieSummary(state);
   const n = sum.days;
   const col = (v: number) => (v >= 0 ? c.ok : c.bad);
@@ -124,7 +139,7 @@ function CaloriesSection({ goal, onGoal }: { goal: number | null; onGoal: (v: nu
   const weeks = byWeek(state);
 
   return (
-    <Section title="Calories">
+    <Section title="Calories" first={first} note={goal ? `Daily deficit goal: ${fmtInt(goal)} kcal (change it on the You tab).` : 'Set a daily deficit goal on the You tab.'}>
       <StatGrid>
         <StatTile value={n ? sgn(sum.avg) : '–'} color={n ? col(sum.avg) : undefined} label="Avg daily deficit (kcal, − = surplus)" />
         <StatTile value={n ? sgn(sum.total) : '–'} color={n ? col(sum.total) : undefined} label="Total deficit so far (kcal)" />
@@ -132,23 +147,14 @@ function CaloriesSection({ goal, onGoal }: { goal: number | null; onGoal: (v: nu
         <StatTile value={String(sum.hit)} sub={`/${n}`} label={goal ? 'Days at or above goal' : 'Days in a deficit'} />
       </StatGrid>
 
-      <View style={s.goal}>
-        <View style={{ flex: 1 }}>
-          <Text style={{ color: c.ink, fontSize: 15, fontWeight: '600' }}>Daily deficit goal</Text>
-          <Mute style={{ fontSize: 13 }}>Optional</Mute>
-        </View>
-        <CommitNumberField value={goal} onCommit={onGoal} accessibilityLabel="Daily deficit goal" style={{ width: 104, textAlign: 'right' }} />
-        <Text style={{ color: c.mute, fontSize: 14 }}>kcal</Text>
-      </View>
-
-      <H2 style={{ marginTop: space.xl }}>Daily deficit</H2>
+      <H2 style={{ marginTop: space.md }}>Daily deficit, last 3 weeks</H2>
       {n ? (
         <>
           <DeficitBars vals={dailyWindow(state, today)} goal={goal} />
           <ChartKey items={goal ? ['deficit', 'surplus', 'goal'] : ['deficit', 'surplus']} />
         </>
       ) : (
-        <Mute>Log calories in and out on any day to see this.</Mute>
+        <Mute>Enter calories in and burned on the Food tab to see this.</Mute>
       )}
 
       <H2 style={{ marginTop: space.xl }}>Cumulative deficit</H2>
@@ -157,20 +163,20 @@ function CaloriesSection({ goal, onGoal }: { goal: number | null; onGoal: (v: nu
       <H2 style={{ marginTop: space.xl }}>By week</H2>
       {weeks.length ? (
         <View>
-          <View style={[s.krow, { borderBottomColor: c.line }]}>
-            {['Week', 'Days', 'Avg in', 'Avg out', 'Avg deficit'].map((h, i) => (
-              <Text key={h} style={[s.kcell, i === 0 && s.kfirst, { color: c.mute, fontSize: 12.5, fontWeight: '600' }]}>
+          <View style={[st.krow, { borderBottomColor: c.line }]}>
+            {['Week of', 'Days', 'Avg in', 'Avg out', 'Avg deficit'].map((h, i) => (
+              <Text key={h} style={[st.kcell, i === 0 && st.kfirst, { color: c.mute, fontSize: 12.5, fontWeight: '600' }]}>
                 {h}
               </Text>
             ))}
           </View>
           {weeks.map((w) => (
-            <View key={w.week} style={[s.krow, { borderBottomColor: c.line }]}>
-              <Text style={[s.kcell, s.kfirst, { color: c.ink, fontWeight: '700' }]}>W{w.week}</Text>
-              <Text style={[s.kcell, { color: c.ink }]}>{w.days}/7</Text>
-              <Text style={[s.kcell, { color: c.ink }]}>{fmtInt(w.avgIn)}</Text>
-              <Text style={[s.kcell, { color: c.ink }]}>{fmtInt(w.avgOut)}</Text>
-              <Text style={[s.kcell, { color: col(w.avgNet), fontWeight: '700' }]}>{sgn(w.avgNet)}</Text>
+            <View key={w.start} style={[st.krow, { borderBottomColor: c.line }]}>
+              <Text style={[st.kcell, st.kfirst, { color: c.ink, fontWeight: '700' }]}>{weekLabel(w.start)}</Text>
+              <Text style={[st.kcell, { color: c.ink }]}>{w.days}/7</Text>
+              <Text style={[st.kcell, { color: c.ink }]}>{fmtInt(w.avgIn)}</Text>
+              <Text style={[st.kcell, { color: c.ink }]}>{fmtInt(w.avgOut)}</Text>
+              <Text style={[st.kcell, { color: col(w.avgNet), fontWeight: '700' }]}>{sgn(w.avgNet)}</Text>
             </View>
           ))}
         </View>
@@ -181,10 +187,9 @@ function CaloriesSection({ goal, onGoal }: { goal: number | null; onGoal: (v: nu
   );
 }
 
-const s = StyleSheet.create({
+const st = StyleSheet.create({
   srow: { flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingVertical: space.md - 2 },
-  goal: { flexDirection: 'row', alignItems: 'center', gap: space.sm, marginTop: space.sm },
   krow: { flexDirection: 'row', borderBottomWidth: 1, paddingVertical: space.sm + 1 },
   kcell: { flex: 1, textAlign: 'right', fontSize: 15, paddingHorizontal: 2, ...tabular },
-  kfirst: { textAlign: 'left', flex: 0.8 },
+  kfirst: { textAlign: 'left', flex: 1.1 },
 });
