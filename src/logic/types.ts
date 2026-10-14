@@ -1,48 +1,49 @@
-import type { DayType } from './config';
+import type { CardioData } from './cardio';
 import type { DietSettings } from './diet';
+import type { LiftingData } from './lifting';
 import type { Food, FoodEntry } from './nutrition';
 import type { Profile } from './profile';
 
-export interface LiftEntry {
-  w: number;
-  done: boolean;
+/** Which parts of the app someone uses. Each one is a tab. */
+export interface Sections {
+  food: boolean;
+  cardio: boolean;
+  lifting: boolean;
 }
 
-/** One day's log. Only submitted logs are persisted. */
-export interface DayLog {
-  submitted?: boolean;
-  /** Workout skipped on purpose. Calories and notes can still be logged. */
-  skipped?: boolean;
-  /** The workout done instead of the scheduled one (or instead of resting). */
-  swap?: DayType;
-  /** The other day whose workout was moved here. */
-  makeupFor?: string;
-  lifts?: Record<string, LiftEntry>;
-  miles?: number;
-  secs?: number;
+export interface Settings {
+  name: string;
+  sections: Sections;
+  /** Finished first-time setup. */
+  onboarded: boolean;
+}
+
+/** Calories typed for a day (outside the food log), calories burned, and a note. */
+export interface DayInfo {
   cin?: number;
   cout?: number;
   note?: string;
 }
 
+/** Everything one person tracks. Saved on the device and, when signed in, synced to their account. */
 export interface TrackerState {
-  start: string;
+  v: 2;
+  /** Last change, ms since 1970. Sync keeps whichever copy is newer. */
+  updatedAt: number;
+  settings: Settings;
+  /** Optional daily deficit goal (kcal). */
   goal: number | null;
-  base: Record<string, number>;
-  logs: Record<string, DayLog>;
+  days: Record<string, DayInfo>;
   /**
    * Foods saved on the device: ones the user created (`custom`), and Open Food Facts products that were
    * logged (so they work offline and show in recents). The built-in USDA list is not stored.
    */
   foods: Food[];
-  /** Food log by date. Saved as soon as it changes (no Submit step). */
+  /** Food log by date. */
   meals: Record<string, FoodEntry[]>;
   diet: DietSettings;
   /** Body stats for suggested targets, or null until entered. */
   profile: Profile | null;
-  /**
-   * Food log on: food logged on the Food tab counts as calories in, on top of any number typed on the day.
-   * Off: the Food tab is hidden and calories in is only the typed number. Logged food is kept either way.
-   */
-  foodLog: boolean;
+  cardio: CardioData;
+  lifting: LiftingData;
 }

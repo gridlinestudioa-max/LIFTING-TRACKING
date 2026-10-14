@@ -17,17 +17,20 @@ import {
   hasRules,
   minsSinceLastMeal,
   shortDayLabel,
+  cinFor,
   entryTotals,
+  foodKcal,
+  kcalInfo,
   type DayEval,
   type FoodEntry,
   type Verdict,
 } from '@/logic';
-import { Header, Mute } from '@/ui/components';
+import { CommitNumberField, Field, Header, Mute } from '@/ui/components';
 import { AddFoodSheet, NutritionSummary } from '@/ui/food/AddFoodSheet';
 import { DietSheet } from '@/ui/food/DietSheet';
 import { Button, Dot, LinkButton, Notice, Pill, useClock } from '@/ui/food/kit';
 import { useTracker } from '@/ui/store';
-import { fonts, radius, space, tabular, toneColor, useColors } from '@/ui/theme';
+import { fonts, radius, space, tabular, toneBg, toneColor, useColors } from '@/ui/theme';
 
 const VERDICT: Record<Verdict, { text: string; tone: 'ok' | 'warn' | 'bad' | 'mute' }> = {
   none: { text: 'Nothing logged yet', tone: 'mute' },
@@ -38,7 +41,7 @@ const VERDICT: Record<Verdict, { text: string; tone: 'ok' | 'warn' | 'bad' | 'mu
 
 export default function FoodScreen() {
   const c = useColors();
-  const { state, today } = useTracker();
+  const { state, today, setDay: saveDay } = useTracker();
   const now = useClock();
   const [day, setDay] = useState(today);
   // Add/edit sheet. `n` remounts it fresh on every open.
@@ -47,8 +50,8 @@ export default function FoodScreen() {
 
   const isToday = day === today;
   const entries = byTime(state.meals[day] ?? []);
-  // Calories typed on the Calendar for this day, outside the food log.
-  const typed = state.logs[day]?.cin ?? null;
+  // Calories typed for this day, outside the food log (below).
+  const typed = state.days[day]?.cin ?? null;
   const diet = activeDiet(state.diet, state.profile);
   const ev = evaluateDay(diet, entries, day < today, typed ?? 0);
   const openSheet = (editing: FoodEntry | null) => setSheet((s) => ({ n: s.n + 1, open: true, editing }));
@@ -79,7 +82,7 @@ export default function FoodScreen() {
           <NutritionSummary t={ev.totals} />
           {typed ? (
             <Mute style={{ marginTop: space.sm }}>
-              {`Plus ${fmtInt(typed)} kcal entered on the Calendar = ${fmtInt(ev.totals.kcal + typed)} kcal in.`}
+              {`Plus ${fmtInt(typed)} kcal entered below = ${fmtInt(ev.totals.kcal + typed)} kcal in.`}
             </Mute>
           ) : null}
           <Button label="Add food" primary onPress={() => openSheet(null)} style={{ marginTop: space.lg }} />
@@ -91,11 +94,11 @@ export default function FoodScreen() {
               ))}
             </View>
           ) : (
-            <Mute style={{ marginTop: space.md }}>
-              Nothing logged for this day. Calories you log here count as calories in on the Calendar.
-            </Mute>
+            <Mute style={{ marginTop: space.md }}>Nothing logged for this day.</Mute>
           )}
         </View>
+
+        <InAndOut day={day} onSave={saveDay} />
       </ScrollView>
 
       <AddFoodSheet
@@ -109,6 +112,61 @@ export default function FoodScreen() {
       />
       <DietSheet visible={dietOpen} onClose={() => setDietOpen(false)} />
     </SafeAreaView>
+  );
+}
+
+/** Calories outside the food log, calories burned, the deficit, and a note for the day. */
+function InAndOut({ day, onSave }: { day: string; onSave: (s: string, patch: { cin?: number; cout?: number; note?: string }) => void }) {
+  const c = useColors();
+  const { state } = useTracker();
+  const info = state.days[day] ?? {};
+  const food = foodKcal(state, day);
+  const k = kcalInfo(cinFor(state, day), info.cout, state.goal);
+  return (
+    <View style={[st.section, { borderTopColor: c.line }]}>
+      <Text style={[st.h, { color: c.ink }]}>In and out</Text>
+      <View style={[st.pair, { marginTop: space.sm }]}>
+        <View style={{ flex: 1, gap: 6 }}>
+          <Text style={[st.lbl, { color: c.mute }]}>{food != null ? 'Other calories in' : 'Calories in'}</Text>
+          <CommitNumberField
+            value={info.cin ?? null}
+            onCommit={(v) => onSave(day, { cin: v ?? undefined })}
+            placeholder="0"
+            accessibilityLabel={food != null ? 'Other calories in, not in the food log' : 'Calories in'}
+          />
+        </View>
+        <View style={{ flex: 1, gap: 6 }}>
+          <Text style={[st.lbl, { color: c.mute }]}>Burned (total)</Text>
+          <CommitNumberField value={info.cout ?? null} onCommit={(v) => onSave(day, { cout: v ?? undefined })} placeholder="0" accessibilityLabel="Calories burned" />
+        </View>
+      </View>
+      <Mute style={{ fontSize: 13, marginTop: space.xs }}>
+        {food != null ? 'For anything not in the log above. ' : ''}Burned = your watch or Health app total for the whole day.
+      </Mute>
+      <View style={[st.result, { backgroundColor: toneBg(c, k.tone) }]} accessibilityLiveRegion="polite">
+        <Text style={k.tone === 'mute' ? { color: c.mute, fontSize: 14 } : { color: toneColor(c, k.tone), fontFamily: fonts.semi, fontSize: 22, lineHeight: 26 }}>
+          {k.text}
+        </Text>
+      </View>
+      <Text style={[st.lbl, { color: c.mute, marginTop: space.lg, marginBottom: 6 }]}>Notes for the day</Text>
+      <NoteField key={day} value={info.note ?? ''} onCommit={(note) => onSave(day, { note: note || undefined })} />
+    </View>
+  );
+}
+
+/** A note that saves when you leave the field. */
+function NoteField({ value, onCommit }: { value: string; onCommit: (v: string) => void }) {
+  const [text, setText] = useState(value);
+  return (
+    <Field
+      value={text}
+      onChangeText={setText}
+      onEndEditing={() => text !== value && onCommit(text.trim())}
+      placeholder="How it went, anything to remember"
+      multiline
+      accessibilityLabel="Notes for the day"
+      style={{ minHeight: 76, textAlignVertical: 'top', fontSize: 16 }}
+    />
   );
 }
 
@@ -231,5 +289,8 @@ const st = StyleSheet.create({
   section: { marginTop: space.xl, paddingTop: space.lg, borderTopWidth: 1 },
   sectionHead: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' },
   h: { fontFamily: fonts.display, fontSize: 30, lineHeight: 34 },
+  pair: { flexDirection: 'row', gap: space.md },
+  lbl: { fontSize: 13, fontWeight: '600' },
+  result: { marginTop: space.md, borderRadius: radius.md - 2, paddingVertical: space.md, paddingHorizontal: space.md },
   entry: { flexDirection: 'row', alignItems: 'flex-start', gap: space.sm, paddingVertical: space.md },
 });

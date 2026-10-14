@@ -43,3 +43,9 @@ export function paceText(miles: number | null | undefined, secs: number | null |
   }
   return `${m}:${pad(s)} /mi`;
 }
+
+/** Reformat a time field when editing ends ("58" -> "58:00"). */
+export function normalizeTimeInput(v: string): string {
+  const secs = parseTime(v);
+  return secs != null && secs > 0 ? fmtTime(secs) : v;
+}

@@ -1,7 +1,7 @@
 import { Platform, Text, View } from 'react-native';
 import Svg, { Circle, Line, Polyline, Rect, Text as SvgText } from 'react-native-svg';
 
-import { MONTHS, dayDiff, fmt, sgn, toD, type BarRow } from '@/logic';
+import { MONTHS, dayDiff, fmt, sgn, toD, type WeekBar as BarRow } from '@/logic';
 
 import { fonts, space, useColors } from './theme';
 

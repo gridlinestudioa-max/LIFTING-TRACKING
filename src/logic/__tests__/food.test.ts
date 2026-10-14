@@ -22,9 +22,7 @@ import {
   quickEntry,
   recentFoodIds,
   searchFoods,
-  submitError,
   sumTotals,
-  planFor,
   withStyle,
   type DietSettings,
   type Food,
@@ -261,29 +259,28 @@ describe('food log and calories in', () => {
 
   it('calories in = typed on the day + food log', () => {
     const st = defaultState();
-    st.logs[S] = { submitted: true, cout: 2800 };
+    st.days[S] = { cout: 2800 };
     expect(cinFor(st, S)).toBeNull();
-    st.logs[S].cin = 500;
+    st.days[S].cin = 500;
     expect(cinFor(st, S)).toBe(500);
     st.meals[S] = [eat('chicken', at(12), 2), quickEntry('Lunch out', { kcal: 900, protein: 0, carbs: 0, fat: 0 }, at(13), 'q')];
     expect(cinFor(st, S)).toBe(500 + 370 + 900);
-    delete st.logs[S].cin;
+    delete st.days[S].cin;
     expect(cinFor(st, S)).toBe(1270);
     expect(calorieSummary(st).total).toBe(2800 - 1270);
   });
 
-  it('food log off: only the typed number counts, logged food is kept', () => {
+  it('food section off: only the typed number counts, logged food is kept', () => {
     const st = defaultState();
-    st.logs[S] = { submitted: true, cin: 2000, cout: 2800 };
+    st.days[S] = { cin: 2000, cout: 2800 };
     st.meals[S] = [eat('chicken', at(12), 2)];
-    st.foodLog = false;
+    st.settings.sections.food = false;
     expect(cinFor(st, S)).toBe(2000);
     expect(st.meals[S]).toHaveLength(1);
-    // A day with only food logged has no calories in while the food log is off.
-    delete st.logs[S].cin;
+    delete st.days[S].cin;
     expect(cinFor(st, S)).toBeNull();
-    expect(normalize(JSON.parse(JSON.stringify(st))).foodLog).toBe(false);
-    expect(normalize({}).foodLog).toBe(true);
+    expect(normalize(JSON.parse(JSON.stringify(st))).settings.sections.food).toBe(false);
+    expect(normalize({}).settings.sections.food).toBe(true);
   });
 
   it('typed calories count toward the diet calorie limit', () => {
@@ -293,13 +290,6 @@ describe('food log and calories in', () => {
     expect(evaluateDay(d, entries, false, 700).verdict).toBe('off');
     expect(evaluateDay(d, [], false, 1200).checks[0].tone).toBe('bad');
     expect(previewEntry(d, [], eat('chicken', at(12), 2), null, 700)!.tone).toBe('bad');
-  });
-
-  it('food logged counts as calories when submitting a rest day', () => {
-    const st = defaultState();
-    const rest = planFor(st.start, '2026-10-10')!;
-    expect(submitError(rest, {})).toMatch(/calories/);
-    expect(submitError(rest, {}, true)).toBeNull();
   });
 
   it('saves and restores foods, the log and the diet', () => {
@@ -315,6 +305,7 @@ describe('food log and calories in', () => {
 
   it('old saved data without food loads with empty food fields', () => {
     const back = normalize({ start: '2026-10-05', logs: {} });
+    expect(back.v).toBe(2);
     expect(back.foods).toEqual([]);
     expect(back.meals).toEqual({});
     expect(back.diet).toEqual(DEFAULT_DIET);

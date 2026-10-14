@@ -96,7 +96,7 @@ export function AddFoodSheet({
   const all = useMemo(() => [...state.foods, ...(usda.foods ?? [])], [state.foods, usda.foods]);
   const dayEntries = state.meals[day] ?? [];
   const others = editing ? dayEntries.filter((e) => e.id !== editing.id) : dayEntries;
-  const extra = state.logs[day]?.cin ?? 0;
+  const extra = state.days[day]?.cin ?? 0;
   const lastAt = dayEntries.length ? Math.max(...dayEntries.map((e) => e.at)) : null;
   const defaultAt = editing ? editing.at : isToday ? now : (lastAt ?? 12 * 60);
 

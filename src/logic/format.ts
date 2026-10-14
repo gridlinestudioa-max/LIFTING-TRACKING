@@ -14,3 +14,9 @@ export function fmtInt(v: number): string {
 export function sgn(v: number): string {
   return (v < 0 && Math.round(v) !== 0 ? '−' : '') + fmtInt(Math.abs(v));
 }
+
+/** Parse a non-negative number field; null when empty or invalid. */
+export function num(v: string): number | null {
+  const n = parseFloat(v);
+  return Number.isFinite(n) && n >= 0 ? n : null;
+}

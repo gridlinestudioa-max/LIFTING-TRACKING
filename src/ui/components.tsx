@@ -1,9 +1,9 @@
 import { createContext, useContext, useState, type ReactNode } from 'react';
 import { Platform, StyleSheet, Text, TextInput, View, type StyleProp, type TextInputProps, type TextStyle, type ViewStyle } from 'react-native';
 
-import { LONG, PLAN_WEEKS, fmt, headline, planFor } from '@/logic';
+import { PLAN_WEEKS } from '@/logic';
 
-import { useTracker } from './store';
+import { useTracker, type SyncStatus } from './store';
 import { fonts, radius, space, tabular, useColors } from './theme';
 
 /** A raised panel. Used sparingly: the day detail and nothing that can sit open on the page. */
@@ -45,19 +45,19 @@ export function Section({ title, note, first, children }: { title: string; note?
 }
 
 /** Twelve segments, one per plan week. Past weeks are filled, this week is taller and solid. */
-function WeekBar({ current }: { current: number }) {
+export function WeekBar({ current, weeks = PLAN_WEEKS }: { current: number; weeks?: number }) {
   const c = useColors();
-  const label = current < 0 ? 'Plan has not started' : current >= PLAN_WEEKS ? 'Plan complete' : `Week ${current + 1} of ${PLAN_WEEKS}`;
+  const label = current < 0 ? 'Plan has not started' : current >= weeks ? 'Plan complete' : `Week ${current + 1} of ${weeks}`;
   return (
     <View accessible accessibilityLabel={label} style={styles.weekbar}>
-      {Array.from({ length: PLAN_WEEKS }, (_, i) => (
+      {Array.from({ length: weeks }, (_, i) => (
         <View
           key={i}
           style={{
             flex: 1,
             height: i === current ? 10 : 6,
             borderRadius: 3,
-            backgroundColor: i < current ? c.ink : i === current ? c.ink : c.line,
+            backgroundColor: i <= current ? c.ink : c.line,
             opacity: i < current ? 0.35 : 1,
           }}
         />
@@ -66,29 +66,24 @@ function WeekBar({ current }: { current: number }) {
   );
 }
 
-/** Screen header: title, plan position, save status. */
-export function Header({ title = 'Training' }: { title?: string }) {
+const SYNC_TEXT: Record<SyncStatus, string> = {
+  device: 'Saved on this device',
+  syncing: 'Saving…',
+  synced: 'Saved to your account',
+  offline: 'Offline: saved on this device',
+};
+
+/** Screen header: title, where data is saved, and anything extra below. */
+export function Header({ title, children }: { title: string; children?: ReactNode }) {
   const c = useColors();
-  const { state, today, loaded } = useTracker();
-  const p = planFor(state.start, today);
-  const current = p ? p.w : today < state.start ? -1 : PLAN_WEEKS;
+  const { loaded, sync } = useTracker();
   return (
     <View style={{ marginBottom: space.xl }}>
       <View style={styles.titlerow}>
         <Text style={[styles.h1, { color: c.ink }]}>{title}</Text>
-        <Text style={{ color: c.mute, fontSize: 12 }}>{loaded ? 'Saved on this device' : 'Loading…'}</Text>
+        <Text style={{ color: sync === 'offline' ? c.warn : c.mute, fontSize: 12 }}>{loaded ? SYNC_TEXT[sync] : 'Loading…'}</Text>
       </View>
-      <WeekBar current={current} />
-      {p ? (
-        <View style={styles.weekline}>
-          <Text style={{ color: c.ink, fontSize: 15, fontWeight: '700' }}>
-            Week {p.w + 1} of {PLAN_WEEKS}
-          </Text>
-          <Text style={{ color: c.mute, fontSize: 14 }}>Long run this week: {fmt(LONG[p.w])} mi</Text>
-        </View>
-      ) : (
-        <Mute style={{ marginTop: space.sm }}>{headline(state, today)}</Mute>
-      )}
+      {children}
     </View>
   );
 }

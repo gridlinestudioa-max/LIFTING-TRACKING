@@ -1,25 +1,35 @@
 # Training Tracker
 
-A 12-week phone app for training for a half marathon while lifting push/pull/legs, with a daily calories in vs out log.
-It's built with Expo (React Native) + TypeScript from the web prototype in [`docs/reference-prototype.html`](docs/reference-prototype.html).
-The full spec is in [`docs/HANDOFF.md`](docs/HANDOFF.md).
+A phone app (and website) for tracking **food**, **cardio** and **lifting**. People sign in, set up a profile, and pick which of the three they use; each is a tab.
 
-Data is stored only on the phone (AsyncStorage, key `mm_tracker_v1`). There's no account and no cloud sync.
+- **Food:** a food log with about 12,900 built-in USDA foods plus branded foods from Open Food Facts, calories in and out, diets (fasting, keto, vegan, ...) and suggested daily targets from body stats.
+- **Cardio:** log any run, walk, ride, swim or row. An optional 12-week half-marathon plan shows planned runs and whether each was done.
+- **Lifting:** routines built from a library of 700+ exercises on a weekly schedule, or an unplanned workout any day. Each exercise has sets × a rep range; the app raises the weight when you hit the top of the range on every set (double progression).
+
+Built with Expo (React Native) + TypeScript. The original 12-week prototype is in [`docs/`](docs/).
+
+## Accounts and where data lives
+
+With accounts switched on (see [Set up accounts](#set-up-accounts-supabase)), people sign up with email and password. Their data is saved on the device and synced to their account through Supabase, so it's the same on every phone and browser they sign in on. The newer copy wins when two devices disagree. Without an account (or before accounts are set up), the app works on that device only.
+
+Data saved by the first version of the app (key `mm_tracker_v1`) is brought forward automatically the first time the new version opens: runs, calories, notes, lift days and food all carry over, and push/pull/legs become three routines. The original is kept on the device as `mm_tracker_v1_backup`.
 
 ## Layout
 
 | Path | What |
 |---|---|
-| `src/logic/config.ts` | **Plan constants**: start date, long runs, weekly layout, tempo/easy mile rules, lifts. Edit the plan here. |
-| `src/logic/` | Pure TypeScript logic with no React: plan mapping, target weights, day status, time/pace, calories, progress stats, form/submit rules. |
-| `src/logic/__tests__/` | Unit tests (covers the HANDOFF test checklist). |
-| `src/logic/nutrition.ts`, `diet.ts` | Food log, portions and totals, and diets: fasting windows, presets (keto, vegan, ...) and the on-track checks. |
-| `src/logic/profile.ts` | Body stats and suggested daily targets (Mifflin-St Jeor calories; protein, carbs, sugar and fat by diet). Sources are listed at the top of the file. |
-| `src/logic/usda.ts`, `src/logic/data/usda-foods.json` | Built-in USDA food list (about 12,900 foods), loaded the first time food search opens. |
-| `src/logic/openfoodfacts.ts` | Online search and barcode lookup for branded foods on Open Food Facts. |
-| `scripts/build-usda-foods.py` | Rebuilds `usda-foods.json` from USDA downloads (see below). |
-| `src/app/` | Screens (expo-router): `index.tsx` = Calendar tab, `food.tsx` = Food tab, `progress.tsx` = Progress tab. |
-| `src/ui/` | UI components, theme (light/dark follows the system), and the on-device store. `src/ui/food/` = Food tab sheets. |
+| `src/logic/` | Pure TypeScript, no React. Everything below is unit-tested in `src/logic/__tests__/`. |
+| `src/logic/types.ts`, `state.ts`, `migrate.ts` | The saved data (one document per person), loading it safely, and bringing first-version data forward. |
+| `src/logic/cardio.ts`, `config.ts` | Cardio sessions, the half-marathon plan (runs and statuses), cardio stats. Plan constants are in `config.ts`. |
+| `src/logic/lifting.ts`, `exercises.ts`, `templates.ts` | Routines, schedule, workouts, double progression; the exercise library; starter routines. |
+| `src/logic/nutrition.ts`, `diet.ts`, `profile.ts`, `calories.ts` | Food log and totals, diets and on-track checks, body stats and suggested targets, calories in/out. |
+| `src/logic/usda.ts`, `openfoodfacts.ts` | The built-in USDA food list, and online search on Open Food Facts. |
+| `src/logic/sync.ts` | Which copy wins when the device and the account are compared. |
+| `src/logic/data/` | Generated data files: `usda-foods.json`, `exercises.json` (loaded only when needed). |
+| `scripts/` | Rebuild the data files from their sources (see below). |
+| `src/app/` | Screens (expo-router): `food`, `cardio`, `lifting`, `progress`, `you`. `_layout.tsx` = sign-in, setup, and the tabs. |
+| `src/ui/` | Components, theme (light/dark follows the system), the store (`store.tsx`: saving and syncing), accounts (`account.tsx`, `cloud.ts`), sign-in and setup screens. `food/`, `cardio/`, `lifting/` = each tab's sheets. |
+| `supabase/schema.sql` | The database table and access rules for accounts. |
 
 ## Develop
 
@@ -51,7 +61,7 @@ On your phone, open the site and add it to your Home Screen so it opens full-scr
 - **iPhone (Safari):** Share button → *Add to Home Screen*.
 - **Android (Chrome):** ⋮ menu → *Add to Home screen* (or *Install app*).
 
-Your data is saved in that browser on that phone only. Always open it the same way (the Home Screen icon), and don't clear website data for the site, or you'll lose your logs.
+Signed in, your data is saved to your account. Without an account it's saved in that browser on that phone only: always open it the same way (the Home Screen icon), and don't clear website data for the site.
 
 To build the website locally: `npx expo export --platform web`, then serve `dist/`.
 
@@ -83,11 +93,19 @@ Or use `--profile production` and then `npx eas-cli@latest submit --platform ios
 
 Bundle ID / package name is `com.trainingtracker.app` (in `app.json`). Change it before your first build if you want your own.
 
-## Differences from the prototype
+## Set up accounts (Supabase)
 
-- Cloud sync via `window.claude` is dropped (per the handoff). Data stays on the device.
-- If you open the app more than 3 weeks after race day, the daily deficit chart shows the plan's last 3 weeks. The prototype showed an empty chart in that case.
-- The day detail sits below the calendar grid. Tapping a day scrolls it into view.
+Accounts use [Supabase](https://supabase.com) (free tier is enough). Until this is done, the sign-in screen offers "Use without an account" only.
+
+1. Create a project at supabase.com (any name and region). Wait for it to finish setting up.
+2. **SQL Editor** → New query → paste the contents of [`supabase/schema.sql`](supabase/schema.sql) → Run. This creates the table and the rules that let each person read and write only their own data.
+3. **Project Settings → API** (or **Connect**): copy the **Project URL** and the **anon / public** key.
+4. Put them where the app is built:
+   - **Vercel** (the website): Project → Settings → Environment Variables → add `EXPO_PUBLIC_SUPABASE_URL` and `EXPO_PUBLIC_SUPABASE_ANON_KEY`, then redeploy.
+   - **Locally / EAS builds:** copy `.env.example` to `.env` and fill in the two values.
+5. Optional: **Authentication → Sign In / Providers → Email**. "Confirm email" is on by default (people click a link before their first sign-in); turn it off for instant sign-up. Under **URL Configuration**, set the Site URL to the website's address so the confirmation and password-reset links open it.
+
+The anon key is safe to ship in the app; the access rules in `schema.sql` are what protect each person's data.
 
 ## Food data
 
@@ -99,5 +117,16 @@ To rebuild the USDA list, download the FNDDS (survey) and SR Legacy JSON zips fr
 
 ```bash
 python3 scripts/build-usda-foods.py surveyDownload.json FoodData_Central_sr_legacy_food_json_2018-04.json
+```
+
+## Exercise data
+
+The lifting library is [free-exercise-db](https://github.com/yuhonas/free-exercise-db) (public domain, The Unlicense): about 740 lifting exercises with muscles, equipment, instructions and pictures (pictures load from GitHub when you open an exercise). Stretching and cardio entries are left out. People can add their own exercises too.
+
+To rebuild it:
+
+```bash
+curl -o exercises.json https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/dist/exercises.json
+python3 scripts/build-exercises.py exercises.json
 ```
 
