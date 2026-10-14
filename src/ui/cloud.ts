@@ -7,8 +7,9 @@ import { AppState, Platform } from 'react-native';
 import type { TrackerState } from '@/logic';
 
 // Set in .env or Vercel (see README). The publishable/anon key is public by design; Row Level Security protects the data.
-const URL = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
-const KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '';
+// Only the project address is used, so a URL copied with a path (like ".../rest/v1/") still works.
+const URL = (process.env.EXPO_PUBLIC_SUPABASE_URL ?? '').trim().replace(/^(https?:\/\/[^/]+).*$/, '$1');
+const KEY = (process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '').trim();
 
 /** Accounts are switched on (the Supabase project is set). Without it the app works on this device only. */
 export const cloudConfigured = !!URL && !!KEY;
