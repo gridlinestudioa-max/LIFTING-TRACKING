@@ -1,26 +1,35 @@
-import { useMemo, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import {
   FOOD_TAGS,
-  STARTER_FOODS,
+  GRAMS,
+  SOURCE_LABEL,
+  OffError,
   entryFromFood,
   entryTotals,
   fmt,
   fmtClock,
   fmtInt,
   foodError,
+  isBarcode,
+  loadUsdaFoods,
   macroKcal,
   newId,
+  offByBarcode,
   parseClock,
+  portionText,
+  portionsFor,
   previewEntry,
   quickEntry,
   recentFoodIds,
   searchFoods,
+  searchOff,
   type Food,
   type FoodEntry,
   type FoodTag,
   type Nutrients,
+  type Portion,
   type Totals,
 } from '@/logic';
 
@@ -30,6 +39,33 @@ import { fonts, space, tabular, toneColor, useColors } from '../theme';
 import { Button, LinkButton, Notice, Pill, Sheet } from './kit';
 
 type Mode = 'search' | 'amount' | 'quick' | 'food';
+
+/** Open Food Facts asks apps to identify themselves. Browsers don't allow setting this header. */
+const OFF_HEADERS: Record<string, string> | undefined =
+  Platform.OS === 'web' ? undefined : { 'User-Agent': 'TrainingTracker/1.0 (Expo app; React Native)' };
+
+/** The built-in USDA list, loaded the first time the sheet opens. */
+function useUsdaFoods(): { foods: Food[] | null; failed: boolean } {
+  const [foods, setFoods] = useState<Food[] | null>(null);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    let live = true;
+    loadUsdaFoods()
+      .then((f) => live && setFoods(f))
+      .catch(() => live && setFailed(true));
+    return () => {
+      live = false;
+    };
+  }, []);
+  return { foods, failed };
+}
+
+/** The portion an entry was logged with, found again on its food. */
+function portionForEntry(food: Food, e: FoodEntry): Portion | null {
+  if (!food.per100) return null;
+  if (e.serving === '1 g') return GRAMS;
+  return portionsFor(food).find((p) => portionText(p) === e.serving) ?? null;
+}
 
 /**
  * Add something to a day's food log, or edit an entry already there.
@@ -53,7 +89,9 @@ export function AddFoodSheet({
   onClose: () => void;
 }) {
   const { state, saveEntry, removeEntry, saveFood, deleteFood } = useTracker();
-  const all = useMemo(() => [...STARTER_FOODS, ...state.foods], [state.foods]);
+  const usda = useUsdaFoods();
+  // Saved foods (yours, and branded foods you've logged) first, then USDA.
+  const all = useMemo(() => [...state.foods, ...(usda.foods ?? [])], [state.foods, usda.foods]);
   const dayEntries = state.meals[day] ?? [];
   const others = editing ? dayEntries.filter((e) => e.id !== editing.id) : dayEntries;
   const extra = state.logs[day]?.cin ?? 0;
@@ -63,10 +101,24 @@ export function AddFoodSheet({
   const [mode, setMode] = useState<Mode>(editing ? 'amount' : 'search');
   const [query, setQuery] = useState('');
   const [food, setFood] = useState<Food | null>(() => (editing ? foodForEntry(editing, all) : null));
-  const [qty, setQty] = useState(editing ? fmt(editing.qty) : '1');
+  const [portion, setPortion] = useState<Portion | null>(() => (editing && food ? portionForEntry(food, editing) : null));
+  const [qty, setQty] = useState(editing ? fmt(Math.round(editing.qty * 100) / 100) : '1');
   const [time, setTime] = useState(fmtClock(defaultAt));
   // Food being created or edited in the form (null = new).
   const [formFood, setFormFood] = useState<Food | null>(null);
+
+  // Editing an entry from a USDA food: once the list has loaded, switch to the real food so the
+  // measure can be changed. (Adjusting state during render, once.)
+  const [upgraded, setUpgraded] = useState(false);
+  if (!upgraded && usda.foods && editing?.foodId) {
+    setUpgraded(true);
+    const f = all.find((x) => x.id === editing.foodId);
+    const p = f && !food?.per100 ? portionForEntry(f, editing) : null;
+    if (f && p) {
+      setFood(f);
+      setPortion(p);
+    }
+  }
 
   const at = parseClock(time);
   const timeOk = at != null;
@@ -76,30 +128,33 @@ export function AddFoodSheet({
     onClose();
   };
 
+  const pick = (f: Food) => {
+    setFood(f);
+    setPortion(f.per100 ? portionsFor(f)[0] : null);
+    setQty('1');
+    setMode('amount');
+  };
+
   const back =
     mode === 'search' || (editing && mode === 'amount') ? undefined : (
-      <LinkButton
-        label="Back"
-        onPress={() => setMode(mode === 'food' && food && formFood ? 'amount' : 'search')}
-      />
+      <LinkButton label="Back" onPress={() => setMode(mode === 'food' && food && formFood ? 'amount' : 'search')} />
     );
 
   const title =
     mode === 'search' ? 'Add food' : mode === 'quick' ? 'Quick add' : mode === 'food' ? (formFood ? 'Edit food' : 'New food') : editing ? 'Edit entry' : 'Add food';
+
+  const entryFor = (q: number, id?: string) => entryFromFood(food!, q, at!, id, portion ?? undefined);
 
   return (
     <Sheet visible={visible} title={title} onClose={onClose} left={back}>
       {mode === 'search' ? (
         <SearchView
           all={all}
+          usdaLoading={!usda.foods && !usda.failed}
           recent={recentFoodIds(state.meals)}
           query={query}
           setQuery={setQuery}
-          onPick={(f) => {
-            setFood(f);
-            setQty('1');
-            setMode('amount');
-          }}
+          onPick={pick}
           onQuick={() => setMode('quick')}
           onCreate={() => {
             setFormFood(null);
@@ -111,19 +166,28 @@ export function AddFoodSheet({
       {mode === 'amount' && food ? (
         <AmountView
           food={food}
+          portion={portion}
+          setPortion={(p) => {
+            // Switching to grams starts at 100 g; back to a portion starts at 1.
+            if ((p === GRAMS) !== (portion === GRAMS)) setQty(p === GRAMS ? '100' : '1');
+            setPortion(p);
+          }}
           qty={qty}
           setQty={setQty}
           time={time}
           setTime={setTime}
           isToday={isToday}
           now={now}
-          preview={(q) => (timeOk ? previewEntry(state.diet, others, entryFromFood(food, q, at!), isToday ? now : null, extra) : null)}
+          totals={(q) => entryTotals(entryFor(q, 'preview'))}
+          preview={(q) => (timeOk ? previewEntry(state.diet, others, entryFor(q, 'preview'), isToday ? now : null, extra) : null)}
           submitLabel={editing ? 'Save' : 'Add to log'}
           onSubmit={(q) => {
             if (!timeOk || !(q > 0)) return;
-            const e = entryFromFood(food, q, at!, editing?.id);
+            const e = entryFor(q, editing?.id);
             // An edited quick add keeps having no food id.
             if (editing && !editing.foodId) delete e.foodId;
+            // Keep branded foods on the device so they show in recents and work offline.
+            if (food.src === 'off') saveFood(food);
             add(e);
           }}
           onRemove={
@@ -162,7 +226,8 @@ export function AddFoodSheet({
           initialName={query.trim()}
           onSave={(f) => {
             saveFood(f);
-            setFood({ ...f, custom: true });
+            setFood(f);
+            setPortion(null);
             setQty(food && formFood && food.id === f.id ? qty : '1');
             setFormFood(null);
             setMode('amount');
@@ -191,8 +256,36 @@ function foodForEntry(e: FoodEntry, all: Food[]): Food {
 
 // ---------- Search ----------
 
+type OffState =
+  | { status: 'idle' }
+  | { status: 'loading'; query: string }
+  | { status: 'done'; query: string; foods: Food[] }
+  | { status: 'error'; query: string; message: string };
+
+function FoodRow({ f, first, onPress }: { f: Food; first: boolean; onPress: () => void }) {
+  const c = useColors();
+  const meta = [f.brand, f.serving, f.custom ? 'My food' : f.src === 'off' ? SOURCE_LABEL.off : null].filter(Boolean).join(' · ');
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={`${f.name}${f.brand ? `, ${f.brand}` : ''}, ${f.serving}, ${fmtInt(f.n.kcal)} calories`}
+      style={({ pressed }) => [st.result, { borderTopColor: c.line, opacity: pressed ? 0.6 : 1 }, first ? { borderTopWidth: 0 } : null]}>
+      <View style={{ flex: 1 }}>
+        <Text style={{ color: c.ink, fontSize: 16, fontWeight: '600' }}>{f.name}</Text>
+        <Text style={{ color: c.mute, fontSize: 13 }}>{meta}</Text>
+      </View>
+      <Text style={{ color: c.ink, fontSize: 16, fontWeight: '700', ...tabular }}>
+        {fmtInt(f.n.kcal)}
+        <Text style={{ color: c.mute, fontWeight: '400', fontSize: 13 }}> kcal</Text>
+      </Text>
+    </Pressable>
+  );
+}
+
 function SearchView({
   all,
+  usdaLoading,
   recent,
   query,
   setQuery,
@@ -201,6 +294,7 @@ function SearchView({
   onCreate,
 }: {
   all: Food[];
+  usdaLoading: boolean;
   recent: string[];
   query: string;
   setQuery: (q: string) => void;
@@ -209,15 +303,39 @@ function SearchView({
   onCreate: () => void;
 }) {
   const c = useColors();
-  const results = searchFoods(all, query, recent);
-  const recentSet = new Set(recent);
-  const showRecent = !query.trim() && recent.length > 0;
+  const q = query.trim();
+  const results = useMemo(() => searchFoods(all, q, recent, 40), [all, q, recent]);
+  const [off, setOff] = useState<OffState>({ status: 'idle' });
+  const abort = useRef<AbortController | null>(null);
+  useEffect(() => () => abort.current?.abort(), []);
+
+  const runOff = () => {
+    if (q.length < 2) return;
+    abort.current?.abort();
+    const ctl = new AbortController();
+    abort.current = ctl;
+    setOff({ status: 'loading', query: q });
+    const opts = { fetch: (u: string, i?: RequestInit) => fetch(u, i), headers: OFF_HEADERS, signal: ctl.signal };
+    const job = isBarcode(q) ? offByBarcode(q, opts).then((f) => [f]) : searchOff(q, opts);
+    job
+      .then((foods) => !ctl.signal.aborted && setOff({ status: 'done', query: q, foods }))
+      .catch((e) => {
+        if (ctl.signal.aborted) return;
+        setOff({ status: 'error', query: q, message: e instanceof OffError ? e.message : 'Something went wrong searching Open Food Facts.' });
+      });
+  };
+
+  // Branded results belong to the query they were searched for.
+  const offHere = off.status !== 'idle' && off.query === q ? off : null;
+  const barcode = isBarcode(q);
+
   return (
     <View>
       <Field
         value={query}
         onChangeText={setQuery}
-        placeholder="Search foods"
+        onSubmitEditing={runOff}
+        placeholder="Search foods or type a barcode"
         autoFocus
         autoCorrect={false}
         returnKeyType="search"
@@ -229,49 +347,78 @@ function SearchView({
         <Pill label="Create a food" selected={false} onPress={onCreate} />
       </View>
 
-      {results.length === 0 ? (
-        <View style={{ marginTop: space.xl, gap: space.md }}>
-          <Mute>{`No foods match “${query.trim()}”.`}</Mute>
-          <Button label={`Create “${query.trim()}”`} onPress={onCreate} />
-        </View>
-      ) : (
-        <View style={{ marginTop: space.lg }}>
-          {results.map((f, i) => {
-            const header =
-              showRecent && i === 0 ? 'Recent' : showRecent && !recentSet.has(f.id) && recentSet.has(results[i - 1]?.id) ? 'All foods' : null;
-            return (
-              <View key={f.id}>
-                {header ? <Label style={{ marginTop: i ? space.lg : 0 }}>{header}</Label> : null}
-                <Pressable
-                  onPress={() => onPick(f)}
-                  accessibilityRole="button"
-                  accessibilityLabel={`${f.name}, ${f.serving}, ${f.n.kcal} calories`}
-                  style={({ pressed }) => [st.result, { borderTopColor: c.line, opacity: pressed ? 0.6 : 1 }, i === 0 || header ? { borderTopWidth: 0 } : null]}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={{ color: c.ink, fontSize: 16, fontWeight: '600' }}>{f.name}</Text>
-                    <Text style={{ color: c.mute, fontSize: 13 }}>
-                      {[f.brand, f.serving, f.custom ? 'My food' : null].filter(Boolean).join(' · ')}
-                    </Text>
-                  </View>
-                  <Text style={{ color: c.ink, fontSize: 16, fontWeight: '700', ...tabular }}>
-                    {fmtInt(f.n.kcal)}
-                    <Text style={{ color: c.mute, fontWeight: '400', fontSize: 13 }}> kcal</Text>
-                  </Text>
-                </Pressable>
-              </View>
-            );
-          })}
-          <Mute style={{ marginTop: space.lg, fontSize: 13 }}>
-            Starter list for now. The full food database is coming; foods you create are saved on this device.
+      {!q ? (
+        results.length ? (
+          <View style={{ marginTop: space.lg }}>
+            <Label style={{ marginTop: 0 }}>Recent</Label>
+            {results.map((f, i) => (
+              <FoodRow key={f.id} f={f} first={i === 0} onPress={() => onPick(f)} />
+            ))}
+          </View>
+        ) : (
+          <Mute style={{ marginTop: space.lg }}>
+            Search about 12,900 foods from USDA, or branded and packaged foods from Open Food Facts. You can also type a barcode
+            number.
           </Mute>
-        </View>
+        )
+      ) : (
+        <>
+          {!barcode ? (
+            <View style={{ marginTop: space.lg }}>
+              {usdaLoading ? <Mute>Loading the food list…</Mute> : null}
+              {results.map((f, i) => (
+                <FoodRow key={f.id} f={f} first={i === 0} onPress={() => onPick(f)} />
+              ))}
+              {!usdaLoading && !results.length ? <Mute>{`No matches in your foods or USDA for “${q}”.`}</Mute> : null}
+            </View>
+          ) : null}
+
+          <View style={[st.offBox, { borderTopColor: c.line }]}>
+            <Text style={[st.offHead, { color: c.ink }]}>Branded foods</Text>
+            {!offHere ? (
+              q.length >= 2 ? (
+                <Button
+                  label={barcode ? `Look up barcode ${q}` : `Search Open Food Facts for “${q}”`}
+                  onPress={runOff}
+                  style={{ marginTop: space.sm }}
+                />
+              ) : (
+                <Mute>Type at least 2 letters.</Mute>
+              )
+            ) : offHere.status === 'loading' ? (
+              <Mute style={{ marginTop: space.sm }}>Searching Open Food Facts…</Mute>
+            ) : offHere.status === 'error' ? (
+              <View style={{ gap: space.sm, marginTop: space.sm }}>
+                <Text style={{ color: c.bad, fontSize: 15 }}>{offHere.message}</Text>
+                <Button label="Try again" onPress={runOff} />
+              </View>
+            ) : offHere.foods.length ? (
+              <View style={{ marginTop: space.xs }}>
+                {offHere.foods.map((f, i) => (
+                  <FoodRow key={f.id} f={f} first={i === 0} onPress={() => onPick(f)} />
+                ))}
+              </View>
+            ) : (
+              <Mute style={{ marginTop: space.sm }}>{`Nothing on Open Food Facts for “${q}”.`}</Mute>
+            )}
+          </View>
+
+          <View style={{ marginTop: space.xl, gap: space.sm }}>
+            <Mute>Can’t find it?</Mute>
+            <Button label={`Create “${q}”`} onPress={onCreate} />
+          </View>
+        </>
       )}
+
+      <Mute style={{ marginTop: space.xl, fontSize: 12.5, lineHeight: 18 }}>
+        Foods from USDA FoodData Central (public domain) and Open Food Facts (Open Database License, entered by volunteers).
+        Food groups used by diets are a best guess from ingredients and labels; check the package if it matters.
+      </Mute>
     </View>
   );
 }
 
 // ---------- Amount ----------
-
 function TimeRow({ time, setTime, isToday, now }: { time: string; setTime: (t: string) => void; isToday: boolean; now: number }) {
   const c = useColors();
   const ok = parseClock(time) != null;
@@ -300,12 +447,15 @@ function TimeRow({ time, setTime, isToday, now }: { time: string; setTime: (t: s
 
 function AmountView({
   food,
+  portion,
+  setPortion,
   qty,
   setQty,
   time,
   setTime,
   isToday,
   now,
+  totals,
   preview,
   submitLabel,
   onSubmit,
@@ -313,12 +463,16 @@ function AmountView({
   onEditFood,
 }: {
   food: Food;
+  /** Chosen measure, for foods with weights (null for foods with one fixed serving). */
+  portion: Portion | null;
+  setPortion: (p: Portion) => void;
   qty: string;
   setQty: (q: string) => void;
   time: string;
   setTime: (t: string) => void;
   isToday: boolean;
   now: number;
+  totals: (q: number) => Totals;
   preview: (q: number) => ReturnType<typeof previewEntry>;
   submitLabel: string;
   onSubmit: (q: number) => void;
@@ -328,33 +482,54 @@ function AmountView({
   const c = useColors();
   const q = parseFloat(qty);
   const qOk = Number.isFinite(q) && q > 0;
-  const t = entryTotals({ n: food.n, qty: qOk ? q : 0 });
-  const step = (d: number) => setQty(fmt(Math.max(0.25, Math.round(((qOk ? q : 1) + d) * 4) / 4)));
+  const t = totals(qOk ? q : 0);
+  const byWeight = portion === GRAMS;
+  const step = (d: number) =>
+    setQty(
+      byWeight
+        ? fmt(Math.max(1, Math.round((qOk ? q : 100) + d)))
+        : fmt(Math.max(0.25, Math.round(((qOk ? q : 1) + d) * 4) / 4)),
+    );
   const p = qOk ? preview(q) : null;
+  const options = portionsFor(food);
+  const source = food.custom ? 'My food' : food.src ? SOURCE_LABEL[food.src] : null;
 
   return (
     <View>
       <Text style={[st.name, { color: c.ink }]}>{food.name}</Text>
-      <Mute>{[food.brand, `1 serving = ${food.serving}`].filter(Boolean).join(' · ')}</Mute>
+      <Mute>{[food.brand, source].filter(Boolean).join(' · ') || ' '}</Mute>
       {onEditFood ? (
         <View style={{ marginTop: space.sm, flexDirection: 'row' }}>
           <LinkButton label="Edit this food" onPress={onEditFood} />
         </View>
       ) : null}
 
+      {options.length ? (
+        <View style={{ marginTop: space.lg, gap: 6 }}>
+          <Text style={st.lbl(c.mute)}>Measure</Text>
+          <View style={[st.row, { marginTop: 0, flexWrap: 'wrap' }]}>
+            {options.map((o) => (
+              <Pill key={o.label} label={o === GRAMS ? 'Grams' : portionText(o)} selected={portion === o} onPress={() => setPortion(o)} />
+            ))}
+          </View>
+        </View>
+      ) : (
+        <Mute style={{ marginTop: space.sm }}>1 serving = {food.serving}</Mute>
+      )}
+
       <View style={[st.row, { marginTop: space.lg, alignItems: 'flex-start' }]}>
         <View style={{ gap: 6 }}>
-          <Text style={st.lbl(c.mute)}>Servings</Text>
+          <Text style={st.lbl(c.mute)}>{byWeight ? 'Grams' : options.length ? 'How many' : 'Servings'}</Text>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.sm }}>
-            <Pill label="−" selected={false} onPress={() => step(-0.5)} style={{ paddingHorizontal: 14 }} />
+            <Pill label="−" selected={false} onPress={() => step(byWeight ? -10 : -0.5)} style={{ paddingHorizontal: 14 }} />
             <Field
               value={qty}
               onChangeText={setQty}
               keyboardType="decimal-pad"
-              accessibilityLabel="Servings"
-              style={{ width: 64, textAlign: 'center', fontWeight: '700', borderColor: qOk ? undefined : c.bad }}
+              accessibilityLabel={byWeight ? 'Grams' : 'Servings'}
+              style={{ width: 76, textAlign: 'center', fontWeight: '700', borderColor: qOk ? undefined : c.bad }}
             />
-            <Pill label="+" selected={false} onPress={() => step(0.5)} style={{ paddingHorizontal: 14 }} />
+            <Pill label="+" selected={false} onPress={() => step(byWeight ? 10 : 0.5)} style={{ paddingHorizontal: 14 }} />
           </View>
         </View>
       </View>
@@ -613,6 +788,8 @@ const st = {
   ...StyleSheet.create({
     row: { flexDirection: 'row', gap: space.sm, marginTop: space.md },
     result: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.md, borderTopWidth: 1 },
+    offBox: { marginTop: space.xl, paddingTop: space.lg, borderTopWidth: 1 },
+    offHead: { fontFamily: fonts.semi, fontSize: 21, lineHeight: 26 },
     name: { fontFamily: fonts.display, fontSize: 30, lineHeight: 34 },
     nutri: { marginTop: space.lg, borderTopWidth: 1, borderBottomWidth: 1, paddingVertical: space.md },
     kcal: { fontFamily: fonts.display, fontSize: 40, lineHeight: 44, ...tabular },

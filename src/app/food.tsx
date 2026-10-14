@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import {
   addDays,
+  amountText,
   byTime,
   dietName,
   evaluateDay,
@@ -205,7 +206,7 @@ function EntryRow({ e, flags, first, onPress }: { e: FoodEntry; flags?: string[]
           <Text style={{ color: c.ink, fontSize: 16, fontWeight: '600', flexShrink: 1 }}>{e.name}</Text>
         </View>
         <Text style={{ color: c.mute, fontSize: 13, ...tabular }}>
-          {e.qty === 1 ? e.serving : `${fmt(e.qty)} × ${e.serving}`} · P {fmt(Math.round(t.protein))} · C {fmt(Math.round(t.netCarbs))} net · F {fmt(Math.round(t.fat))}
+          {amountText(e)} · P {fmt(Math.round(t.protein))} · C {fmt(Math.round(t.netCarbs))} net · F {fmt(Math.round(t.fat))}
         </Text>
         {off ? <Text style={{ color: c.bad, fontSize: 13, marginTop: 2 }}>{flags!.join(' · ')}</Text> : null}
       </View>

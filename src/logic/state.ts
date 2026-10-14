@@ -1,7 +1,7 @@
 import { ALL_EXERCISES, START_DEFAULT } from './config';
 import { mondayOf } from './dates';
 import { DEFAULT_DIET, normalizeDiet } from './diet';
-import type { Food, FoodEntry, FoodTag, Nutrients } from './nutrition';
+import type { Food, FoodEntry, FoodTag, Nutrients, Portion } from './nutrition';
 import { TAG_LABEL } from './nutrition';
 import type { DayLog, TrackerState } from './types';
 
@@ -43,8 +43,19 @@ export function normalize(s: unknown): TrackerState {
       .map((f: any) => {
         const n = nutrients(f?.n);
         if (!f || typeof f.id !== 'string' || typeof f.name !== 'string' || !n) return null;
-        const food: Food = { id: f.id, name: f.name, serving: typeof f.serving === 'string' ? f.serving : '1 serving', n, tags: tags(f.tags), custom: true };
+        const food: Food = { id: f.id, name: f.name, serving: typeof f.serving === 'string' ? f.serving : '1 serving', n, tags: tags(f.tags) };
+        // Foods saved before database sources existed were all made by the user.
+        if (f.custom === true || !f.src) food.custom = true;
+        if (f.src === 'off' || f.src === 'fndds' || f.src === 'sr') food.src = f.src;
         if (typeof f.brand === 'string' && f.brand) food.brand = f.brand;
+        const per100 = nutrients(f.per100);
+        const portions: Portion[] = Array.isArray(f.portions)
+          ? f.portions.filter((p: any) => p && typeof p.label === 'string' && Number(p.g) > 0).map((p: any) => ({ label: p.label, g: Number(p.g) }))
+          : [];
+        if (per100 && portions.length) {
+          food.per100 = per100;
+          food.portions = portions;
+        }
         return food;
       })
       .filter((f: Food | null): f is Food => f !== null);

@@ -9,5 +9,6 @@ export * from './calories';
 export * from './progress';
 export * from './form';
 export * from './nutrition';
-export * from './foods';
+export * from './usda';
+export * from './openfoodfacts';
 export * from './diet';

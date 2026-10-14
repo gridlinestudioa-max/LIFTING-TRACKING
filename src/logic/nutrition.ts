@@ -29,16 +29,37 @@ export interface Nutrients {
   sugar?: number;
 }
 
+/** A household measure for a food: "1 cup" weighs 140 g. */
+export interface Portion {
+  label: string;
+  g: number;
+}
+
+/** Weigh it: the amount is in grams. */
+export const GRAMS: Portion = { label: 'g', g: 1 };
+
+/** USDA FNDDS (foods as eaten), USDA SR Legacy (ingredients), or Open Food Facts (branded, online). */
+export type FoodSource = 'fndds' | 'sr' | 'off';
+
+export const SOURCE_LABEL: Record<FoodSource, string> = { fndds: 'USDA', sr: 'USDA', off: 'Open Food Facts' };
+
 export interface Food {
   id: string;
   name: string;
   brand?: string;
   /** What one serving is, e.g. "1 cup (158 g)". */
   serving: string;
+  /** Nutrition for one serving. */
   n: Nutrients;
   tags: FoodTag[];
   /** Added by the user (editable, saved on the device). */
   custom?: boolean;
+  /** Where a database food came from. */
+  src?: FoodSource;
+  /** Nutrition per 100 g, when the food has weights. `serving`/`n` are then the first portion. */
+  per100?: Nutrients;
+  /** Household measures with weights; the first is the default serving. */
+  portions?: Portion[];
 }
 
 /**
@@ -119,8 +140,59 @@ export function newId(prefix: string): string {
 }
 
 /** Build a log entry from a food. */
-export function entryFromFood(food: Food, qty: number, at: number, id = newId('e')): FoodEntry {
-  return { id, foodId: food.id, name: food.name, serving: food.serving, qty, n: { ...food.n }, tags: [...food.tags], at };
+export function entryFromFood(food: Food, qty: number, at: number, id = newId('e'), portion?: Portion): FoodEntry {
+  const p = portion && food.per100 ? portion : null;
+  return {
+    id,
+    foodId: food.id,
+    name: food.brand ? `${food.name} (${food.brand})` : food.name,
+    serving: p ? portionText(p) : food.serving,
+    qty,
+    n: p ? scaleNutrients(food.per100!, p.g / 100) : { ...food.n },
+    tags: [...food.tags],
+    at,
+  };
+}
+
+/**
+ * Nutrients times a factor. Kept to 3 decimals, not rounded for display, since a per-gram value
+ * gets multiplied back up (150 g of rice) and early rounding would throw that off.
+ */
+export function scaleNutrients(n: Nutrients, f: number): Nutrients {
+  const r = (v: number) => Math.round(v * f * 1000) / 1000;
+  const out: Nutrients = { kcal: r(n.kcal), protein: r(n.protein), carbs: r(n.carbs), fat: r(n.fat) };
+  if (n.fiber != null) out.fiber = r(n.fiber);
+  if (n.sugar != null) out.sugar = r(n.sugar);
+  return out;
+}
+
+const fmtG = (g: number) => String(Math.round(g * 10) / 10);
+
+/** "1 cup (140 g)", or "1 g" for the grams portion. Labels that already give the weight are left alone. */
+export function portionText(p: Portion): string {
+  if (p.label === GRAMS.label) return '1 g';
+  return /\d\s*g\b|\(\d+(?:\.\d+)?\s*g\)/.test(p.label) ? p.label : `${p.label} (${fmtG(p.g)} g)`;
+}
+
+/** How an entry's amount reads: "150 g", "1 cup (140 g)", "2 × 1 cup (140 g)". */
+export function amountText(e: Pick<FoodEntry, 'qty' | 'serving'>): string {
+  const q = Math.round(e.qty * 100) / 100;
+  if (e.serving === '1 g') return `${q} g`;
+  return q === 1 ? e.serving : `${q} × ${e.serving}`;
+}
+
+/** The portions to offer for a food: its own (or one serving), plus grams when it has weights. */
+export function portionsFor(food: Food): Portion[] {
+  if (!food.per100) return [];
+  const own = food.portions?.length ? food.portions : [{ label: '100 g', g: 100 }];
+  return [...own, GRAMS];
+}
+
+/** Build a database food from per-100 g nutrition and its portions; the first portion is the default. */
+export function foodWithPortions(f: Omit<Food, 'serving' | 'n'>, per100: Nutrients, portions: Portion[]): Food {
+  const ps = portions.filter((p) => p.g > 0);
+  const first = ps[0] ?? { label: '100 g', g: 100 };
+  return { ...f, per100, portions: ps.length ? ps : [first], serving: portionText(first), n: scaleNutrients(per100, first.g / 100) };
 }
 
 /** A calories-only entry (macros optional). */
@@ -187,31 +259,55 @@ export function fmtDuration(min: number): string {
 
 // ---------- Search ----------
 
-const norm = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+const norm = (s: string) => s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+const tokenize = (s: string) => norm(s).split(/[^a-z0-9%]+/).filter(Boolean);
+
+interface Indexed {
+  name: string;
+  /** Words of the name and brand. */
+  words: string[];
+}
+const index = new WeakMap<Food, Indexed>();
+function indexed(f: Food): Indexed {
+  let x = index.get(f);
+  if (!x) {
+    x = { name: norm(f.name), words: tokenize(`${f.name} ${f.brand ?? ''}`) };
+    index.set(f, x);
+  }
+  return x;
+}
 
 /**
- * Foods matching every word of the query (name or brand), best matches first:
- * name starts with the query, then a word starts with it, then anywhere. Recent foods rank higher.
- * An empty query returns recent foods, then the rest alphabetically.
+ * Foods where every query word starts a word of the name or brand ("ham" finds ham, not graham).
+ * Best first: your own foods and recent foods, name starting with the query, the first part of the
+ * name (before the comma) matching, foods as eaten (FNDDS) over ingredients, then shorter names.
+ * An empty query returns recent foods only.
  */
 export function searchFoods(foods: readonly Food[], query: string, recent: readonly string[] = [], limit = 50): Food[] {
   const q = norm(query.trim());
-  const words = q.split(/\s+/).filter(Boolean);
+  const qWords = tokenize(query);
   const recentRank = new Map(recent.map((id, i) => [id, i]));
+  if (!qWords.length) {
+    const byId = new Map(foods.map((f) => [f.id, f]));
+    return recent.map((id) => byId.get(id)).filter((f): f is Food => !!f).slice(0, limit);
+  }
   const scored: { f: Food; score: number }[] = [];
   for (const f of foods) {
-    const name = norm(f.name);
-    const hay = `${name} ${norm(f.brand ?? '')}`;
-    if (!words.every((w) => hay.includes(w))) continue;
+    const x = indexed(f);
+    if (!qWords.every((w) => x.words.some((t) => t.startsWith(w)))) continue;
     let score = 0;
-    if (q) {
-      if (name.startsWith(q)) score += 300;
-      else if (new RegExp(`\\b${q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`).test(name)) score += 200;
-      else score += 100;
-    }
+    const head = x.name.split(',')[0].trim();
+    if (x.name.startsWith(q)) score += 300;
+    if (head === q || head === `${q}s` || `${head}s` === q) score += 200;
+    // Words matched whole (not just as a prefix).
+    score += qWords.filter((w) => x.words.includes(w)).length * 20;
+    // USDA names lead with the main food ("Rice, white, ..."), so a query word there counts most.
+    if (qWords.includes(x.words[0])) score += 80;
     const r = recentRank.get(f.id);
-    if (r != null) score += 50 - Math.min(r, 49);
-    if (f.custom) score += 1;
+    if (r != null) score += 400 - Math.min(r, 99);
+    if (f.custom) score += 150;
+    if (f.src === 'fndds') score += 40;
+    score -= Math.min(x.name.length, 120) * 0.6;
     scored.push({ f, score });
   }
   scored.sort((a, b) => b.score - a.score || a.f.name.localeCompare(b.f.name));

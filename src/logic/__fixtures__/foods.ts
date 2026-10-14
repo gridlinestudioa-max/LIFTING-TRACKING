@@ -1,10 +1,6 @@
-import type { Food } from './nutrition';
+import type { Food } from '../nutrition';
 
-/**
- * Starter food list so the log works before the full database exists.
- * Typical values per serving, rounded, based on USDA FoodData Central generic foods.
- * The full food database replaces/extends this; keep ids stable since log entries reference them.
- */
+/** Hand-entered test foods: typical values per serving, rounded, from USDA FoodData Central. */
 export const STARTER_FOODS: Food[] = [
   // Protein
   { id: 'egg', name: 'Egg, large', serving: '1 egg (50 g)', n: { kcal: 72, protein: 6.3, carbs: 0.4, fat: 4.8, sugar: 0.2 }, tags: ['egg'] },

@@ -29,7 +29,10 @@ export interface TrackerState {
   goal: number | null;
   base: Record<string, number>;
   logs: Record<string, DayLog>;
-  /** Foods the user created. The starter/built-in list is not stored. */
+  /**
+   * Foods saved on the device: ones the user created (`custom`), and Open Food Facts products that were
+   * logged (so they work offline and show in recents). The built-in USDA list is not stored.
+   */
   foods: Food[];
   /** Food log by date. Saved as soon as it changes (no Submit step). */
   meals: Record<string, FoodEntry[]>;

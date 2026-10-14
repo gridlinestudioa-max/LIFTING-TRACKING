@@ -38,7 +38,7 @@ interface Tracker {
   /** Add or replace (same id) a food log entry. Saved right away. */
   saveEntry: (s: string, e: FoodEntry) => void;
   removeEntry: (s: string, id: string) => void;
-  /** Add or replace (same id) a food the user created. */
+  /** Add or replace (same id) a saved food: one the user created, or an Open Food Facts product. */
   saveFood: (f: Food) => void;
   deleteFood: (id: string) => void;
   setDiet: (d: DietSettings) => void;
@@ -142,7 +142,7 @@ export function TrackerProvider({ children }: { children: ReactNode }) {
   const saveFood = useCallback(
     (f: Food) =>
       update((st) => {
-        const food = { ...f, custom: true };
+        const food = f;
         const foods = st.foods.some((x) => x.id === f.id) ? st.foods.map((x) => (x.id === f.id ? food : x)) : [...st.foods, food];
         return { ...st, foods };
       }),

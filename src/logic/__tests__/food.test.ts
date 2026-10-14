@@ -2,7 +2,6 @@ import { describe, expect, it } from '@jest/globals';
 
 import {
   DEFAULT_DIET,
-  STARTER_FOODS,
   calorieSummary,
   cinFor,
   defaultState,
@@ -31,6 +30,7 @@ import {
   type Food,
   type FoodEntry,
 } from '..';
+import { STARTER_FOODS } from '../__fixtures__/foods';
 
 const food = (id: string): Food => {
   const f = STARTER_FOODS.find((x) => x.id === id);
@@ -112,7 +112,8 @@ describe('search', () => {
 
   it('matches every word, name prefix first', () => {
     expect(searchFoods(all, 'rice').slice(0, 2).map((f) => f.id).sort()).toEqual(['brownrice', 'rice']);
-    expect(searchFoods(all, 'ba')[0].id).toBe('bacon'); // name prefix beats a later word
+    // Words must start a word of the name: "ice" doesn't find rice.
+    expect(searchFoods(all, 'ice')).toEqual([]);
     expect(searchFoods(all, 'brown rice').map((f) => f.id)).toEqual(['brownrice']);
   });
 
