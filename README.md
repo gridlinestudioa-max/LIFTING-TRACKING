@@ -30,7 +30,7 @@ Data saved by the first version of the app (key `mm_tracker_v1`) is brought forw
 | `src/app/` | Screens (expo-router): `food`, `cardio`, `lifting`, `progress`, `you`. `_layout.tsx` = sign-in, setup, and the tabs. |
 | `src/ui/` | Components, theme (light/dark follows the system), the store (`store.tsx`: saving and syncing), accounts (`account.tsx`, `cloud.ts`), sign-in and setup screens. `food/`, `cardio/`, `lifting/` = each tab's sheets. |
 | `src/brand.ts`, `assets/brand/` | The app's name and logo (see [Name and logo](#name-and-logo)). |
-| `supabase/schema.sql`, `supabase/email-templates/` | The database table and access rules for accounts; branded sign-up and password emails. |
+| `supabase/schema.sql`, `supabase/social.sql`, `supabase/email-templates/` | The database tables and access rules for accounts and for friends and leaderboards; branded sign-up and password emails. |
 
 ## Develop
 
@@ -100,6 +100,7 @@ Accounts use [Supabase](https://supabase.com) (free tier is enough). Until this 
 
 1. Create a project at supabase.com (any name and region). Wait for it to finish setting up.
 2. **SQL Editor** → New query → paste the contents of [`supabase/schema.sql`](supabase/schema.sql) → Run. This creates the table and the rules that let each person read and write only their own data.
+   Then do the same with [`supabase/social.sql`](supabase/social.sql) to switch on friends and the leaderboard (safe to run again).
 3. Copy the **Project URL** (green **Connect** button, or **Data API**) and the **publishable key** (`sb_publishable_…`, under **Project Settings → API Keys**; older projects call it the **anon / public** key). Never use the secret / `service_role` key.
 4. Put them where the app is built:
    - **Vercel** (the website): Project → Settings → Environment Variables → add `EXPO_PUBLIC_SUPABASE_URL` and `EXPO_PUBLIC_SUPABASE_ANON_KEY`, then redeploy.

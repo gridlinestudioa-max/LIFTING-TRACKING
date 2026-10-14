@@ -16,6 +16,7 @@ import { AccountProvider, useAccount } from '@/ui/account';
 import { remoteStore } from '@/ui/cloud';
 import { Onboarding } from '@/ui/Onboarding';
 import { SignIn } from '@/ui/SignIn';
+import { SocialProvider } from '@/ui/social/SocialProvider';
 import { TrackerProvider, useTracker } from '@/ui/store';
 import { NewPassword, Welcome } from '@/ui/Welcome';
 import { useColors, useIsDark } from '@/ui/theme';
@@ -78,7 +79,11 @@ function Signed() {
   if (arrival === 'recovery') return <NewPassword />;
   if (arrival === 'confirmed') return <Welcome setUp={state.settings.onboarded} />;
   if (!state.settings.onboarded) return <Onboarding />;
-  return <AppTabs />;
+  return (
+    <SocialProvider>
+      <AppTabs />
+    </SocialProvider>
+  );
 }
 
 function Gate() {

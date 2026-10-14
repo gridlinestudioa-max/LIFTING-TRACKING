@@ -10,6 +10,8 @@ import { ProfileForm } from '@/ui/food/ProfileForm';
 import { ProfileLines } from '@/ui/food/ProfileLines';
 import { SECTION_INFO } from '@/ui/Onboarding';
 import { PlanPicker } from '@/ui/cardio/PlanPicker';
+import { FriendsBoard } from '@/ui/social/FriendsBoard';
+import { PersonalBoard } from '@/ui/social/PersonalBoard';
 import { useTracker } from '@/ui/store';
 import { space, useColors } from '@/ui/theme';
 
@@ -84,6 +86,13 @@ export default function YouScreen() {
             )}
           </View>
         </Section>
+
+        {on.cardio ? (
+          <>
+            <PersonalBoard />
+            <FriendsBoard />
+          </>
+        ) : null}
 
         <Section title="Tabs">
           {SECTION_INFO.map((x, i) => (

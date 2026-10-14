@@ -35,6 +35,18 @@
           "recordAudioAndroid": false,
           "barcodeScannerEnabled": true
         }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Allow $(PRODUCT_NAME) to use your location to record the route of your runs, walks and rides."
+        }
+      ],
+      [
+        "expo-contacts",
+        {
+          "contactsPermission": "Allow $(PRODUCT_NAME) to find friends from your contacts. Numbers are scrambled (hashed) before they leave your phone."
+        }
       ]
     ],
     "experiments": {
