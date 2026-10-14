@@ -13,16 +13,21 @@ import {
   normalize,
   normalizeDiet,
   profileError,
+  ageOn,
+  missingForSuggestions,
+  profileSummary,
+  statsOf,
   suggestTargets,
   tdee,
   withStyle,
   type Profile,
+  type Stats,
 } from '..';
 
 // 30-year-old man, 5 ft 10 in, 180 lb, moderately active, losing weight.
-const him: Profile = { sex: 'male', age: 30, heightIn: 70, weightLb: 180, activity: 'moderate', goal: 'lose' };
+const him: Stats = { sex: 'male', age: 30, heightIn: 70, weightLb: 180, activity: 'moderate', goal: 'lose' };
 // 35-year-old woman, 5 ft 4 in, 140 lb, sedentary, losing weight.
-const her: Profile = { sex: 'female', age: 35, heightIn: 64, weightLb: 140, activity: 'sedentary', goal: 'lose' };
+const her: Stats = { sex: 'female', age: 35, heightIn: 64, weightLb: 140, activity: 'sedentary', goal: 'lose' };
 
 describe('calories', () => {
   it('Mifflin-St Jeor resting burn', () => {
@@ -102,12 +107,34 @@ describe('suggested vs your own numbers', () => {
 });
 
 describe('profile', () => {
-  it('validates', () => {
-    expect(profileError(him)).toBeNull();
-    expect(profileError({ ...him, age: 16 })).toMatch(/adults/);
-    expect(profileError({ ...him, heightIn: 30 })).toMatch(/height/);
-    expect(profileError({ ...him, weightLb: NaN })).toMatch(/weight/);
-    expect(profileError({ ...him, sex: undefined })).toMatch(/male or female/);
+  it('validates only what is filled in', () => {
+    const today = '2026-10-14';
+    expect(profileError({}, today)).toBeNull();
+    expect(profileError(him, today)).toBeNull();
+    expect(profileError({ heightIn: 30 }, today)).toMatch(/height/);
+    expect(profileError({ weightLb: NaN }, today)).toMatch(/weight/);
+    expect(profileError({ birthday: '2027-01-01' }, today)).toMatch(/past/);
+    expect(profileError({ birthday: '1890-01-01' }, today)).toMatch(/year/);
+  });
+
+  it('age comes from the birthday', () => {
+    expect(ageOn('1990-10-14', '2026-10-14')).toBe(36);
+    expect(ageOn('1990-10-15', '2026-10-14')).toBe(35);
+    expect(ageOn('1990-11-01', '2026-10-14')).toBe(35);
+    const p: Profile = { sex: 'male', birthday: '1996-03-02', heightIn: 70, weightLb: 180 };
+    expect(statsOf(p, '2026-10-14')).toEqual({ sex: 'male', age: 30, heightIn: 70, weightLb: 180, activity: 'light', goal: 'maintain' });
+  });
+
+  it('suggestions need sex, birthday, height and weight', () => {
+    const today = '2026-10-14';
+    expect(statsOf(null, today)).toBeNull();
+    expect(statsOf({ sex: 'female', weightLb: 140 }, today)).toBeNull();
+    expect(missingForSuggestions({ sex: 'female', weightLb: 140 }, today)).toBe('birthday and height');
+    expect(missingForSuggestions({}, today)).toBe('sex, birthday, height and weight');
+    expect(missingForSuggestions({ birthday: '2012-01-01' }, today)).toMatch(/18/);
+    // Without full stats the diet uses its preset limits, even with "suggested" on.
+    const d = withStyle(DEFAULT_DIET, 'keto');
+    expect(activeDiet(d, { sex: 'female' }).limits).toEqual({ netCarbsMax: 20 });
   });
 
   it('saves and restores', () => {
@@ -115,11 +142,15 @@ describe('profile', () => {
     expect(st.profile).toBeNull();
     st.profile = him;
     expect(normalize(JSON.parse(JSON.stringify(st))).profile).toEqual(him);
-    expect(normalize({ profile: { ...him, age: 'old' } }).profile).toBeNull();
+    // Bad values are dropped, good ones kept.
+    expect(normalize({ profile: { ...him, age: 'old', heightIn: 3 } }).profile).toEqual({ sex: 'male', weightLb: 180, activity: 'moderate', goal: 'lose' });
+    expect(normalize({ profile: { age: 'old' } }).profile).toBeNull();
+    expect(normalize({ profile: { birthday: '1990-05-06' } }).profile).toEqual({ birthday: '1990-05-06' });
   });
 
-  it('formats height', () => {
+  it('formats', () => {
     expect(heightText(70)).toBe('5 ft 10 in');
     expect(heightText(71.6)).toBe('6 ft 0 in');
+    expect(profileSummary({ sex: 'female', birthday: '1990-10-14', weightLb: 140 }, '2026-10-14')).toBe('Female · 36 years · 140 lb');
   });
 });

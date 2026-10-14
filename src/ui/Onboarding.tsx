@@ -2,12 +2,14 @@ import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { DAY_NAMES, TEMPLATES, applyTemplate, mondayOf, newId, type Sections } from '@/logic';
+import { DAY_NAMES, applyTemplate, liftingPlan, newId, type CardioPlan, type Sections } from '@/logic';
 
+import { PlanPicker } from './cardio/PlanPicker';
 import { Field, Mute } from './components';
 import { Button, LinkButton } from './food/kit';
 import { ProfileForm } from './food/ProfileForm';
-import { StartPicker } from './StartPicker';
+import { LiftPlanPicker, type LiftChoice } from './lifting/LiftPlanPicker';
+import { Logo } from './Logo';
 import { useTracker } from './store';
 import { fonts, radius, space, useColors } from './theme';
 
@@ -15,8 +17,8 @@ type Step = 'sections' | 'body' | 'cardio' | 'lifting';
 
 export const SECTION_INFO: { id: keyof Sections; title: string; blurb: string }[] = [
   { id: 'food', title: 'Food', blurb: 'Log meals from 12,900 USDA foods and branded products. Calories, macros, fasting and diets like keto.' },
-  { id: 'cardio', title: 'Cardio', blurb: 'Log runs, rides, swims and more. Optional 12-week half-marathon plan.' },
-  { id: 'lifting', title: 'Lifting', blurb: 'Build routines from 700+ exercises. The app raises your weights as you get stronger.' },
+  { id: 'cardio', title: 'Cardio', blurb: 'Log runs, rides, swims and more. Optional plans from 5K to Ironman.' },
+  { id: 'lifting', title: 'Lifting', blurb: 'Plans for 3 to 7 days a week and 700+ exercises. The app raises your weights as you get stronger.' },
 ];
 
 /** A card that turns a section on or off. */
@@ -48,24 +50,20 @@ export function Onboarding() {
   const [name, setName] = useState(state.settings.name);
   const [sections, setSections] = useState<Sections>(state.settings.sections);
   const [err, setErr] = useState<string | null>(null);
-  const [planOn, setPlanOn] = useState(!!state.cardio.plan);
-  const [planStart, setPlanStart] = useState(state.cardio.plan?.start ?? mondayOf(today));
+  const [plan, setPlan] = useState<CardioPlan | null>(state.cardio.plan);
   const hasRoutines = state.lifting.routines.length > 0;
-  const [template, setTemplate] = useState<string | null>(hasRoutines ? 'keep' : null);
+  const [keep, setKeep] = useState(hasRoutines);
+  const [lift, setLift] = useState<LiftChoice>({ split: 'ppl', days: 3 });
 
   const order: Step[] = ['sections', ...(sections.food ? (['body'] as Step[]) : []), ...(sections.cardio ? (['cardio'] as Step[]) : []), ...(sections.lifting ? (['lifting'] as Step[]) : [])];
   const at = order.indexOf(step);
   const finish = () => {
     update((s) => {
-      let lifting = s.lifting;
-      if (sections.lifting && template && template !== 'keep' && template !== 'own') {
-        const t = TEMPLATES.find((x) => x.id === template)!;
-        lifting = applyTemplate(lifting, t, () => newId('r'));
-      }
+      const lifting = sections.lifting && !keep ? applyTemplate(s.lifting, liftingPlan(lift.split, lift.days), () => newId('r')) : s.lifting;
       return {
         ...s,
         settings: { ...s.settings, name: name.trim(), sections, onboarded: true },
-        cardio: sections.cardio ? { ...s.cardio, plan: planOn ? { start: mondayOf(planStart) } : null } : s.cardio,
+        cardio: sections.cardio ? { ...s.cardio, plan } : s.cardio,
         lifting,
       };
     });
@@ -98,6 +96,9 @@ export function Onboarding() {
 
         {step === 'sections' ? (
           <>
+            <View style={{ marginBottom: space.md }}>
+              <Logo size={48} />
+            </View>
             <Text style={[st.h1, { color: c.ink }]}>Set up your profile</Text>
             <Mute style={{ fontSize: 15 }}>You can change all of this later on the You tab.</Mute>
             <Text style={[st.lbl, { color: c.mute, marginTop: space.xl }]}>Your name (optional)</Text>
@@ -114,11 +115,12 @@ export function Onboarding() {
         {step === 'body' ? (
           <>
             <Text style={[st.h1, { color: c.ink }]}>About you</Text>
-            <Mute style={{ fontSize: 15, marginBottom: space.lg }}>
-              Used to suggest daily calories, protein, carbs, sugar and fat. Optional; you can add it later.
+            <Mute style={{ fontSize: 15, marginBottom: space.md }}>
+              Used to suggest daily calories, protein, carbs, sugar and fat. You can add or change it later on the You tab.
             </Mute>
             <ProfileForm
               initial={state.profile}
+              saveLabel="Next"
               onSave={(p) => {
                 setProfile(p);
                 next();
@@ -130,33 +132,19 @@ export function Onboarding() {
         {step === 'cardio' ? (
           <>
             <Text style={[st.h1, { color: c.ink }]}>Cardio</Text>
-            <Mute style={{ fontSize: 15 }}>Log any run, ride, swim or walk. Want a plan too?</Mute>
-            <View style={{ gap: space.sm, marginTop: space.lg }}>
-              <SectionToggle
-                title="12-week half-marathon plan"
-                blurb="Tempo run Tuesday, easy run Friday, long run Sunday, building to 13.1 miles on race day."
-                on={planOn}
-                onPress={() => setPlanOn(!planOn)}
-              />
-            </View>
-            {planOn ? (
-              <View style={{ marginTop: space.lg, gap: space.sm }}>
-                <Text style={[st.lbl, { color: c.mute }]}>Plan starts (a Monday)</Text>
-                <StartPicker start={planStart} onChange={(s) => setPlanStart(mondayOf(s))} />
-              </View>
-            ) : null}
+            <Mute style={{ fontSize: 15, marginBottom: space.lg }}>
+              Log any run, ride, swim or walk. Want a plan too? It puts workouts on your calendar and tracks what you finish.
+            </Mute>
+            <PlanPicker plan={plan} today={today} onChange={setPlan} />
           </>
         ) : null}
 
         {step === 'lifting' ? (
           <>
             <Text style={[st.h1, { color: c.ink }]}>Lifting</Text>
-            <Mute style={{ fontSize: 15 }}>
-              Start from a routine and change anything later. Each exercise has a rep range; when you hit the top on every set,
-              the weight goes up.
-            </Mute>
-            <View style={{ gap: space.sm, marginTop: space.lg }}>
-              {hasRoutines ? (
+            <Mute style={{ fontSize: 15, marginBottom: space.lg }}>Choose a plan to start from. You can change anything later.</Mute>
+            {hasRoutines ? (
+              <View style={{ gap: space.sm, marginBottom: space.lg }}>
                 <SectionToggle
                   title="Keep my routines"
                   blurb={state.lifting.routines
@@ -165,15 +153,13 @@ export function Onboarding() {
                       return days.length ? `${r.name} (${days.join(', ')})` : r.name;
                     })
                     .join(' · ')}
-                  on={template === 'keep'}
-                  onPress={() => setTemplate('keep')}
+                  on={keep}
+                  onPress={() => setKeep(true)}
                 />
-              ) : null}
-              {TEMPLATES.map((t) => (
-                <SectionToggle key={t.id} title={t.name} blurb={`${t.blurb} ${t.routines.map((r) => r.name).join(', ')}.`} on={template === t.id} onPress={() => setTemplate(t.id)} />
-              ))}
-              <SectionToggle title="Build my own" blurb="Start empty and add routines from the exercise library." on={template === 'own'} onPress={() => setTemplate('own')} />
-            </View>
+                <SectionToggle title="Start a new plan" blurb="Choose a split and days below." on={!keep} onPress={() => setKeep(false)} />
+              </View>
+            ) : null}
+            {!keep ? <LiftPlanPicker value={lift} onChange={setLift} /> : null}
           </>
         ) : null}
 

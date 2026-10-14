@@ -17,6 +17,7 @@ import { remoteStore } from '@/ui/cloud';
 import { Onboarding } from '@/ui/Onboarding';
 import { SignIn } from '@/ui/SignIn';
 import { TrackerProvider, useTracker } from '@/ui/store';
+import { NewPassword, Welcome } from '@/ui/Welcome';
 import { useColors, useIsDark } from '@/ui/theme';
 
 // Keep the splash screen up until the display font is ready, so headings never flash in a fallback font.
@@ -70,8 +71,12 @@ function AppTabs() {
 /** Signed in (or on this device only): load that person's data, set up if needed, then the tabs. */
 function Signed() {
   const { state, loaded } = useTracker();
+  const { arrival } = useAccount();
   const c = useColors();
   if (!loaded) return <View style={{ flex: 1, backgroundColor: c.bg }} />;
+  // Opened from an email link: say so first (or set a new password), instead of dropping into the app.
+  if (arrival === 'recovery') return <NewPassword />;
+  if (arrival === 'confirmed') return <Welcome setUp={state.settings.onboarded} />;
   if (!state.settings.onboarded) return <Onboarding />;
   return <AppTabs />;
 }

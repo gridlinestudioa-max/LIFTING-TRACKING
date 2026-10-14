@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 
-import { cloudConfigured, supabase } from './cloud';
+import { clearLinkFromUrl, cloudConfigured, link, linkTarget, supabase, type Arrival } from './cloud';
 
 /** Remembers "use without an account" on this device. */
 const MODE_KEY = 'mm_mode';
@@ -20,6 +20,14 @@ interface Account {
   resetPassword: (email: string) => Promise<string | null>;
   signOut: () => Promise<void>;
   useWithoutAccount: () => void;
+  /** Opened from an email link: just confirmed the email, or here to set a new password. */
+  arrival: Arrival;
+  /** A problem with the email link (expired, already used). */
+  linkError: string | null;
+  /** Done with the welcome or new-password page. */
+  dismissArrival: () => void;
+  /** Returns an error message, or null. */
+  updatePassword: (password: string) => Promise<string | null>;
 }
 
 const Ctx = createContext<Account | null>(null);
@@ -34,12 +42,15 @@ function friendly(msg: string): string {
   if (m.includes('unable to validate email') || m.includes('invalid email')) return 'That email address doesn’t look right.';
   if (m.includes('fetch') || m.includes('network')) return 'Couldn’t reach the server. Check your connection.';
   if (m.includes('rate limit')) return 'Too many tries. Wait a minute and try again.';
+  if (m.includes('should be different')) return 'Choose a password different from your old one.';
   return msg;
 }
 
 export function AccountProvider({ children }: { children: ReactNode }) {
   const [mode, setMode] = useState<AccountMode>('loading');
   const [user, setUser] = useState<Account['user']>(null);
+  const [arrival, setArrival] = useState<Arrival>(link.arrival);
+  const [linkError, setLinkError] = useState<string | null>(link.error);
 
   useEffect(() => {
     const sb = supabase();
@@ -57,15 +68,19 @@ export function AccountProvider({ children }: { children: ReactNode }) {
     sb.auth
       .getSession()
       .then(({ data }) => {
+        // Supabase has read the email link (if any) by now.
+        clearLinkFromUrl();
         if (!live) return;
+        if (!data.session) setArrival(null);
         if (data.session) {
           setUser({ id: data.session.user.id, email: data.session.user.email ?? '' });
           setMode('account');
         } else fallback();
       })
       .catch(fallback);
-    const { data: sub } = sb.auth.onAuthStateChange((_e, session) => {
+    const { data: sub } = sb.auth.onAuthStateChange((e, session) => {
       if (!live) return;
+      if (e === 'PASSWORD_RECOVERY') setArrival('recovery');
       if (session) {
         setUser({ id: session.user.id, email: session.user.email ?? '' });
         setMode('account');
@@ -84,6 +99,7 @@ export function AccountProvider({ children }: { children: ReactNode }) {
   const signIn = useCallback(async (email: string, password: string) => {
     const sb = supabase();
     if (!sb) return 'Accounts aren’t set up yet.';
+    setLinkError(null);
     const { error } = await sb.auth.signInWithPassword({ email: email.trim(), password });
     return error ? friendly(error.message) : null;
   }, []);
@@ -91,7 +107,8 @@ export function AccountProvider({ children }: { children: ReactNode }) {
   const signUp = useCallback(async (email: string, password: string) => {
     const sb = supabase();
     if (!sb) return { error: 'Accounts aren’t set up yet.', confirm: false };
-    const { data, error } = await sb.auth.signUp({ email: email.trim(), password });
+    // The confirmation link opens this website and signs the person in.
+    const { data, error } = await sb.auth.signUp({ email: email.trim(), password, options: { emailRedirectTo: linkTarget() } });
     if (error) return { error: friendly(error.message), confirm: false };
     // With email confirmation on, there's no session until the link is opened.
     return { error: null, confirm: !data.session };
@@ -100,7 +117,7 @@ export function AccountProvider({ children }: { children: ReactNode }) {
   const resetPassword = useCallback(async (email: string) => {
     const sb = supabase();
     if (!sb) return 'Accounts aren’t set up yet.';
-    const { error } = await sb.auth.resetPasswordForEmail(email.trim());
+    const { error } = await sb.auth.resetPasswordForEmail(email.trim(), { redirectTo: linkTarget() });
     return error ? friendly(error.message) : null;
   }, []);
 
@@ -112,14 +129,26 @@ export function AccountProvider({ children }: { children: ReactNode }) {
     setMode('signedOut');
   }, []);
 
+  const dismissArrival = useCallback(() => setArrival(null), []);
+
+  const updatePassword = useCallback(async (password: string) => {
+    const sb = supabase();
+    if (!sb) return 'Accounts aren’t set up yet.';
+    const { error } = await sb.auth.updateUser({ password });
+    return error ? friendly(error.message) : null;
+  }, []);
+
   const useWithoutAccount = useCallback(() => {
     AsyncStorage.setItem(MODE_KEY, 'local').catch(() => {});
     setMode('local');
   }, []);
 
   const value = useMemo(
-    () => ({ mode, user, cloud: cloudConfigured, signIn, signUp, resetPassword, signOut, useWithoutAccount }),
-    [mode, user, signIn, signUp, resetPassword, signOut, useWithoutAccount],
+    () => ({
+      mode, user, cloud: cloudConfigured, signIn, signUp, resetPassword, signOut, useWithoutAccount,
+      arrival, linkError, dismissArrival, updatePassword,
+    }),
+    [mode, user, signIn, signUp, resetPassword, signOut, useWithoutAccount, arrival, linkError, dismissArrival, updatePassword],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

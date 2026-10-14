@@ -5,10 +5,12 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   DAY_NAMES,
   activeWorkout,
+  applyTemplate,
   defaultIncrement,
   fmtInt,
   fmtW,
   liftWeek,
+  liftingPlan,
   newId,
   nextTarget,
   scheduledRoutine,
@@ -21,6 +23,7 @@ import {
 import { Card, Header, Mute, Section } from '@/ui/components';
 import { Button, LinkButton, Pill, Sheet } from '@/ui/food/kit';
 import { ExercisePicker } from '@/ui/lifting/ExercisePicker';
+import { LiftPlanPicker, type LiftChoice } from '@/ui/lifting/LiftPlanPicker';
 import { useLibrary } from '@/ui/lifting/library';
 import { RoutineSheet } from '@/ui/lifting/RoutineSheet';
 import { WorkoutSheet } from '@/ui/lifting/WorkoutSheet';
@@ -28,7 +31,7 @@ import { StatusMark } from '@/ui/marks';
 import { useTracker } from '@/ui/store';
 import { fonts, radius, space, tabular, useColors } from '@/ui/theme';
 
-type Open = { kind: 'workout' | 'routine'; id: string } | { kind: 'library' } | { kind: 'start' } | null;
+type Open = { kind: 'workout' | 'routine'; id: string } | { kind: 'library' } | { kind: 'start' } | { kind: 'plan' } | null;
 
 export default function LiftingScreen() {
   const c = useColors();
@@ -159,6 +162,7 @@ export default function LiftingScreen() {
             );
           })}
           <View style={{ flexDirection: 'row', gap: space.sm, marginTop: space.md, flexWrap: 'wrap' }}>
+            <Pill label="Choose a plan" selected={false} onPress={() => show({ kind: 'plan' })} />
             <Pill label="New routine" selected={false} onPress={newRoutine} />
             <Pill label="Browse exercises" selected={false} onPress={() => show({ kind: 'library' })} />
           </View>
@@ -191,6 +195,7 @@ export default function LiftingScreen() {
           <ExercisePicker />
         </Sheet>
       ) : null}
+      {open?.kind === 'plan' ? <PlanSheet key={n} onClose={() => setOpen(null)} /> : null}
       {open?.kind === 'start' ? (
         <Sheet visible title="Start a workout" onClose={() => setOpen(null)}>
           <Mute>Pick a routine, or start empty and add exercises as you go.</Mute>
@@ -203,6 +208,31 @@ export default function LiftingScreen() {
         </Sheet>
       ) : null}
     </SafeAreaView>
+  );
+}
+
+/** Switch to a ready-made plan. Current routines stay (and keep their history) but come off the schedule. */
+function PlanSheet({ onClose }: { onClose: () => void }) {
+  const { state, update } = useTracker();
+  const [choice, setChoice] = useState<LiftChoice>({ split: 'ppl', days: 3 });
+  return (
+    <Sheet visible title="Choose a plan" onClose={onClose}>
+      <LiftPlanPicker value={choice} onChange={setChoice} />
+      {state.lifting.routines.length ? (
+        <Mute style={{ marginTop: space.md, fontSize: 13 }}>
+          Your current routines stay in the list with their history, but come off the weekly schedule.
+        </Mute>
+      ) : null}
+      <Button
+        label="Use this plan"
+        primary
+        style={{ marginTop: space.lg }}
+        onPress={() => {
+          update((s) => ({ ...s, lifting: applyTemplate(s.lifting, liftingPlan(choice.split, choice.days), () => newId('r')) }));
+          onClose();
+        }}
+      />
+    </Sheet>
   );
 }
 

@@ -5,6 +5,7 @@ import { EQUIPMENT, MUSCLE_GROUPS, newId, searchExercises, type Exercise, type U
 
 import { Field, Label, Mute } from '../components';
 import { Button, LinkButton, Pill } from '../food/kit';
+import { MultiSelect, Select } from '../Select';
 import { useTracker } from '../store';
 import { fonts, radius, space, useColors } from '../theme';
 import { useLibrary } from './library';
@@ -64,11 +65,13 @@ export function ExercisePicker({ onPick, pickLabel = 'Add' }: { onPick?: (e: Exe
   return (
     <View>
       <Field value={q} onChangeText={setQ} placeholder="Search 700+ exercises" autoCorrect={false} accessibilityLabel="Search exercises" />
-      <View style={[st.wrap, { marginTop: space.sm }]}>
-        <Pill label="All" selected={!group} onPress={() => setGroup(null)} />
-        {MUSCLE_GROUPS.map((g) => (
-          <Pill key={g.id} label={g.label} selected={group === g.id} onPress={() => setGroup(group === g.id ? null : g.id)} />
-        ))}
+      <View style={{ marginTop: space.sm }}>
+        <Select
+          label="Muscle group"
+          value={group ?? ''}
+          options={[{ value: '', label: 'All muscle groups' }, ...MUSCLE_GROUPS.map((g) => ({ value: g.id, label: g.label }))]}
+          onChange={(v) => setGroup(v || null)}
+        />
       </View>
       <View style={{ flexDirection: 'row', marginTop: space.md }}>
         <LinkButton label="Create your own exercise" onPress={() => setCreating(true)} />
@@ -115,22 +118,19 @@ function CreateExercise({ initialName, onDone }: { initialName: string; onDone: 
       <Label>Name</Label>
       <Field value={name} onChangeText={setName} placeholder="e.g. Hotel gym chest press" accessibilityLabel="Exercise name" />
       <Label>Equipment</Label>
-      <View style={st.wrap}>
-        {EQUIPMENT.map((e) => (
-          <Pill key={e} label={cap(e)} selected={equipment === e} onPress={() => setEquipment(e)} />
-        ))}
-      </View>
+      <Select label="Equipment" value={equipment} options={EQUIPMENT.map((e) => ({ value: e, label: cap(e) }))} onChange={setEquipment} />
       <Label>Main muscles</Label>
-      <View style={st.wrap}>
-        {muscles.map((m) => (
-          <Pill key={m} label={cap(m)} selected={primary.includes(m)} onPress={() => setPrimary(primary.includes(m) ? primary.filter((x) => x !== m) : [...primary, m])} />
-        ))}
-      </View>
+      <MultiSelect label="Main muscles" values={primary} options={muscles.map((m) => ({ value: m, label: cap(m) }))} onChange={setPrimary} placeholder="Choose" />
       <Label>Weight is counted in</Label>
-      <View style={st.wrap}>
-        <Pill label="Pounds" selected={unit === 'lb'} onPress={() => setUnit('lb')} />
-        <Pill label="Plates" selected={unit === 'plates'} onPress={() => setUnit('plates')} />
-      </View>
+      <Select<Unit>
+        label="Weight is counted in"
+        value={unit}
+        options={[
+          { value: 'lb', label: 'Pounds' },
+          { value: 'plates', label: 'Plates', hint: 'For machines with numbered plates or pins.' },
+        ]}
+        onChange={setUnit}
+      />
       {err ? <Text style={{ color: c.bad, fontWeight: '700', marginTop: space.md }}>{err}</Text> : null}
       <Button
         label="Save exercise"
@@ -150,7 +150,6 @@ function CreateExercise({ initialName, onDone }: { initialName: string; onDone: 
 }
 
 const st = StyleSheet.create({
-  wrap: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
   row: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.md },
   name: { fontFamily: fonts.display, fontSize: 28, lineHeight: 32 },
   image: { width: '100%', aspectRatio: 1.4, borderRadius: radius.md, marginTop: space.md },

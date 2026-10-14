@@ -1,6 +1,8 @@
 import { describe, expect, it } from '@jest/globals';
 
-import { cinFor, nextTarget, normalize, runStatus, scheduledRoutine, type TrackerState } from '..';
+import { cinFor, nextTarget, normalize, plannedFor, scheduledRoutine, workoutStatus, type CardioData, type TrackerState } from '..';
+
+const runStatus = (c: CardioData, s: string, today: string) => workoutStatus(c, plannedFor(c.plan, s, 'run')!, today);
 
 // Saved by the first version: plan from Oct 5, a few weeks of runs, lifts, calories and a swap.
 const V1 = {
@@ -52,7 +54,7 @@ describe('bringing first-version data forward', () => {
   });
 
   it('keeps every run, counted toward the right plan run', () => {
-    expect(st.cardio.plan).toEqual({ start: '2026-10-05' });
+    expect(st.cardio.plan).toEqual({ id: 'run-half', start: '2026-10-05' });
     const runs = st.cardio.sessions.map((x) => [x.date, x.miles, x.secs ?? null, x.planDay ?? null]);
     expect(runs).toEqual([
       ['2026-10-06', 3, 1650, '2026-10-06'],

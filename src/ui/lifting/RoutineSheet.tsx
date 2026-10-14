@@ -4,7 +4,8 @@ import { StyleSheet, Text, View } from 'react-native';
 import { DAY_NAMES, defaultIncrement, fmtW, nextTarget, type Routine, type RoutineItem } from '@/logic';
 
 import { Field, Label, Mute } from '../components';
-import { Button, LinkButton, Pill, Sheet } from '../food/kit';
+import { Button, LinkButton, Sheet } from '../food/kit';
+import { MultiSelect } from '../Select';
 import { useTracker } from '../store';
 import { fonts, radius, space, useColors } from '../theme';
 import { ExercisePicker } from './ExercisePicker';
@@ -54,22 +55,21 @@ export function RoutineSheet({ visible, id, onClose }: { visible: boolean; id: s
           <Field value={r.name} onChangeText={(name) => save((r) => ({ ...r, name }))} placeholder="e.g. Push day" accessibilityLabel="Routine name" />
 
           <Label>Days</Label>
-          <View style={st.wrap}>
-            {DAY_NAMES.map((d, i) => {
-              const on = state.lifting.schedule[i] === id;
-              const other = !on && state.lifting.schedule[i] ? state.lifting.routines.find((x) => x.id === state.lifting.schedule[i])?.name : null;
-              return (
-                <Pill
-                  key={d}
-                  label={other ? `${d} (${other})` : d}
-                  selected={on}
-                  onPress={() =>
-                    update((s) => ({ ...s, lifting: { ...s.lifting, schedule: s.lifting.schedule.map((x, j) => (j === i ? (on ? null : id) : x)) } }))
-                  }
-                />
-              );
+          <MultiSelect
+            label="Days"
+            values={state.lifting.schedule.map((x, i) => (x === id ? i : -1)).filter((i) => i >= 0)}
+            options={DAY_NAMES.map((d, i) => {
+              const other = state.lifting.schedule[i] && state.lifting.schedule[i] !== id ? state.lifting.routines.find((x) => x.id === state.lifting.schedule[i])?.name : null;
+              return { value: i, label: d, hint: other ? `Now: ${other}` : undefined };
             })}
-          </View>
+            onChange={(days) =>
+              update((s) => ({
+                ...s,
+                lifting: { ...s.lifting, schedule: s.lifting.schedule.map((x, j) => (days.includes(j) ? id : x === id ? null : x)) },
+              }))
+            }
+            placeholder="Not scheduled"
+          />
           <Mute style={{ fontSize: 13, marginTop: 4 }}>One routine per day. Picking a day that has another routine replaces it.</Mute>
 
           <Text style={[st.h, { color: c.ink }]}>Exercises</Text>

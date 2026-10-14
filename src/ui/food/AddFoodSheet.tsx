@@ -35,6 +35,7 @@ import {
 } from '@/logic';
 
 import { Field, Label, Mute } from '../components';
+import { MultiSelect, Select } from '../Select';
 import { useTracker } from '../store';
 import { fonts, space, tabular, toneColor, useColors } from '../theme';
 import { Button, LinkButton, Notice, Pill, Sheet } from './kit';
@@ -509,11 +510,12 @@ function AmountView({
       {options.length ? (
         <View style={{ marginTop: space.lg, gap: 6 }}>
           <Text style={st.lbl(c.mute)}>Measure</Text>
-          <View style={[st.row, { marginTop: 0, flexWrap: 'wrap' }]}>
-            {options.map((o) => (
-              <Pill key={o.label} label={o === GRAMS ? 'Grams' : portionText(o)} selected={portion === o} onPress={() => setPortion(o)} />
-            ))}
-          </View>
+          <Select
+            label="Measure"
+            value={portion ? options.indexOf(portion) : null}
+            options={options.map((o, i) => ({ value: i, label: o === GRAMS ? 'Grams' : portionText(o) }))}
+            onChange={(i) => setPortion(options[i])}
+          />
         </View>
       ) : (
         <Mute style={{ marginTop: space.sm }}>1 serving = {food.serving}</Mute>
@@ -745,15 +747,8 @@ function FoodForm({
       ) : null}
 
       <Text style={[st.lbl(c.mute), { marginTop: space.lg }]}>Contains (used by diets like vegan or paleo)</Text>
-      <View style={[st.row, { flexWrap: 'wrap', marginTop: 6 }]}>
-        {FOOD_TAGS.map((t) => (
-          <Pill
-            key={t.id}
-            label={t.label}
-            selected={tags.includes(t.id)}
-            onPress={() => setTags(tags.includes(t.id) ? tags.filter((x) => x !== t.id) : [...tags, t.id])}
-          />
-        ))}
+      <View style={{ marginTop: 6 }}>
+        <MultiSelect label="Contains" values={tags} options={FOOD_TAGS.map((t) => ({ value: t.id, label: t.label }))} onChange={setTags} />
       </View>
 
       {err ? <Text style={{ color: c.bad, fontWeight: '700', marginTop: space.md }}>{err}</Text> : null}

@@ -2,13 +2,16 @@ import DateTimePicker, { DateTimePickerAndroid } from '@react-native-community/d
 import { createElement } from 'react';
 import { Platform, Pressable, Text, View } from 'react-native';
 
-import { raceDay, shortDayLabel, toD, toS } from '@/logic';
+import { planEnd, raceDay, shortDayLabel, toD, toS, type CardioPlan } from '@/logic';
 
 import { Mute } from './components';
 import { useColors, useIsDark } from './theme';
 
-/** Plan start date. Any chosen date snaps back to that week's Monday (done in the store). */
-export function StartPicker({ start, onChange }: { start: string; onChange: (s: string) => void }) {
+/** Plan start date. Any chosen date snaps back to that week's Monday (done by the caller). */
+export function StartPicker({ plan, onChange }: { plan: CardioPlan; onChange: (s: string) => void }) {
+  const start = plan.start;
+  const race = raceDay(plan);
+  const end = planEnd(plan);
   const c = useColors();
   const isDark = useIsDark();
 
@@ -55,7 +58,7 @@ export function StartPicker({ start, onChange }: { start: string; onChange: (s: 
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
       {picker}
-      <Mute>Race day: {shortDayLabel(raceDay(start))}</Mute>
+      <Mute>{race ? `Race day: ${shortDayLabel(race)}` : end ? `Ends ${shortDayLabel(end)}` : 'No end date: repeats every week'}</Mute>
     </View>
   );
 }

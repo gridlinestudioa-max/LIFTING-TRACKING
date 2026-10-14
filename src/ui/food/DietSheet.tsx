@@ -2,21 +2,19 @@ import { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import {
-  ACTIVITY,
   FAST_PRESETS,
   FOOD_TAGS,
-  GOALS,
   STYLES,
   STYLE_BY_ID,
   activeDiet,
   calorieTarget,
   editOwnLimits,
-  fmt,
   fmtClock,
   fmtInt,
-  heightText,
   isAdjusted,
+  missingForSuggestions,
   parseClock,
+  statsOf,
   suggestTargets,
   tdee,
   usesSuggestions,
@@ -28,7 +26,9 @@ import {
 import { CommitNumberField, Field, Mute } from '../components';
 import { useTracker } from '../store';
 import { fonts, space, useColors } from '../theme';
-import { Button, LinkButton, Notice, Pill, Sheet } from './kit';
+import { MultiSelect, Select } from '../Select';
+import { Button, LinkButton, Notice, Sheet } from './kit';
+import { ProfileLines } from './ProfileLines';
 import { ProfileForm } from './ProfileForm';
 
 /** Pick and adjust the diet. Changes save as they're made. */
@@ -37,6 +37,7 @@ export function DietSheet({ visible, onClose }: { visible: boolean; onClose: () 
   const { state, setDiet, setProfile } = useTracker();
   const d = state.diet;
   const profile = state.profile;
+  const stats = statsOf(profile);
   const [editingProfile, setEditingProfile] = useState(false);
   const f = d.fasting;
   const preset = f ? FAST_PRESETS.find((p) => p.eatHours === f.eatHours) : undefined;
@@ -63,20 +64,14 @@ export function DietSheet({ visible, onClose }: { visible: boolean; onClose: () 
       <Heading>About you</Heading>
       {profile && !editingProfile ? (
         <View style={{ gap: 4 }}>
-          <Text style={{ color: c.ink, fontSize: 15, fontWeight: '600' }}>
-            {[
-              profile.sex === 'male' ? 'Male' : 'Female',
-              `${profile.age} years`,
-              heightText(profile.heightIn),
-              `${fmt(profile.weightLb)} lb`,
-            ].join(' · ')}
-          </Text>
-          <Mute>
-            {ACTIVITY.find((a) => a.id === profile.activity)!.label} activity · {GOALS.find((g) => g.id === profile.goal)!.label}
-          </Mute>
-          <Mute>
-            {`You burn about ${fmtInt(Math.round(tdee(profile) / 10) * 10)} kcal a day. Suggested intake: ${fmtInt(calorieTarget(profile))} kcal.`}
-          </Mute>
+          <ProfileLines profile={profile} />
+          {stats ? (
+            <Mute>
+              {`You burn about ${fmtInt(Math.round(tdee(stats) / 10) * 10)} kcal a day. Suggested intake: ${fmtInt(calorieTarget(stats))} kcal.`}
+            </Mute>
+          ) : (
+            <Mute>{`For suggested targets, add your ${missingForSuggestions(profile)}.`}</Mute>
+          )}
           <View style={{ flexDirection: 'row', marginTop: space.xs }}>
             <LinkButton label="Edit your stats" onPress={() => setEditingProfile(true)} />
           </View>
@@ -100,35 +95,27 @@ export function DietSheet({ visible, onClose }: { visible: boolean; onClose: () 
       )}
 
       <Heading>Fasting</Heading>
-      <View style={st.wrap}>
-        <Pill
-          label="Off"
-          selected={!f}
-          onPress={() => {
+      <Select
+        label="Fasting"
+        value={!f ? 'off' : customFast || !preset ? 'custom' : preset.id}
+        options={[
+          { value: 'off', label: 'Off', hint: 'Eat any time.' },
+          ...FAST_PRESETS.map((p) => ({ value: p.id, label: p.id, hint: p.blurb })),
+          { value: 'custom', label: 'Custom', hint: 'Choose how many hours you eat.' },
+        ]}
+        onChange={(v) => {
+          if (v === 'off') {
             setCustomFast(false);
             setFast(null);
-          }}
-        />
-        {FAST_PRESETS.map((p) => (
-          <Pill
-            key={p.id}
-            label={p.id}
-            selected={!!f && !customFast && f.eatHours === p.eatHours}
-            onPress={() => {
-              setCustomFast(false);
-              setFast(p.eatHours);
-            }}
-          />
-        ))}
-        <Pill
-          label="Custom"
-          selected={customFast}
-          onPress={() => {
+          } else if (v === 'custom') {
             setCustomFast(true);
             if (!f) setFast(8);
-          }}
-        />
-      </View>
+          } else {
+            setCustomFast(false);
+            setFast(FAST_PRESETS.find((p) => p.id === v)!.eatHours);
+          }
+        }}
+      />
       {f ? (
         <View style={{ marginTop: space.md, gap: space.md }}>
           {!customFast && preset ? <Mute>{preset.blurb}</Mute> : null}
@@ -167,14 +154,10 @@ export function DietSheet({ visible, onClose }: { visible: boolean; onClose: () 
       ) : null}
 
       <Heading>Food style</Heading>
-      <View style={st.wrap}>
-        {STYLES.map((s) => (
-          <Pill key={s.id} label={s.name} selected={d.style === s.id} onPress={() => setDiet(withStyle(d, s.id))} />
-        ))}
-      </View>
+      <Select label="Food style" value={d.style} options={STYLES.map((s) => ({ value: s.id, label: s.name, hint: s.blurb }))} onChange={(v) => setDiet(withStyle(d, v))} />
       <Mute style={{ marginTop: space.md }}>
         {STYLE_BY_ID[d.style].blurb}
-        {!profile && isAdjusted(d) ? ' You’ve adjusted the limits below.' : ''}
+        {!stats && isAdjusted(d) ? ' You’ve adjusted the limits below.' : ''}
       </Mute>
 
       <Heading>Daily targets</Heading>
@@ -184,7 +167,7 @@ export function DietSheet({ visible, onClose }: { visible: boolean; onClose: () 
         />
       ) : (
         <>
-          {profile ? (
+          {stats ? (
             <Notice tone="mute" style={{ marginBottom: space.sm }}>
               <Text style={{ color: c.ink, fontSize: 14 }}>You’re using your own numbers. Suggested values are shown under each one.</Text>
               <View style={{ flexDirection: 'row', marginTop: 4 }}>
@@ -195,13 +178,13 @@ export function DietSheet({ visible, onClose }: { visible: boolean; onClose: () 
             <Mute>Leave a box empty to turn that rule off. Add your stats above for suggested numbers.</Mute>
           )}
           {LIMIT_ROWS.map((r) => {
-            const sug = profile ? suggestTargets(profile, d.style).limits[r.key] : undefined;
+            const sug = stats ? suggestTargets(stats, d.style).limits[r.key] : undefined;
             return (
               <LimitRow
                 key={r.key}
                 label={r.label}
                 unit={r.unit}
-                note={[r.note, profile ? (sug != null ? `Suggested: ${fmtInt(sug)}${r.unit === '%' ? '%' : ` ${r.unit}`}` : 'Suggested: off') : null]
+                note={[r.note, stats ? (sug != null ? `Suggested: ${fmtInt(sug)}${r.unit === '%' ? '%' : ` ${r.unit}`}` : 'Suggested: off') : null]
                   .filter(Boolean)
                   .join(' · ')}
                 value={d.limits[r.key]}
@@ -213,18 +196,12 @@ export function DietSheet({ visible, onClose }: { visible: boolean; onClose: () 
       )}
 
       <Heading>Foods to avoid</Heading>
-      <View style={st.wrap}>
-        {FOOD_TAGS.map((t) => (
-          <Pill
-            key={t.id}
-            label={t.label}
-            selected={d.exclude.includes(t.id)}
-            onPress={() =>
-              setDiet({ ...d, exclude: d.exclude.includes(t.id) ? d.exclude.filter((x) => x !== t.id) : [...d.exclude, t.id] })
-            }
-          />
-        ))}
-      </View>
+      <MultiSelect
+        label="Foods to avoid"
+        values={d.exclude}
+        options={FOOD_TAGS.map((t) => ({ value: t.id, label: t.label }))}
+        onChange={(exclude) => setDiet({ ...d, exclude })}
+      />
     </Sheet>
   );
 }
@@ -241,7 +218,7 @@ const LIMIT_ROWS: { key: keyof Limits; label: string; unit: string; note?: strin
 function SuggestedTargets({ onEdit }: { onEdit: () => void }) {
   const c = useColors();
   const { state } = useTracker();
-  const t = suggestTargets(state.profile!, state.diet.style);
+  const t = suggestTargets(statsOf(state.profile)!, state.diet.style);
   const active = activeDiet(state.diet, state.profile).limits;
   return (
     <View>
@@ -306,7 +283,6 @@ function LimitRow({
 
 const st = StyleSheet.create({
   h: { fontFamily: fonts.semi, fontSize: 22, lineHeight: 26, marginTop: space.xl, paddingTop: space.lg, borderTopWidth: 1, marginBottom: space.sm },
-  wrap: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
   line: { flexDirection: 'row', gap: space.md },
   lbl: { fontSize: 13, fontWeight: '600' },
   limit: { flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingVertical: space.sm, borderTopWidth: 1, marginTop: space.xs },
