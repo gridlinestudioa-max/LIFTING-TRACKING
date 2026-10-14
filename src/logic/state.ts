@@ -81,6 +81,8 @@ export function normalize(s: unknown): TrackerState {
         if (f.tally === true) food.tally = true;
         const tp = f.tallyPortion;
         if (food.per100 && tp && typeof tp.label === 'string' && Number(tp.g) > 0) food.tallyPortion = { label: tp.label, g: Number(tp.g) };
+        const pc = Number(f.pieces);
+        if (Number.isInteger(pc) && pc >= 1 && pc <= 200) food.pieces = pc;
         return food;
       })
       .filter((f: Food | null): f is Food => f !== null);
