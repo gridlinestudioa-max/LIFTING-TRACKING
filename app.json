@@ -39,6 +39,8 @@
       [
         "expo-location",
         {
+          "locationAlwaysAndWhenInUsePermission": "Allow $(PRODUCT_NAME) to use your location to record the route of your runs, walks and rides, including while the screen is locked. Location is only used while you are recording.",
+          "locationAlwaysPermission": "Allow $(PRODUCT_NAME) to use your location to record the route of your runs, walks and rides, including while the screen is locked. Location is only used while you are recording.",
           "locationWhenInUsePermission": "Allow $(PRODUCT_NAME) to use your location to record the route of your runs, walks and rides, including while the screen is locked.",
           "isIosBackgroundLocationEnabled": true,
           "isAndroidForegroundServiceEnabled": true
