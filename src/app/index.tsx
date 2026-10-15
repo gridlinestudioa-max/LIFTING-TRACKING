@@ -1,5 +1,5 @@
 import { router } from 'expo-router';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -21,6 +21,7 @@ import {
   kcalInfo,
   liftSummary,
   liftWeek,
+  loadStatus,
   mondayOf,
   moveWidget,
   paceText,
@@ -32,12 +33,15 @@ import {
   scheduledRoutine,
   shortDayLabel,
   sumTotals,
+  trainingLoad,
   visibleWidgets,
+  weeklyEffort,
   weeklyTotals,
   workoutLine,
   workoutStatus,
   type WidgetId,
 } from '@/logic';
+import { SleepCard, StepsCard, WaterCard, WeightCard } from '@/ui/body/BodyCards';
 import { Header, Mute, Section, WeekBar } from '@/ui/components';
 import { Button, LinkButton, Sheet, useClock } from '@/ui/food/kit';
 import { TallyList } from '@/ui/food/Meals';
@@ -98,6 +102,16 @@ function Widget({ id }: { id: WidgetId }) {
       return <LastCard />;
     case 'streak':
       return <StreakCard />;
+    case 'load':
+      return <LoadCard />;
+    case 'weight':
+      return <WeightCard />;
+    case 'water':
+      return <WaterCard />;
+    case 'sleep':
+      return <SleepCard />;
+    case 'steps':
+      return <StepsCard />;
   }
 }
 
@@ -376,6 +390,33 @@ function LastCard() {
         </>
       ) : (
         <Mute>Nothing logged yet.</Mute>
+      )}
+    </Tap>
+  );
+}
+
+function LoadCard() {
+  const c = useColors();
+  const { state, today } = useTracker();
+  const series = useMemo(() => trainingLoad(state.cardio, state.profile, today, 84), [state.cardio, state.profile, today]);
+  const status = loadStatus(series);
+  const last = series[series.length - 1];
+  const week = weeklyEffort(state.cardio, state.profile, today, 1)[0].effort;
+  return (
+    <Tap title="Training load" to="/cardio">
+      {last ? (
+        <>
+          <View style={{ flexDirection: 'row' }}>
+            <Big value={fmtInt(week)} label="Effort this week" />
+            <Big value={fmtInt(last.fitness)} label="Fitness" />
+            <Big value={fmtInt(last.fatigue)} label="Fatigue" />
+          </View>
+          <Text style={{ color: c.mute, fontSize: 13, marginTop: space.sm }}>
+            {status ? `This week: ${status.label.toLowerCase()}.` : 'Keep logging timed workouts. The trend needs about three weeks.'}
+          </Text>
+        </>
+      ) : (
+        <Mute>Log a cardio session with a time to see your effort and training load.</Mute>
       )}
     </Tap>
   );

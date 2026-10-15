@@ -2,7 +2,9 @@
 
 import type { Sections } from './types';
 
-export type WidgetId = 'workout' | 'calories' | 'remaining' | 'protein' | 'macros' | 'fasting' | 'week' | 'plan' | 'tally' | 'streak' | 'last';
+export type WidgetId =
+  | 'workout' | 'calories' | 'remaining' | 'protein' | 'macros' | 'fasting' | 'week' | 'plan' | 'tally' | 'streak' | 'last'
+  | 'weight' | 'water' | 'sleep' | 'steps' | 'load';
 
 export const WIDGETS: { id: WidgetId; label: string; needs?: keyof Sections }[] = [
   { id: 'workout', label: 'Today’s workout' },
@@ -15,7 +17,12 @@ export const WIDGETS: { id: WidgetId; label: string; needs?: keyof Sections }[] 
   { id: 'week', label: 'This week’s training' },
   { id: 'plan', label: 'Cardio plan progress', needs: 'cardio' },
   { id: 'last', label: 'Last cardio activity', needs: 'cardio' },
+  { id: 'load', label: 'Training load', needs: 'cardio' },
   { id: 'streak', label: 'Lifting streak', needs: 'lifting' },
+  { id: 'weight', label: 'Weight' },
+  { id: 'water', label: 'Water' },
+  { id: 'sleep', label: 'Sleep' },
+  { id: 'steps', label: 'Steps' },
 ];
 
 export const DEFAULT_HOME: WidgetId[] = ['workout', 'calories', 'protein', 'week'];

@@ -10,6 +10,7 @@ import { ProfileForm } from '@/ui/food/ProfileForm';
 import { ProfileLines } from '@/ui/food/ProfileLines';
 import { SECTION_INFO } from '@/ui/Onboarding';
 import { PlanPicker } from '@/ui/cardio/PlanPicker';
+import { DataSection, DeleteSection, PrivacySection } from '@/ui/data/DataSection';
 import { FriendsBoard } from '@/ui/social/FriendsBoard';
 import { PersonalBoard } from '@/ui/social/PersonalBoard';
 import { useTracker } from '@/ui/store';
@@ -139,6 +140,10 @@ export default function YouScreen() {
             <Button label="Start a new plan" onPress={() => setConfirmReset(true)} />
           )}
         </Section>
+
+        <DataSection />
+        <PrivacySection />
+        <DeleteSection />
 
         <Text style={{ color: c.mute, fontSize: 12, lineHeight: 17, marginTop: space.sm, paddingHorizontal: space.xs }}>
           Food data: USDA FoodData Central and Open Food Facts (ODbL). Exercises: free-exercise-db. Targets are general guidance, not medical advice.

@@ -16,18 +16,35 @@ import {
   parseTime,
   planDayOptions,
   plannedOn,
+  sessionGpx,
   shortDayLabel,
   type CardioSession,
   type CardioType,
 } from '@/logic';
 
 import { Field } from '../components';
+import { saveText } from '../files';
 import { Button, LinkButton, Sheet } from '../food/kit';
 import { Select } from '../Select';
 import { useTracker } from '../store';
 import { Splits } from './Recorder';
 import { RouteMap } from './RouteMap';
 import { fonts, radius, space, tabular, useColors } from '../theme';
+
+// 0 = not set. Labels follow the usual 1–10 "how hard did it feel" scale.
+const RPE_OPTIONS = [
+  { value: 0, label: 'Not set' },
+  { value: 1, label: '1 · Very easy' },
+  { value: 2, label: '2 · Easy' },
+  { value: 3, label: '3 · Light' },
+  { value: 4, label: '4 · Comfortable' },
+  { value: 5, label: '5 · Moderate' },
+  { value: 6, label: '6 · Somewhat hard' },
+  { value: 7, label: '7 · Hard' },
+  { value: 8, label: '8 · Very hard' },
+  { value: 9, label: '9 · Near max' },
+  { value: 10, label: '10 · All out' },
+];
 
 /** Log a cardio session on a day, or edit one. Remount (change `key`) each time it opens. */
 export function LogSheet({ visible, day, editing, onClose }: { visible: boolean; day: string; editing: CardioSession | null; onClose: () => void }) {
@@ -47,10 +64,12 @@ export function LogSheet({ visible, day, editing, onClose }: { visible: boolean;
   const [hr, setHr] = useState(editing?.hr ? String(editing.hr) : '');
   const [maxHr, setMaxHr] = useState(editing?.maxHr ? String(editing.maxHr) : '');
   const [kcal, setKcal] = useState(editing?.kcal ? String(editing.kcal) : '');
-  const [more, setMore] = useState(!!(editing?.elevFt || editing?.hr || editing?.maxHr || editing?.kcal));
+  const [rpe, setRpe] = useState<number>(editing?.rpe ?? 0);
+  const [more, setMore] = useState(!!(editing?.elevFt || editing?.hr || editing?.maxHr || editing?.kcal || editing?.rpe));
   // '' = doesn't count toward a plan run.
   const [planDay, setPlanDay] = useState<string>(editing ? (editing.planDay ?? '') : (defaultPlanDay(cardio, day, type) ?? ''));
   const [err, setErr] = useState<string | null>(null);
+  const [exportErr, setExportErr] = useState<string | null>(null);
 
   const others = { ...cardio, sessions: cardio.sessions.filter((x) => x.id !== editing?.id) };
   const options = cardio.plan ? planDayOptions(others, day, today, type) : [];
@@ -77,6 +96,7 @@ export function LogSheet({ visible, day, editing, onClose }: { visible: boolean;
     if (num(hr) && num(hr)! >= 40 && num(hr)! <= 230) x.hr = num(hr);
     if (num(maxHr) && num(maxHr)! >= 40 && num(maxHr)! <= 240) x.maxHr = num(maxHr);
     if (num(kcal)) x.kcal = num(kcal);
+    if (rpe >= 1 && rpe <= 10) x.rpe = rpe;
     if (planDay && options.some((o) => o.s === planDay)) x.planDay = planDay;
     update((s) => {
       const list = s.cardio.sessions.filter((y) => y.id !== x.id);
@@ -85,6 +105,12 @@ export function LogSheet({ visible, day, editing, onClose }: { visible: boolean;
       return { ...s, cardio: { ...s.cardio, sessions: [...list, x].sort((a, b) => a.date.localeCompare(b.date)), skips } };
     });
     onClose();
+  };
+
+  const exportRoute = async () => {
+    const gpx = editing ? sessionGpx(editing) : null;
+    if (!editing || !gpx) return;
+    setExportErr(await saveText(`${editing.date}-${editing.type}.gpx`, gpx, 'application/gpx+xml'));
   };
 
   const remove = () => {
@@ -175,10 +201,15 @@ export function LogSheet({ visible, day, editing, onClose }: { visible: boolean;
             <Small label="Avg heart rate" value={hr} onChange={setHr} />
             <Small label="Max heart rate" value={maxHr} onChange={setMaxHr} />
           </View>
+          <View style={{ marginTop: space.md, gap: 6 }}>
+            <Text style={[st.lbl, { color: c.mute }]}>How hard did it feel?</Text>
+            <Select label="How hard did it feel?" value={rpe} options={RPE_OPTIONS} onChange={setRpe} />
+            <Text style={{ color: c.mute, fontSize: 12 }}>Used for your effort score when there’s no heart rate.</Text>
+          </View>
         </>
       ) : (
         <View style={{ flexDirection: 'row', marginTop: space.lg }}>
-          <LinkButton label="+ Heart rate, elevation, calories" onPress={() => setMore(true)} />
+          <LinkButton label="+ Heart rate, effort, elevation, calories" onPress={() => setMore(true)} />
         </View>
       )}
 
@@ -186,6 +217,14 @@ export function LogSheet({ visible, day, editing, onClose }: { visible: boolean;
       <Field value={note} onChangeText={setNote} placeholder="Splits, how it felt" multiline style={{ minHeight: 70, textAlignVertical: 'top' }} />
 
       {err ? <Text style={{ color: c.bad, fontWeight: '700', marginTop: space.md }}>{err}</Text> : null}
+      {editing?.route && editing.route.length >= 2 ? (
+        <View style={{ marginTop: space.lg }}>
+          <View style={{ flexDirection: 'row' }}>
+            <LinkButton label="Export route (GPX)" onPress={exportRoute} />
+          </View>
+          {exportErr ? <Text style={{ color: c.bad, fontWeight: '700', marginTop: space.sm }}>{exportErr}</Text> : null}
+        </View>
+      ) : null}
       <Button label={editing ? 'Save' : 'Log it'} primary onPress={save} style={{ marginTop: space.xl }} />
       {editing ? <Button label="Delete" danger onPress={remove} style={{ marginTop: space.md }} /> : null}
     </Sheet>
