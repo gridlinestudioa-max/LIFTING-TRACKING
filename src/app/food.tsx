@@ -4,7 +4,8 @@ import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import {
-  activeDiet,
+  calTarget,
+  dietFor,
   addDays,
   byTime,
   dietName,
@@ -57,7 +58,7 @@ export default function FoodScreen() {
   const entries = byTime(state.meals[day] ?? []);
   // Calories typed for this day, outside the food log.
   const typed = state.days[day]?.cin ?? null;
-  const diet = activeDiet(state.diet, state.profile);
+  const diet = dietFor(state, today);
   const ev = evaluateDay(diet, entries, day < today, typed ?? 0);
   const openSheet = (editing: FoodEntry | null, meal?: MealSlot) => setSheet((s) => ({ n: s.n + 1, open: true, editing, meal }));
 
@@ -203,7 +204,7 @@ function InAndOut({ day, today, onSave }: { day: string; today: string; onSave: 
   const total = cinFor(state, day);
   const est = estimatesBurn(state.profile) && day <= today ? dayBurn(state, day) : null;
   const out = info.cout ?? est?.total ?? null;
-  const k = kcalInfo(total, out, state.goal);
+  const k = kcalInfo(total, out, calTarget(state, day));
   const [low, setLow] = useState(false);
   const tracker = state.profile?.tracker;
   const missing = estimatesBurn(state.profile) && !est ? missingForBurn(state.profile) : null;
@@ -300,9 +301,9 @@ function NavButton({ label, a11y, onPress }: { label: string; a11y: string; onPr
 /** The diet at a glance: on track or not, and the fasting window. The rules and today's numbers are one tap away. */
 function DietCard({ ev, isToday, now, day, onChange }: { ev: DayEval; isToday: boolean; now: number; day: string; onChange: () => void }) {
   const c = useColors();
-  const { state } = useTracker();
+  const { state, today } = useTracker();
   const [open, setOpen] = useState(false);
-  const d = activeDiet(state.diet, state.profile);
+  const d = dietFor(state, today);
 
   if (!hasRules(d)) {
     return (

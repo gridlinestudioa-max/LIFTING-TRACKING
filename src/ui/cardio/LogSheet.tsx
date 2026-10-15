@@ -204,12 +204,11 @@ export function LogSheet({ visible, day, editing, onClose }: { visible: boolean;
           <View style={{ marginTop: space.md, gap: 6 }}>
             <Text style={[st.lbl, { color: c.mute }]}>How hard did it feel?</Text>
             <Select label="How hard did it feel?" value={rpe} options={RPE_OPTIONS} onChange={setRpe} />
-            <Text style={{ color: c.mute, fontSize: 12 }}>Used for your effort score when there’s no heart rate.</Text>
           </View>
         </>
       ) : (
         <View style={{ flexDirection: 'row', marginTop: space.lg }}>
-          <LinkButton label="+ Heart rate, effort, elevation, calories" onPress={() => setMore(true)} />
+          <LinkButton label="+ Heart rate, how hard it felt, elevation, calories" onPress={() => setMore(true)} />
         </View>
       )}
 

@@ -51,7 +51,7 @@ const KEY_LABELS: Record<KeyKind, string> = {
   logged: 'Logged',
   deficit: 'Deficit',
   surplus: 'Surplus',
-  goal: 'Your goal',
+  goal: 'Your target',
   weight: 'Logged weight',
   trend: 'Weekly trend',
   fitness: 'Fitness',
@@ -166,8 +166,9 @@ export function BarChart({
   const c = useColors();
   const H = 184, padT = 22, padB = 22;
   const nums = values.filter((v): v is number => v != null);
-  const g = goal != null && goal > 0 ? goal : null;
-  const ticks = niceTicks(Math.min(0, ...nums), Math.max(0, ...nums, g ?? 0));
+  // A target line: a deficit above zero, a surplus below. Eating what you burn is the zero line already.
+  const g = goal != null && goal !== 0 ? goal : null;
+  const ticks = niceTicks(Math.min(0, ...nums, g ?? 0), Math.max(0, ...nums, g ?? 0));
   const lo = ticks[0], hi = ticks[ticks.length - 1];
   const y = (v: number) => padT + ((hi - v) / (hi - lo || 1)) * (H - padT - padB);
   const n = values.length;

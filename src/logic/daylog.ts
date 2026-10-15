@@ -3,7 +3,7 @@
 // Pure logic, no React.
 
 import { coutFor } from './burn';
-import { cinFor, net } from './calories';
+import { cinFor, net, onTarget } from './calories';
 import { dayStatus, plannedOn, type CardioSession, type CardioType, type PlannedWorkout } from './cardio';
 import { fmt } from './format';
 import { scheduledRoutine, type Routine, type Workout } from './lifting';
@@ -108,4 +108,40 @@ export function firstWorkout(state: TrackerState): string | null {
   let first: string | null = null;
   for (const w of state.lifting.workouts) if (!first || w.date < first) first = w.date;
   return first;
+}
+
+/**
+ * How a day went, all things considered: every planned workout done (and the calorie target hit, when
+ * there is one and the day is over) is 'all'; some of it is 'some'; none of it on a past day is 'missed'.
+ * Today and future days with something to do are 'planned' until it's done. Nothing planned is 'rest'.
+ */
+export type DayResult = 'all' | 'some' | 'missed' | 'planned' | 'rest';
+
+export interface DayProgress {
+  /** Things to do that day: each workout, plus the calorie target once the day is over. */
+  total: number;
+  done: number;
+  result: DayResult;
+}
+
+export function dayProgress(d: DayLog, today: string, target: number | null): DayProgress {
+  let total = 0;
+  let done = 0;
+  let partial = false;
+  for (const m of [d.cardio?.mark ?? null, d.lift?.mark ?? null]) {
+    if (!m || m === 'skipped') continue;
+    total++;
+    if (m === 'done') done++;
+    if (m === 'partial') partial = true;
+  }
+  if (target != null && d.net != null && d.s < today) {
+    total++;
+    if (onTarget(d.net, target)) done++;
+  }
+  let result: DayResult;
+  if (!total) result = 'rest';
+  else if (done === total) result = 'all';
+  else if (done > 0 || partial) result = 'some';
+  else result = d.s >= today ? 'planned' : 'missed';
+  return { total, done, result };
 }

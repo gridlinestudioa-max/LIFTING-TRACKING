@@ -9,11 +9,9 @@ import {
   fmt,
   fmtInt,
   fmtTime,
-  maxHrFor,
   paceText,
   repsDone,
   sessionBurn,
-  sessionEffort,
   setsDone,
   shortDayLabel,
   volume,
@@ -86,7 +84,6 @@ function CardioDetail({ x }: { x: CardioSession }) {
   const foot = x.type === 'run' || x.type === 'walk' || x.type === 'hike';
   const b = baseInputs(state.profile, today);
   const kcal = x.kcal ?? (b ? sessionBurn(x, b) : null);
-  const effort = sessionEffort(x, maxHrFor(state.profile, state.cardio, today));
   const stats = [
     { label: 'Sport', value: CARDIO_LABEL[x.type] },
     x.miles ? { label: 'Distance', value: distText(x.type, x.miles) } : null,
@@ -98,7 +95,6 @@ function CardioDetail({ x }: { x: CardioSession }) {
     x.hr ? { label: 'Avg heart rate', value: `${x.hr} bpm` } : null,
     x.maxHr ? { label: 'Max heart rate', value: `${x.maxHr} bpm` } : null,
     kcal ? { label: x.kcal ? 'Calories' : 'Calories (est.)', value: `${fmtInt(kcal)} kcal` } : null,
-    effort ? { label: 'Effort', value: `${fmtInt(effort.score)} pts` } : null,
     x.rpe ? { label: 'How hard it felt', value: `${x.rpe}/10` } : null,
   ].filter((s): s is { label: string; value: string } => !!s);
   const splits = x.splits ?? [];

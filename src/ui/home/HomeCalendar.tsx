@@ -10,7 +10,12 @@ import {
   MONTHS,
   SPORT_LABEL,
   dayDiff,
+  calTarget,
   dayLog,
+  dayProgress,
+  onTarget,
+  targetText,
+  weekdayIndex,
   daysInMonth,
   distText,
   firstWorkout,
@@ -31,10 +36,13 @@ import {
   workoutStatus,
   type DayLog,
   type DayMark,
+  type DayProgress,
+  type DayResult,
 } from '@/logic';
 
 import { RouteMap } from '../cardio/RouteMap';
 import { LinkButton } from '../food/kit';
+import { CardioIcon, LiftIcon } from '../TabBar';
 import { useTracker } from '../store';
 import { fonts, radius, space, tabular, useColors, type Palette } from '../theme';
 
@@ -42,9 +50,21 @@ function markColor(c: Palette, m: DayMark | null): string {
   return m === 'done' ? c.ok : m === 'missed' ? c.bad : m === 'partial' ? c.warn : m === 'planned' ? c.mute : c.line;
 }
 
+const RESULT_TEXT: Record<DayResult, string> = { all: 'All done', some: 'Some done', missed: 'Missed', planned: 'To do', rest: 'Rest day' };
+
+/** The date's circle: filled green when everything was done, amber when some was, red when it was missed. */
+function discStyle(c: Palette, r: DayResult, past: boolean): { bg: string; fg: string; border: string } {
+  if (r === 'all') return { bg: c.ok, fg: '#ffffff', border: c.ok };
+  if (r === 'some') return { bg: c.warn, fg: '#ffffff', border: c.warn };
+  if (r === 'missed') return { bg: c.badbg, fg: c.bad, border: c.bad };
+  if (r === 'planned') return { bg: 'transparent', fg: c.ink, border: c.mute };
+  return { bg: 'transparent', fg: past ? c.mute : c.ink, border: 'transparent' };
+}
+
 /**
- * The whole plan on one calendar: each day shows its cardio and its lift (a green dot when done, red when
- * missed, grey when still to come) and the calorie deficit. Tap a day to open its full review underneath.
+ * The plan on one calendar. Each date's circle says how the day went (green: all done, amber: some, red:
+ * missed, outlined: still to do), small icons show cardio and lifting, and a thin bar shows the calorie
+ * deficit (green) or surplus (red). Past days are shaded; today is outlined. Tap a day for its full review.
  */
 export function HomeCalendar() {
   const c = useColors();
@@ -54,14 +74,22 @@ export function HomeCalendar() {
   const since = useMemo(() => firstWorkout(state), [state]);
 
   const cells = useMemo(() => {
-    const out: (DayLog | null)[] = [];
+    const out: ({ d: DayLog; p: DayProgress } | null)[] = [];
     for (let i = 0; i < monthOffset(view.y, view.m); i++) out.push(null);
-    for (let d = 1; d <= daysInMonth(view.y, view.m); d++) out.push(dayLog(state, `${view.y}-${pad(view.m + 1)}-${pad(d)}`, today, since));
+    for (let n = 1; n <= daysInMonth(view.y, view.m); n++) {
+      const s = `${view.y}-${pad(view.m + 1)}-${pad(n)}`;
+      const d = dayLog(state, s, today, since);
+      out.push({ d, p: dayProgress(d, today, calTarget(state, s)) });
+    }
     while (out.length % 7) out.push(null);
     return out;
   }, [state, view, today, since]);
-  const rows: (DayLog | null)[][] = [];
+  const rows: ({ d: DayLog; p: DayProgress } | null)[][] = [];
   for (let i = 0; i < cells.length; i += 7) rows.push(cells.slice(i, i + 7));
+  const todayCell = useMemo(() => {
+    const d = dayLog(state, today, today, since);
+    return dayProgress(d, today, calTarget(state, today));
+  }, [state, today, since]);
 
   const shift = (n: number) =>
     setView(({ y, m }) => {
@@ -69,6 +97,7 @@ export function HomeCalendar() {
       return { y: d.getFullYear(), m: d.getMonth() };
     });
   const thisMonth = view.y === toD(today).getFullYear() && view.m === toD(today).getMonth();
+  const tc = todayCell.result === 'all' ? c.ok : todayCell.result === 'some' ? c.warn : c.ink;
 
   return (
     <View style={[st.card, { backgroundColor: c.card }]}>
@@ -90,26 +119,58 @@ export function HomeCalendar() {
           <Nav label="›" a11y="Next month" onPress={() => shift(1)} />
         </View>
       </View>
+
+      <View style={[st.todayBar, { backgroundColor: c.soft }]}>
+        <Text style={{ color: c.ink, fontSize: 14, fontWeight: '800' }}>{`Today, ${shortDayLabel(today)}`}</Text>
+        <Text style={{ color: tc, fontSize: 14, fontWeight: '700', ...tabular }}>
+          {todayCell.total ? (todayCell.result === 'all' ? `All done ✓` : `${todayCell.done} of ${todayCell.total} done`) : 'Rest day'}
+        </Text>
+      </View>
+
       <View style={st.row}>
-        {DAY_NAMES.map((d) => (
-          <Text key={d} style={[st.dow, { color: c.mute }]}>
-            {d.slice(0, 1)}
+        {DAY_NAMES.map((d, i) => (
+          <Text key={d} style={[st.dow, { color: i === weekdayIndex(today) && thisMonth ? c.ink : c.mute }]}>
+            {d}
           </Text>
         ))}
       </View>
       {rows.map((r, i) => (
         <View key={i}>
           <View style={st.row}>
-            {r.map((d, j) => (d ? <Cell key={d.s} d={d} today={today} selected={open === d.s} onPress={() => setOpen(open === d.s ? null : d.s)} /> : <View key={`b${j}`} style={st.cell} />))}
+            {r.map((x, j) =>
+              x ? (
+                <Cell key={x.d.s} d={x.d} p={x.p} today={today} selected={open === x.d.s} onPress={() => setOpen(open === x.d.s ? null : x.d.s)} />
+              ) : (
+                <View key={`b${j}`} style={st.cell} />
+              ),
+            )}
           </View>
-          {open && r.some((d) => d?.s === open) ? <DayReview d={r.find((d) => d?.s === open)!} onClose={() => setOpen(null)} /> : null}
+          {open && r.some((x) => x?.d.s === open) ? <DayReview d={r.find((x) => x?.d.s === open)!.d} p={r.find((x) => x?.d.s === open)!.p} onClose={() => setOpen(null)} /> : null}
         </View>
       ))}
       <View style={st.key}>
-        <KeyDot color={c.ok} label="Done" />
-        <KeyDot color={c.bad} label="Missed" />
-        <KeyDot color={c.mute} label="Planned" />
-        <Text style={{ color: c.mute, fontSize: 11.5 }}>± kcal deficit</Text>
+        <KeyDisc r="all" label="All done" />
+        <KeyDisc r="some" label="Some done" />
+        <KeyDisc r="missed" label="Missed" />
+        <KeyDisc r="planned" label="To do" />
+      </View>
+      <View style={[st.key, { marginTop: 4 }]}>
+        <View style={st.keyItem}>
+          <CardioIcon color={c.mute} focused={false} size={14} />
+          <Text style={[st.keyText, { color: c.mute }]}>Cardio</Text>
+        </View>
+        <View style={st.keyItem}>
+          <LiftIcon color={c.mute} focused={false} size={14} />
+          <Text style={[st.keyText, { color: c.mute }]}>Lifting</Text>
+        </View>
+        <View style={st.keyItem}>
+          <View style={[st.bar, { width: 14, backgroundColor: c.ok }]} />
+          <Text style={[st.keyText, { color: c.mute }]}>Deficit</Text>
+        </View>
+        <View style={st.keyItem}>
+          <View style={[st.bar, { width: 14, backgroundColor: c.bad }]} />
+          <Text style={[st.keyText, { color: c.mute }]}>Surplus</Text>
+        </View>
       </View>
     </View>
   );
@@ -124,57 +185,58 @@ function Nav({ label, a11y, onPress }: { label: string; a11y: string; onPress: (
   );
 }
 
-function KeyDot({ color, label }: { color: string; label: string }) {
+function KeyDisc({ r, label }: { r: DayResult; label: string }) {
   const c = useColors();
+  const ds = discStyle(c, r, false);
   return (
-    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-      <View style={[st.dot, { backgroundColor: color }]} />
-      <Text style={{ color: c.mute, fontSize: 11.5 }}>{label}</Text>
+    <View style={st.keyItem}>
+      <View style={{ width: 12, height: 12, borderRadius: 6, backgroundColor: ds.bg, borderWidth: 1.5, borderColor: ds.border }} />
+      <Text style={[st.keyText, { color: c.mute }]}>{label}</Text>
     </View>
   );
 }
 
-function Line({ mark, label }: { mark: DayMark | null; label: string | null }) {
-  const c = useColors();
-  if (!label) return <View style={{ height: 13 }} />;
-  return (
-    <View style={st.line}>
-      <View style={[st.dot, { backgroundColor: markColor(c, mark) }]} />
-      <Text style={[st.lineText, { color: mark === 'skipped' ? c.mute : c.ink }]} numberOfLines={1}>
-        {label}
-      </Text>
-    </View>
-  );
-}
-
-const Cell = memo(function Cell({ d, today, selected, onPress }: { d: DayLog; today: string; selected: boolean; onPress: () => void }) {
+const Cell = memo(function Cell({ d, p, today, selected, onPress }: { d: DayLog; p: DayProgress; today: string; selected: boolean; onPress: () => void }) {
   const c = useColors();
   const day = toD(d.s).getDate();
   const isToday = d.s === today;
-  const future = d.s > today;
+  const past = d.s < today;
+  const ds = discStyle(c, p.result, past);
   const a11y = [
-    shortDayLabel(d.s),
-    d.cardio?.label ? `${d.cardio.label}${d.cardio.mark ? `, ${d.cardio.mark}` : ''}` : null,
-    d.lift?.label ? `${d.lift.label}${d.lift.mark ? `, ${d.lift.mark}` : ''}` : null,
+    isToday ? `Today, ${shortDayLabel(d.s)}` : shortDayLabel(d.s),
+    p.total ? `${RESULT_TEXT[p.result]}, ${p.done} of ${p.total}` : 'Rest day',
+    d.cardio?.label ? `Cardio: ${d.cardio.label}` : null,
+    d.lift?.label ? `Lifting: ${d.lift.label}` : null,
     d.net != null ? `${d.net >= 0 ? 'deficit' : 'surplus'} ${fmtInt(Math.abs(d.net))} calories` : null,
   ]
     .filter(Boolean)
     .join('. ');
+  const cm = d.cardio?.mark && d.cardio.mark !== 'skipped' ? d.cardio.mark : null;
+  const lm = d.lift?.mark && d.lift.mark !== 'skipped' ? d.lift.mark : null;
   return (
     <Pressable
       onPress={onPress}
       accessibilityRole="button"
       accessibilityState={{ selected }}
       accessibilityLabel={a11y}
-      style={({ pressed }) => [st.cell, st.cellBox, { borderColor: selected ? c.ink : 'transparent', backgroundColor: selected ? c.soft : pressed ? c.soft : 'transparent' }]}>
-      <View style={[st.num, isToday && { backgroundColor: c.ink }]}>
-        <Text style={{ color: isToday ? c.onAccent : future ? c.mute : c.ink, fontSize: 13, fontWeight: '700', ...tabular }}>{day}</Text>
+      style={({ pressed }) => [
+        st.cell,
+        st.cellBox,
+        {
+          backgroundColor: selected ? c.soft : past ? c.bg : 'transparent',
+          borderColor: isToday ? c.ink : selected ? c.line : 'transparent',
+          borderWidth: isToday ? 2 : 1,
+          opacity: pressed ? 0.7 : 1,
+        },
+      ]}>
+      <View style={[st.disc, { backgroundColor: ds.bg, borderColor: ds.border }]}>
+        <Text style={{ color: ds.fg, fontSize: 13.5, fontWeight: isToday || p.result !== 'rest' ? '800' : '600', ...tabular }}>{day}</Text>
       </View>
-      <Line mark={d.cardio?.mark ?? null} label={d.cardio?.label ?? null} />
-      <Line mark={d.lift?.mark ?? null} label={d.lift?.label ?? null} />
-      <Text style={[st.net, { color: d.net == null ? 'transparent' : d.net >= 0 ? c.ok : c.bad }]} numberOfLines={1}>
-        {d.net == null ? '·' : sgn(Math.round(d.net))}
-      </Text>
+      <View style={st.icons}>
+        {cm ? <CardioIcon color={markColor(c, cm)} focused={cm === 'done'} size={13} /> : null}
+        {lm ? <LiftIcon color={markColor(c, lm)} focused={lm === 'done'} size={13} /> : null}
+      </View>
+      <View style={[st.bar, { backgroundColor: d.net == null ? 'transparent' : d.net >= 0 ? c.ok : c.bad }]} />
     </Pressable>
   );
 });
@@ -211,12 +273,12 @@ function Stat({ value, label, color }: { value: string; label: string; color?: s
 }
 
 /** A full look at one day: cardio, lifting, food, calories and the body log. */
-function DayReview({ d, onClose }: { d: DayLog; onClose: () => void }) {
+function DayReview({ d, p, onClose }: { d: DayLog; p: DayProgress; onClose: () => void }) {
   const c = useColors();
   const { state, today } = useTracker();
   const diff = dayDiff(d.s, today);
   const when = diff === 0 ? 'Today' : diff === -1 ? 'Yesterday' : diff === 1 ? 'Tomorrow' : diff < 0 ? `${-diff} days ago` : `In ${diff} days`;
-  const goal = state.goal;
+  const goal = calTarget(state, d.s);
   const empty = !d.cardio?.label && !d.lift?.label && !d.food && d.net == null && !Object.keys(d.info).length;
   const route = d.cardio?.sessions.find((x) => x.route)?.route;
 
@@ -230,6 +292,11 @@ function DayReview({ d, onClose }: { d: DayLog; onClose: () => void }) {
         </View>
       </View>
 
+      {p.total ? (
+        <Text style={{ color: p.result === 'all' ? c.ok : p.result === 'some' ? c.warn : p.result === 'missed' ? c.bad : c.mute, fontSize: 14, fontWeight: '800', marginTop: 2 }}>
+          {`${RESULT_TEXT[p.result]} · ${p.done} of ${p.total}${d.s < today && calTarget(state, d.s) != null && d.net != null ? ' (workouts and calories)' : ''}`}
+        </Text>
+      ) : null}
       {empty ? <Text style={{ color: c.mute, fontSize: 14, marginTop: space.sm }}>{d.s > today ? 'Nothing planned.' : 'Nothing logged.'}</Text> : null}
 
       {d.cardio && (d.cardio.planned.length || d.cardio.sessions.length) ? (
@@ -297,7 +364,11 @@ function DayReview({ d, onClose }: { d: DayLog; onClose: () => void }) {
             <Stat value={d.cout != null ? fmtInt(d.cout) : '–'} label="Out" />
             <Stat value={d.net != null ? sgn(Math.round(d.net)) : '–'} label={d.net != null && d.net < 0 ? 'Surplus' : 'Deficit'} color={d.net == null ? undefined : d.net >= 0 ? c.ok : c.bad} />
           </View>
-          {goal && d.net != null ? <Text style={{ color: c.mute, fontSize: 13, marginTop: 4 }}>{d.net >= goal ? `Goal of ${fmtInt(goal)} met` : `${fmtInt(goal - d.net)} short of your ${fmtInt(goal)} goal`}</Text> : null}
+          {goal != null && d.net != null ? (
+            <Text style={{ color: onTarget(d.net, goal) ? c.ok : c.mute, fontSize: 13, marginTop: 4, fontWeight: '600' }}>
+              {`${onTarget(d.net, goal) ? 'On target' : 'Off target'} (${targetText(goal).toLowerCase()})`}
+            </Text>
+          ) : null}
         </Block>
       ) : null}
 
@@ -333,15 +404,17 @@ const st = StyleSheet.create({
   month: { fontFamily: fonts.display, fontSize: 26, lineHeight: 30 },
   nav: { width: 36, height: 36, borderRadius: 18, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
   row: { flexDirection: 'row' },
-  dow: { flex: 1, textAlign: 'center', fontSize: 12, fontWeight: '700', marginBottom: 4 },
-  cell: { flex: 1, minHeight: 70 },
-  cellBox: { borderWidth: 1.5, borderRadius: radius.sm, paddingVertical: 3, paddingHorizontal: 2, alignItems: 'stretch', margin: 1 },
-  num: { alignSelf: 'center', minWidth: 22, height: 22, borderRadius: 11, alignItems: 'center', justifyContent: 'center', marginBottom: 1 },
-  line: { flexDirection: 'row', alignItems: 'center', gap: 2, height: 13 },
+  dow: { flex: 1, textAlign: 'center', fontSize: 11.5, fontWeight: '700', marginBottom: 4 },
+  cell: { flex: 1, minHeight: 64 },
+  cellBox: { borderRadius: radius.sm, paddingVertical: 4, alignItems: 'center', margin: 1.5, gap: 3 },
+  disc: { width: 30, height: 30, borderRadius: 15, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center' },
+  icons: { flexDirection: 'row', gap: 2, height: 13, alignItems: 'center' },
+  bar: { width: '60%', height: 3, borderRadius: 2 },
   dot: { width: 6, height: 6, borderRadius: 3 },
-  lineText: { flex: 1, fontSize: 9.5, fontWeight: '600', letterSpacing: -0.2 },
-  net: { fontSize: 9.5, fontWeight: '700', textAlign: 'center', marginTop: 1, ...tabular },
-  key: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: space.md, marginTop: space.sm, paddingHorizontal: 4 },
+  todayBar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderRadius: radius.sm, paddingHorizontal: space.md, paddingVertical: space.sm, marginBottom: space.sm },
+  key: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', columnGap: space.md, rowGap: 4, marginTop: space.sm, paddingHorizontal: 4 },
+  keyItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  keyText: { fontSize: 11.5 },
   review: { borderWidth: 1, borderRadius: radius.md, padding: space.md, marginVertical: space.sm },
   reviewTitle: { fontFamily: fonts.display, fontSize: 22, lineHeight: 26 },
   block: { borderTopWidth: 1, paddingTop: space.sm, marginTop: space.sm },

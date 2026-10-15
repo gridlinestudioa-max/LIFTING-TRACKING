@@ -1,14 +1,16 @@
 import { router } from 'expo-router';
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import {
+  calTarget,
+  targetText,
   CARDIO_LABEL,
   KIND_LABEL,
   SPORT_LABEL,
   WIDGETS,
-  activeDiet,
+  dietFor,
   activeWorkout,
   cinFor,
   coutFor,
@@ -21,7 +23,6 @@ import {
   kcalInfo,
   liftSummary,
   liftWeek,
-  loadStatus,
   mondayOf,
   moveWidget,
   paceText,
@@ -33,9 +34,7 @@ import {
   scheduledRoutine,
   shortDayLabel,
   sumTotals,
-  trainingLoad,
   visibleWidgets,
-  weeklyEffort,
   weeklyTotals,
   workoutLine,
   workoutStatus,
@@ -104,8 +103,6 @@ function Widget({ id }: { id: WidgetId }) {
       return <LastCard />;
     case 'streak':
       return <StreakCard />;
-    case 'load':
-      return <LoadCard />;
     case 'weight':
       return <WeightCard />;
     case 'water':
@@ -212,7 +209,8 @@ function CaloriesCard() {
   const { state, today } = useTracker();
   const cin = cinFor(state, today);
   const cout = coutFor(state, today, today);
-  const k = kcalInfo(cin, cout, state.goal);
+  const target = calTarget(state, today);
+  const k = kcalInfo(cin, cout, target);
   const net = cin != null && cout != null ? cout - cin : null;
   return (
     <Tap title="Calories" to="/food">
@@ -225,15 +223,16 @@ function CaloriesCard() {
           color={net == null ? undefined : toneColor(c, k.tone)}
         />
       </View>
-      {state.goal && net != null ? <Meter value={Math.max(0, net)} max={state.goal} good /> : null}
-      {state.goal ? <Text style={{ color: c.mute, fontSize: 13, marginTop: space.xs }}>{`Goal: ${fmtInt(state.goal)} deficit`}</Text> : null}
+      {target != null && target > 0 && net != null ? <Meter value={Math.max(0, net)} max={target} good /> : null}
+      {target != null ? <Text style={{ color: c.mute, fontSize: 13, marginTop: space.xs }}>{`Target: ${targetText(target).toLowerCase()}`}</Text> : null}
+      {net != null && target != null ? <Text style={{ color: toneColor(c, k.tone), fontSize: 13, fontWeight: '700' }}>{k.text.split(' · ')[1] ?? ''}</Text> : null}
     </Tap>
   );
 }
 
 function useTodayTotals() {
   const { state, today } = useTracker();
-  return { t: sumTotals(state.meals[today] ?? []), limits: activeDiet(state.diet, state.profile).limits, typed: state.days[today]?.cin ?? 0 };
+  return { t: sumTotals(state.meals[today] ?? []), limits: dietFor(state, today).limits, typed: state.days[today]?.cin ?? 0 };
 }
 
 function RemainingCard() {
@@ -297,9 +296,9 @@ function MacrosCard() {
 
 function FastingCard() {
   const c = useColors();
-  const { state } = useTracker();
+  const { state, today } = useTracker();
   const now = useClock();
-  const f = activeDiet(state.diet, state.profile).fasting;
+  const f = dietFor(state, today).fasting;
   const head = f ? fastHeadline(f, now) : null;
   return (
     <Tap title="Fasting" to="/food">
@@ -397,32 +396,6 @@ function LastCard() {
   );
 }
 
-function LoadCard() {
-  const c = useColors();
-  const { state, today } = useTracker();
-  const series = useMemo(() => trainingLoad(state.cardio, state.profile, today, 84), [state.cardio, state.profile, today]);
-  const status = loadStatus(series);
-  const last = series[series.length - 1];
-  const week = weeklyEffort(state.cardio, state.profile, today, 1)[0].effort;
-  return (
-    <Tap title="Training load" to="/cardio">
-      {last ? (
-        <>
-          <View style={{ flexDirection: 'row' }}>
-            <Big value={fmtInt(week)} label="Effort this week" />
-            <Big value={fmtInt(last.fitness)} label="Fitness" />
-            <Big value={fmtInt(last.fatigue)} label="Fatigue" />
-          </View>
-          <Text style={{ color: c.mute, fontSize: 13, marginTop: space.sm }}>
-            {status ? `This week: ${status.label.toLowerCase()}.` : 'Keep logging timed workouts. The trend needs about three weeks.'}
-          </Text>
-        </>
-      ) : (
-        <Mute>Log a cardio session with a time to see your effort and training load.</Mute>
-      )}
-    </Tap>
-  );
-}
 
 function StreakCard() {
   const { state, today } = useTracker();

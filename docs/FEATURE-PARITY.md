@@ -12,7 +12,7 @@ Competitor details come from the public sources listed at the end and were check
 | Log an activity by hand | Both | Distance, time, pace, elevation, heart rate, calories, notes, how hard it felt | Done |
 | Activity stats: totals by week, month, year, all time; averages; records; best efforts | Strava: free for the basics | Same, per sport, in the Progress tab | Done |
 | Training plans | Paid tiers on both | Running, biking, swimming and triathlon plans, free | Done |
-| Fitness and fatigue trend | Strava: paid (Fitness and Relative Effort) | Effort per session, weekly effort, fitness and fatigue lines, free. Our own estimate, not Strava's formula | Done |
+| Fitness and fatigue trend | Strava: paid (Fitness and Relative Effort) | Removed: the effort-point numbers were confusing. Distance, time and pace trends instead | Not done |
 | Import activities from other apps | Strava: upload files from a device | GPX and TCX import with preview and duplicate skipping | Done (FIT not yet) |
 | Export your data | Both offer some form of export | One tap: JSON of everything, CSV for activities, food and body log, GPX per route | Done |
 | Calories and nutrition log | Fitbit: food log | 12,900 built-in USDA foods, Open Food Facts search, full macros, meals, copy from yesterday, tally items, diets | Done |
@@ -35,7 +35,7 @@ Competitor details come from the public sources listed at the end and were check
 
 - The account copy is protected by access rules, not end-to-end encryption. Whoever runs the database could technically read it. The app says this on the You tab.
 - Whoever publishes the app has to write their own privacy policy and promises. The in-app text only describes what the code does today. It makes no promise about the future, and none about how the operator handles the database.
-- Effort, fitness and fatigue are estimates built from published training-load ideas (Edwards' heart-rate zones, Foster's session RPE, the Banister model). They aren't Strava's numbers and shouldn't be compared with them. They're a rough guide, not medical advice.
+- Cut, bulk and maintenance plans are general guidance for healthy adults inside common safe ranges, not medical advice.
 
 ## Roadmap
 

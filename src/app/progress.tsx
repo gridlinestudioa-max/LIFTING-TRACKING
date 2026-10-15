@@ -2,8 +2,9 @@ import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { MONTHS, REPORT_PERIODS, byWeek, calorieSummary, cardioReport, fmt, fmtInt, liftSummary, sgn, toD, type ReportPeriod } from '@/logic';
+import { CYCLE_KIND_LABEL, MONTHS, REPORT_PERIODS, activeCycle, byWeek, calTarget, calorieSummary, targetText, cardioReport, fmt, fmtInt, liftSummary, sgn, toD, type ReportPeriod } from '@/logic';
 import { Button, LinkButton } from '@/ui/food/kit';
+import { CycleCard } from '@/ui/cycle/Cycle';
 import { ReportSheet } from '@/ui/report/ReportSheet';
 import { Header, Mute, Section, StatGrid, StatTile } from '@/ui/components';
 import { CardioStatsSheet, paceFor } from '@/ui/stats/CardioStats';
@@ -34,6 +35,7 @@ export default function ProgressScreen() {
             </Pressable>
           }
         />
+        {on.food ? <CycleCard /> : null}
         {on.food ? <CaloriesSection /> : null}
         {on.cardio ? <CardioSection /> : null}
         {on.lifting ? <LiftingSection /> : null}
@@ -122,19 +124,26 @@ function Big({ value, unit, label }: { value: string; unit?: string; label: stri
 
 function CaloriesSection() {
   const c = useColors();
-  const { state } = useTracker();
-  const goal = state.goal;
-  const sum = calorieSummary(state);
+  const { state, today } = useTracker();
+  const target = calTarget(state, today);
+  const cycle = activeCycle(state.cycle, today);
+  const sum = calorieSummary(state, today);
   const n = sum.days;
   const col = (v: number) => (v >= 0 ? c.ok : c.bad);
   const [byWeekOpen, setByWeekOpen] = useState(false);
   return (
-    <Section title="Calories" action={goal ? <Text style={{ color: c.mute, fontSize: 13 }}>{`Goal ${fmtInt(goal)}/day`}</Text> : undefined}>
+    <Section title="Calories">
+      {target != null ? (
+        <Text style={{ color: c.ink, fontSize: 14.5, marginBottom: space.sm }}>
+          <Text style={{ fontWeight: '700' }}>{cycle ? `${CYCLE_KIND_LABEL[cycle.kind]} target: ` : 'Daily target: '}</Text>
+          {targetText(target)}
+        </Text>
+      ) : null}
       <StatGrid>
         <StatTile value={n ? sgn(sum.avg) : '–'} color={n ? col(sum.avg) : undefined} label="Avg daily deficit" />
         <StatTile value={n ? sgn(sum.total) : '–'} color={n ? col(sum.total) : undefined} label="Total deficit" />
         <StatTile value={String(n)} label="Days logged" />
-        <StatTile value={String(sum.hit)} sub={`/${n}`} label={goal ? 'Days at goal' : 'Days in a deficit'} />
+        <StatTile value={String(sum.hit)} sub={`/${n}`} label={target != null ? 'Days on target' : 'Days in a deficit'} />
       </StatGrid>
       {!n ? <Mute>Add calories in and burned on the Food tab.</Mute> : null}
       {n ? (

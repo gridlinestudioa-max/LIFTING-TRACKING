@@ -1,5 +1,6 @@
 import { coutFor } from './burn';
-import { addDays, dayDiff, mondayOf } from './dates';
+import { activeCycle } from './cycle';
+import { addDays, dayDiff, mondayOf, todayString } from './dates';
 import { fmtInt } from './format';
 import { sumTotals } from './nutrition';
 import type { TrackerState } from './types';
@@ -11,10 +12,39 @@ export function net(cin: number, cout: number): number {
   return cout - cin;
 }
 
+/**
+ * The day's calorie target as a net (positive = deficit, negative = surplus, 0 = eat what you burn): from a
+ * cut, bulk or maintenance phase while one runs, otherwise the deficit goal. Null when there's neither.
+ */
+export function calTarget(state: TrackerState, today: string = todayString()): number | null {
+  const c = activeCycle(state.cycle, today);
+  if (c) return -c.delta;
+  return state.goal != null && state.goal > 0 ? state.goal : null;
+}
+
+/** How close to the target counts as hitting it when the aim is a surplus or eating what you burn. */
+export const TARGET_BAND = 200;
+
+/**
+ * Whether a day hit the target. A deficit target: at least that deficit. A surplus target: at least that
+ * surplus, but not more than 300 over it. Eating what you burn: within 200 kcal either way.
+ */
+export function onTarget(n: number, target: number): boolean {
+  if (target > 0) return n >= target;
+  if (target < 0) return n <= target && n >= target - 300;
+  return Math.abs(n) <= TARGET_BAND;
+}
+
+/** "500 kcal deficit a day", "250 kcal surplus a day", "Eat what you burn". */
+export function targetText(target: number): string {
+  if (target === 0) return 'Eat what you burn';
+  return `${fmtInt(Math.abs(target))} kcal ${target > 0 ? 'deficit' : 'surplus'} a day`;
+}
+
 export function kcalInfo(
   cin: number | null | undefined,
   cout: number | null | undefined,
-  goal: number | null,
+  target: number | null,
 ): { text: string; tone: Tone } {
   if (cin == null || cout == null || !Number.isFinite(cin) || !Number.isFinite(cout)) {
     return { text: 'Enter both to see your deficit', tone: 'mute' };
@@ -22,11 +52,14 @@ export function kcalInfo(
   const n = net(cin, cout);
   const a = fmtInt(Math.abs(n));
   let text = n >= 0 ? `Deficit: ${a} kcal` : `Surplus: ${a} kcal`;
-  if (goal != null && goal > 0 && n >= 0) {
-    const diff = Math.round(n - goal);
-    text += diff >= 0 ? ' · goal met ✓' : ` · ${fmtInt(Math.abs(diff))} short of goal`;
+  if (target != null) {
+    if (onTarget(n, target)) text += ' · on target ✓';
+    else if (target > 0) text += ` · ${fmtInt(Math.round(target - n))} short of your target`;
+    else if (target < 0) text += n > target ? ` · eat ${fmtInt(Math.round(n - target))} more to hit your target` : ' · over your target';
+    else text += ' · off target';
   }
-  return { text, tone: n >= 0 ? 'ok' : 'bad' };
+  const good = target == null ? n >= 0 : onTarget(n, target);
+  return { text, tone: good ? 'ok' : target == null ? 'bad' : 'warn' };
 }
 
 /** Calories eaten from the food log, or null when food tracking is off or nothing is logged that day. */
@@ -69,16 +102,20 @@ export interface CalorieSummary {
   days: number;
   total: number;
   avg: number;
-  /** Days at or above goal (or days in a deficit if no goal). */
+  /** Days on target (or days in a deficit if there's no target). */
   hit: number;
 }
 
-export function calorieSummary(state: TrackerState): CalorieSummary {
+export function calorieSummary(state: TrackerState, today: string = todayString()): CalorieSummary {
   const ds = kDays(state);
   const n = ds.length;
   const total = ds.reduce((a, d) => a + d.net, 0);
-  const goal = state.goal;
-  const hit = goal != null && goal > 0 ? ds.filter((d) => d.net >= goal).length : ds.filter((d) => d.net > 0).length;
+  // Each day against the target in force that day (a plan's, or the deficit goal).
+  const anyTarget = calTarget(state, today) != null || state.goal != null;
+  const hit = ds.filter((d) => {
+    const t = calTarget(state, d.s);
+    return t != null ? onTarget(d.net, t) : !anyTarget && d.net > 0;
+  }).length;
   return { days: n, total, avg: n ? total / n : 0, hit };
 }
 
