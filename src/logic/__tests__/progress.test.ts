@@ -14,6 +14,13 @@ import {
   muscleBars,
   muscleGroupOf,
   normalize,
+  muscleLoad,
+  maxHeartRate,
+  zoneOf,
+  zoneBars,
+  climbBars,
+  trainingDayEating,
+  type FoodDay,
   parseUsda,
   spanAt,
   type CardioSession,
@@ -124,5 +131,35 @@ describe('hidden graphs setting', () => {
     const s = normalize({ v: 2, settings: { hiddenGraphs: ['food:micros', 'food:micros', 'cardio:hr', 'bad id', 7, 'x'.repeat(40) + ':y'] } });
     expect(s.settings.hiddenGraphs).toEqual(['food:micros', 'cardio:hr']);
     expect(normalize({}).settings.hiddenGraphs).toEqual([]);
+  });
+});
+
+describe('muscle map, zones, climbing and training-day eating', () => {
+  it('scales muscle load so the most-worked muscle is 1, helpers count half', () => {
+    const w = { id: 'w', date: '2026-10-10', name: 'Push', done: true, exercises: [{ exId: 'bench', name: 'Bench', unit: 'lb' as const, repMin: 5, repMax: 8, inc: 5, sets: [{ w: 135, reps: 8, done: true }, { w: 135, reps: 8, done: true }, { w: 135, reps: 8, done: false }] }] };
+    const load = muscleLoad(w, () => ({ primary: ['chest'], secondary: ['triceps', 'shoulders'] }));
+    expect(load).toEqual({ chest: 1, triceps: 0.5, shoulders: 0.5 });
+    expect(muscleLoad(w, () => undefined)).toEqual({});
+  });
+
+  it('puts each session in the zone of its average heart rate', () => {
+    expect(maxHeartRate([{ hr: 150, maxHr: 192 }], 30)).toBe(192);
+    expect(maxHeartRate([], 30)).toBe(190);
+    expect(maxHeartRate([], null)).toBeNull();
+    expect(zoneOf(110, 190)).toBe(1);
+    expect(zoneOf(125, 190)).toBe(2);
+    expect(zoneOf(175, 190)).toBe(5);
+    const buckets = [{ start: '2026-10-12', end: '2026-10-18', label: 'Oct 12' }];
+    const z = zoneBars([{ id: 'a', date: '2026-10-13', type: 'run', secs: 1800, hr: 125 }, { id: 'b', date: '2026-10-14', type: 'run', secs: 600, hr: 160 }], buckets, 190);
+    expect(z.map((x) => x[0])).toEqual([0, 30, 0, 10, 0]);
+    expect(climbBars([{ id: 'a', date: '2026-10-13', type: 'run', elevFt: 300 }, { id: 'b', date: '2026-10-14', type: 'run', elevFt: 200 }], buckets)).toEqual([500]);
+  });
+
+  it('averages eating on training and rest days', () => {
+    const day = (s: string, kcal: number, protein: number) => ({ s, entries: [], t: { kcal, protein, carbs: 100, fat: 50, fiber: 0, sugar: 0, netCarbs: 100 } }) as unknown as FoodDay;
+    const r = trainingDayEating([day('a', 2600, 160), day('b', 2400, 140), day('c', 2000, 120)], (s) => s !== 'c');
+    expect(r.training).toMatchObject({ days: 2, kcal: 2500, protein: 150 });
+    expect(r.rest).toMatchObject({ days: 1, kcal: 2000 });
+    expect(trainingDayEating([], () => true)).toEqual({ training: null, rest: null });
   });
 });

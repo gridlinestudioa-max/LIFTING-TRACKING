@@ -13,6 +13,12 @@ import {
   addDays,
   avgBars,
   avgByBucket,
+  HR_ZONES,
+  climbBars,
+  maxHeartRate,
+  trainingDayEating,
+  zoneBars,
+  type DayTypeAverages,
   bucketTitle,
   dayDiff,
   calTarget,
@@ -363,6 +369,53 @@ function TimeGraph({ range }: { range: Range }) {
   );
 }
 
+const ZONE_COLORS = ['#9aa4ad', '#4a9fd8', '#2e9e72', '#e0a31b', '#d64545'];
+
+function ZonesGraph({ range }: { range: Range }) {
+  const { state } = useTracker();
+  const { sessions, today, w } = useSport();
+  const withHr = sessions.filter((x) => x.hr && x.secs);
+  const age = statsOf(state.profile, today)?.age ?? null;
+  const max = maxHeartRate(state.cardio.sessions, age);
+  const span = spanAt(range, today, withHr[0]?.date, DAY_WEEK_MONTH);
+  if (!max) return <Mute style={{ marginVertical: space.lg }}>Add your birthday (Settings → Your details) or a max heart rate to a workout to see heart-rate zones.</Mute>;
+  const z = zoneBars(withHr, span.buckets, max);
+  const series = HR_ZONES.map((x, i) => ({ label: `${x.label} ${x.name.toLowerCase()}`, color: ZONE_COLORS[i], values: z[i] }));
+  const tot = z.map((v) => sumOf(v));
+  const all = sumOf(tot);
+  return (
+    <>
+      <ChartCaption>{cap(span, `minutes in each zone, ${byWhat(span)}`)}</ChartCaption>
+      {withHr.length ? (
+        <StackedBarChart
+          series={series}
+          labels={labels(span)}
+          titles={titles(span)}
+          unit="min"
+          format={(v) => `${fmtInt(v)} min`}
+          label={`Heart-rate zones, ${span.caption.toLowerCase()}`}
+          summary={all ? { title: `${fmtInt(all)} min with heart rate · max ${max} bpm`, items: series.map((x, i) => ({ label: HR_ZONES[i].label, value: `${Math.round((tot[i] / all) * 100)}%`, color: x.color })).filter((_, i) => tot[i] > 0) } : { title: 'Nothing logged in this range' }}
+        />
+      ) : (
+        <NoData what={`${w.many} with heart rate`} />
+      )}
+    </>
+  );
+}
+
+function ClimbGraph({ range }: { range: Range }) {
+  const { sessions, today, w } = useSport();
+  const span = spanAt(range, today, sessions[0]?.date, DAYS_WEEKS);
+  const vals = climbBars(sessions, span.buckets);
+  const total = sumOf(vals);
+  return (
+    <>
+      <ChartCaption>{cap(span, `feet climbed ${byWhat(span)}`)}</ChartCaption>
+      <BarChart values={vals} labels={labels(span)} titles={titles(span)} unit="ft" format={(v) => `${fmtInt(v)} ft`} label={`Climbing, ${span.caption.toLowerCase()}`} summary={total ? { title: `${fmtInt(total)} ft climbed in ${fmtInt(sessions.filter((x) => x.date >= span.from && x.elevFt).length)} ${w.many}` } : { title: 'No climbing logged in this range' }} />
+    </>
+  );
+}
+
 // ---------- Lifting ----------
 
 function useDone() {
@@ -702,6 +755,41 @@ function MealGraph({ range }: { range: Range }) {
   );
 }
 
+function TrainingDaysGraph({ range }: { range: Range }) {
+  const { days, today } = useFood();
+  const { state } = useTracker();
+  const span = rangeSpan(range, today, days[0]?.s);
+  const trainedOn = useMemo(() => {
+    const set = new Set<string>();
+    for (const x of state.cardio.sessions) set.add(x.date);
+    for (const x of state.lifting.workouts) if (x.done) set.add(x.date);
+    return set;
+  }, [state.cardio.sessions, state.lifting.workouts]);
+  const r = trainingDayEating(days.filter((d) => d.s >= span.from && d.s <= span.to), (s) => trainedOn.has(s));
+  const line = (x: DayTypeAverages) => `${fmtInt(Math.round(x.kcal))} kcal · ${fmtInt(Math.round(x.protein))} g protein · ${fmtInt(Math.round(x.carbs))} g carbs`;
+  return (
+    <>
+      <ChartCaption>{`${span.caption} · average kcal eaten a day`}</ChartCaption>
+      {r.training || r.rest ? (
+        <BarChart
+          values={[r.training ? Math.round(r.training.kcal) : null, r.rest ? Math.round(r.rest.kcal) : null]}
+          labels={['Training days', 'Rest days']}
+          titles={[`Training days (${r.training?.days ?? 0})`, `Rest days (${r.rest?.days ?? 0})`]}
+          unit="kcal"
+          format={(v) => `${fmtInt(v)} kcal`}
+          label="Eating on training days and rest days"
+          summary={{
+            title: r.training && r.rest ? `${fmtInt(Math.abs(Math.round(r.training.kcal - r.rest.kcal)))} kcal ${r.training.kcal >= r.rest.kcal ? 'more' : 'less'} on training days` : 'Average a day',
+            items: [r.training ? { label: 'Training', value: line(r.training) } : null, r.rest ? { label: 'Rest', value: line(r.rest) } : null].filter((x): x is { label: string; value: string } => !!x),
+          }}
+        />
+      ) : (
+        <NoData />
+      )}
+    </>
+  );
+}
+
 /** 2,400 or 1.4: whole numbers with commas for big amounts, one decimal for small ones. */
 const amt = (v: number) => (v >= 100 ? fmtInt(Math.round(v)) : fmt(Math.round(v * 10) / 10));
 
@@ -946,6 +1034,10 @@ const FOOD_GRAPHS: Graph[] = [
     ),
   },
   {
+    id: 'trainingdays', title: 'Training vs rest days', Chart: TrainingDaysGraph,
+    useInfo: foodInfo('Average calories, protein and carbs on days you trained (any run, ride, swim or lifting workout) against days you didn’t. Tap a bar to see each side. Training days usually call for more carbs; protein matters every day.', (x) => x.macroLine),
+  },
+  {
     id: 'deficit', title: 'Calorie deficit', Chart: DeficitGraph,
     useInfo: function useInfo() {
       const { state, today } = useTracker();
@@ -993,6 +1085,16 @@ const CARDIO_GRAPHS: Graph[] = [
   { id: 'freq', title: 'How often', Chart: FrequencyGraph, useInfo: cardioInfo((sport) => `How many ${SPORT_WORD[sport].many} you did. Showing up consistently usually comes before getting faster.`, 'count') },
   { id: 'avgdist', title: 'Average distance', Chart: AvgDistanceGraph, useInfo: cardioInfo((sport) => `The distance of a typical ${SPORT_WORD[sport].one}: whether they’re getting longer, apart from how often you go.`, null) },
   { id: 'hr', title: 'Heart rate', Chart: HeartRateGraph, useInfo: cardioInfo(() => 'Average heart rate, weighted by how long each session lasted. A lower heart rate at the same pace usually means better aerobic fitness. Add heart rate when you log, or import it from a watch.', null) },
+  {
+    id: 'zones', title: 'Heart-rate zones', Chart: ZonesGraph,
+    useInfo: cardioInfo(() => 'Minutes in each heart-rate zone, as a share of your max heart rate: zone 1 under 60%, zone 2 60–70% (easy, where most training should be), zone 3 70–80%, zone 4 80–90%, zone 5 90% or more. Max heart rate is your highest recorded, or 220 minus your age. Sessions only store an average heart rate, so each one counts toward the zone of its average.', null),
+  },
+  { id: 'climb', title: 'Climbing', Chart: ClimbGraph, useInfo: cardioInfo(() => 'Feet climbed (elevation gain), from recorded routes or what you typed in. Hills build strength and make the same pace harder.', null) },
+  {
+    id: 'zones', title: 'Heart-rate zones', Chart: ZonesGraph,
+    useInfo: cardioInfo(() => 'Minutes in each heart-rate zone, as a share of your max heart rate: zone 1 under 60%, zone 2 60–70% (easy, where most training should be), zone 3 70–80%, zone 4 80–90%, zone 5 90% or more. Max heart rate is your highest recorded, or 220 minus your age. Sessions store an average heart rate, so each one counts toward the zone of its average.', null),
+  },
+  { id: 'climb', title: 'Climbing', Chart: ClimbGraph, useInfo: cardioInfo(() => 'Feet climbed (elevation gain), from recorded routes or what you typed in. Hills build strength and make the same pace harder.', null) },
   { id: 'time', title: 'Time', Chart: TimeGraph, useInfo: cardioInfo(() => 'Total time moving. Time counts effort that distance misses, like hills, wind and easy days.', null) },
 ];
 

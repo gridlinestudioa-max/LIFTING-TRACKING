@@ -290,3 +290,103 @@ function dedupeDay(pts: RecordPoint[]): RecordPoint[] {
 
 /** Records set within a date range. */
 export const recordsIn = (pts: RecordPoint[], from: string, to: string) => pts.filter((p) => p.s >= from && p.s <= to);
+
+// ---------- Muscle map, heart-rate zones, climbing, training-day eating ----------
+
+/** Muscles drawn on the muscle map, as the exercise library names them. */
+export const MAP_MUSCLES = [
+  'chest', 'shoulders', 'biceps', 'triceps', 'forearms', 'abdominals', 'quadriceps', 'adductors', 'abductors',
+  'calves', 'traps', 'lats', 'middle back', 'lower back', 'glutes', 'hamstrings', 'neck',
+] as const;
+export type MapMuscle = (typeof MAP_MUSCLES)[number];
+
+/**
+ * How hard one workout worked each muscle, 0..1: each finished set counts 1 for the exercise's main
+ * muscles and ½ for the muscles that help, then scaled so the most-worked muscle is 1.
+ */
+export function muscleLoad(w: Workout, byId: (exId: string) => Pick<Exercise, 'primary' | 'secondary'> | undefined): Partial<Record<MapMuscle, number>> {
+  const raw: Partial<Record<string, number>> = {};
+  for (const e of w.exercises) {
+    const n = e.sets.filter((s) => s.done).length;
+    const ex = byId(e.exId);
+    if (!n || !ex) continue;
+    for (const m of ex.primary) raw[m] = (raw[m] ?? 0) + n;
+    for (const m of ex.secondary) raw[m] = (raw[m] ?? 0) + n / 2;
+  }
+  const top = Math.max(0, ...MAP_MUSCLES.map((m) => raw[m] ?? 0));
+  const out: Partial<Record<MapMuscle, number>> = {};
+  if (top) for (const m of MAP_MUSCLES) if (raw[m]) out[m] = raw[m]! / top;
+  return out;
+}
+
+/** Heart-rate zones as a share of max heart rate: Z1 under 60%, then 60–70, 70–80, 80–90 and 90% or more. */
+export const HR_ZONES = [
+  { id: 1, label: 'Zone 1', name: 'Very easy', from: 0 },
+  { id: 2, label: 'Zone 2', name: 'Easy', from: 0.6 },
+  { id: 3, label: 'Zone 3', name: 'Moderate', from: 0.7 },
+  { id: 4, label: 'Zone 4', name: 'Hard', from: 0.8 },
+  { id: 5, label: 'Zone 5', name: 'Max', from: 0.9 },
+] as const;
+
+/** Max heart rate: the highest you've recorded, or 220 minus your age, whichever is higher. Null without either. */
+export function maxHeartRate(sessions: readonly Pick<CardioSession, 'hr' | 'maxHr'>[], age: number | null): number | null {
+  const seen = Math.max(0, ...sessions.map((x) => x.maxHr ?? 0));
+  const est = age ? 220 - age : 0;
+  const m = Math.max(seen, est);
+  return m >= 100 ? m : null;
+}
+
+/** The zone (1–5) for a heart rate. */
+export function zoneOf(hr: number, max: number): number {
+  const f = hr / max;
+  let z = 1;
+  for (const x of HR_ZONES) if (f >= x.from) z = x.id;
+  return z;
+}
+
+/**
+ * Minutes in each zone by bucket. Sessions only carry an average heart rate, so each session's moving
+ * time goes to the zone of its average.
+ */
+export function zoneBars(sessions: readonly CardioSession[], buckets: Bucket[], max: number): number[][] {
+  const out = HR_ZONES.map(() => buckets.map(() => 0));
+  for (const x of sessions) {
+    if (!x.hr || !x.secs) continue;
+    const i = bucketOf(buckets, x.date);
+    if (i < 0) continue;
+    out[zoneOf(x.hr, max) - 1][i] += Math.round(x.secs / 60);
+  }
+  return out;
+}
+
+/** Feet climbed by bucket (null where nothing with climbing was logged). */
+export function climbBars(sessions: readonly CardioSession[], buckets: Bucket[]): (number | null)[] {
+  const out: (number | null)[] = buckets.map(() => null);
+  for (const x of sessions) {
+    if (!x.elevFt) continue;
+    const i = bucketOf(buckets, x.date);
+    if (i >= 0) out[i] = (out[i] ?? 0) + x.elevFt;
+  }
+  return out;
+}
+
+export interface DayTypeAverages {
+  days: number;
+  kcal: number;
+  protein: number;
+  carbs: number;
+}
+
+/** Average eating on days you trained (any finished cardio or lifting) and on rest days, among logged days. */
+export function trainingDayEating(days: readonly FoodDay[], trained: (s: string) => boolean): { training: DayTypeAverages | null; rest: DayTypeAverages | null } {
+  const avg = (xs: readonly FoodDay[]): DayTypeAverages | null =>
+    xs.length
+      ? {
+          days: xs.length,
+          kcal: xs.reduce((t, d) => t + d.t.kcal, 0) / xs.length,
+          protein: xs.reduce((t, d) => t + d.t.protein, 0) / xs.length,
+          carbs: xs.reduce((t, d) => t + d.t.carbs, 0) / xs.length,
+        }
+      : null;
+  return { training: avg(days.filter((d) => trained(d.s))), rest: avg(days.filter((d) => !trained(d.s))) };
+}

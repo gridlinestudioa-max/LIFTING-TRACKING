@@ -18,7 +18,13 @@ Competitor details come from the public sources listed at the end and were check
 | Calories and nutrition log | Fitbit: food log | 12,900 built-in USDA foods, Open Food Facts search, full macros, meals, copy from yesterday, tally items, diets | Done |
 | Calories burned | Fitbit: from its own devices | Estimate from profile and workouts, or typed in from a watch | Done (no device sync) |
 | Weight, water, sleep, steps | Fitbit: yes, from its devices | Entered by hand, with trends and averages; optional Home cards | Partial: manual entry only |
-| Lifting log and plans | — | Plans for 3 to 7 days, 700+ exercises, automatic weight progression | Done |
+| Lifting log and plans | Strava (2026): exercises, sets, reps, weight from connected apps or typed in | Plans for 3 to 7 days, 700+ exercises, automatic weight progression | Done |
+| Strength workout summary | Strava: volume, sets, elapsed time, calories, average heart rate | Volume, sets, reps, time, estimated calories, every set | Done (no heart rate for lifting yet) |
+| Muscle map | Strava: body diagram per workout, shaded by sets | Front and back body map per workout; main muscles count a full set, helpers half | Done |
+| Strength progress over time | Strava: not a dedicated graph | Estimated one-rep max per lift, sets per muscle group by week, reps per set, lift records with 1st/2nd/3rd | Done (ahead) |
+| Heart-rate zones | Strava: time in zones per activity | Minutes in each zone over time, per sport (from each session's average) | Partial: needs second-by-second heart rate for exact zones |
+| Climbing and training log | Strava: elevation, time, distance and count by week | Distance, time, climbing, count, pace, average distance, by week, month, year, all time | Done |
+| Training and nutrition together | Strava: no nutrition | Calories, macros, deficit and weight next to training; eating on training days vs rest days | Done (ahead) |
 | Friends and leaderboards | Strava: social feed, kudos, segments | Friends by phone contact, friend profiles with chosen cardio, lifting and food stats, leaderboards for run, ride, swim; personal cardio records | Partial: no feed, kudos or comments |
 | Connect a watch or phone health data | Fitbit: its own devices; Strava: syncs from most | Not yet | Not done |
 | Privacy controls | Strava: privacy zones, visibility settings | Routes are never shared. Plain-language "where your data lives" panel. Delete account | Partial: see below |
