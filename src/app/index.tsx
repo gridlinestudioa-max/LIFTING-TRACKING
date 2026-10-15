@@ -45,6 +45,7 @@ import { SleepCard, StepsCard, WaterCard, WeightCard } from '@/ui/body/BodyCards
 import { Header, Mute, Section, WeekBar } from '@/ui/components';
 import { Button, LinkButton, Sheet, useClock } from '@/ui/food/kit';
 import { TallyList } from '@/ui/food/Meals';
+import { HomeCalendar } from '@/ui/home/HomeCalendar';
 import { StatusMark } from '@/ui/marks';
 import { useTracker } from '@/ui/store';
 import { fonts, radius, space, tabular, toneColor, useColors } from '@/ui/theme';
@@ -63,6 +64,7 @@ export default function HomeScreen() {
         <Header title={name ? `Hi, ${name}` : 'Today'} right={<LinkButton label="Edit" onPress={() => setEditing(true)} />}>
           <Text style={{ color: c.mute, fontSize: 15, marginTop: -space.xs }}>{shortDayLabel(today)}</Text>
         </Header>
+        <HomeCalendar />
         {shown.map((id) => (
           <Widget key={id} id={id} />
         ))}

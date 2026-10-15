@@ -98,6 +98,12 @@ Or use `--profile production` and then `npx eas-cli@latest submit --platform ios
 
 Bundle ID / package name is `com.trainingtracker.app` (in `app.json`). Change it before your first build if you want your own.
 
+### Recording with the screen locked
+
+Recording a run or ride keeps going with the screen locked or another app open **in the installed app** (the builds above, not Expo Go). It uses a background location task (`src/ui/cardio/bgLocation.ts`, `expo-task-manager`): on Android a "Recording your activity" notification shows while it runs, and on iPhone the blue location indicator does. It only needs "while using the app" location permission, because a recording always starts from the app. The recording is saved after every GPS fix (`src/ui/cardio/recStore.ts`), so it also survives the app being closed and opens again when you come back.
+
+Browsers can't do this: they stop GPS when the screen locks or the tab is hidden. On the website the recorder keeps the screen awake, saves as it goes, keeps the clock running and picks up when you come back, joining the gap with a straight line and saying so.
+
 ## Set up accounts (Supabase)
 
 Accounts use [Supabase](https://supabase.com) (free tier is enough). Until this is done, the sign-in screen offers "Use without an account" only.

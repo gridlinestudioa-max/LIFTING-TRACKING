@@ -22,17 +22,17 @@ import {
   sessionsToward,
   shortDayLabel,
   skipKey,
-  toD,
   weeklyTotals,
   workoutStatus,
   type CardioSession,
   type PlannedWorkout,
   type RunStatus,
 } from '@/logic';
-import { CardioCalendar } from '@/ui/cardio/CardioCalendar';
+import { WeekStrip } from '@/ui/cardio/WeekStrip';
 import { kindColor } from '@/ui/cardio/kinds';
 import { LogSheet } from '@/ui/cardio/LogSheet';
-import { Recorder } from '@/ui/cardio/Recorder';
+import { useRecording } from '@/ui/cardio/Recorder';
+import { useRecorder } from '@/ui/cardio/RecordingProvider';
 import { RouteMap } from '@/ui/cardio/RouteMap';
 import { Card, Header, Mute, WeekBar } from '@/ui/components';
 import { Button, LinkButton } from '@/ui/food/kit';
@@ -45,20 +45,12 @@ export default function CardioScreen() {
   const { state, today, update } = useTracker();
   const cardio = state.cardio;
   const [selected, setSelected] = useState(today);
-  const [view, setView] = useState(() => {
-    const d = toD(today);
-    return { y: d.getFullYear(), m: d.getMonth() };
-  });
   const [sheet, setSheet] = useState<{ n: number; open: boolean; editing: CardioSession | null }>({ n: 0, open: false, editing: null });
-  const [recording, setRecording] = useState(false);
+  const recorder = useRecorder();
+  const recording = useRecording();
   const scroll = useRef<ScrollView>(null);
   const detailY = useRef(0);
 
-  const shift = (n: number) =>
-    setView(({ y, m }) => {
-      const d = new Date(y, m + n, 1);
-      return { y: d.getFullYear(), m: d.getMonth() };
-    });
   const open = (editing: CardioSession | null) => setSheet((s) => ({ n: s.n + 1, open: true, editing }));
 
   const plan = cardio.plan;
@@ -82,7 +74,7 @@ export default function CardioScreen() {
       <ScrollView ref={scroll} contentContainerStyle={{ padding: 16, paddingBottom: 48 }}>
         <Header title="Cardio" />
 
-        <Button label="Record an activity" primary onPress={() => setRecording(true)} style={{ marginBottom: space.lg }} />
+        <Button label={recording ? 'Open recording' : 'Record an activity'} primary onPress={recorder.open} style={{ marginBottom: space.lg }} />
 
         <Card>
           {plan ? (
@@ -118,18 +110,14 @@ export default function CardioScreen() {
           </View>
         </Card>
 
-        <CardioCalendar
+        <WeekStrip
           cardio={cardio}
           today={today}
           selected={selected}
-          year={view.y}
-          month={view.m}
           onSelect={(s) => {
             setSelected(s);
             scroll.current?.scrollTo({ y: Math.max(detailY.current - 220, 0), animated: true });
           }}
-          onPrev={() => shift(-1)}
-          onNext={() => shift(1)}
         />
 
         <View style={{ marginTop: space.lg }} onLayout={(e) => (detailY.current = e.nativeEvent.layout.y)}>
@@ -157,15 +145,6 @@ export default function CardioScreen() {
           </Card>
         </View>
       </ScrollView>
-      {recording ? (
-        <Recorder
-          visible
-          onClose={() => {
-            setRecording(false);
-            setSelected(today);
-          }}
-        />
-      ) : null}
       <LogSheet key={sheet.n} visible={sheet.open} day={selected} editing={sheet.editing} onClose={() => setSheet((s) => ({ ...s, open: false }))} />
     </SafeAreaView>
   );

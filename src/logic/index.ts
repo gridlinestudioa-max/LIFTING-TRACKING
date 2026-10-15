@@ -20,6 +20,8 @@ export * from './profile';
 export * from './plans';
 export * from './cardio';
 export * from './gps';
+export * from './recording';
+export * from './daylog';
 export * from './records';
 export * from './social';
 export * from './lifting';
