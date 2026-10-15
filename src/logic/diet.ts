@@ -172,6 +172,29 @@ export function windowText(f: Fasting): string {
   return `${fmtClock(f.start)} – ${fmtClock(f.start + f.eatHours * 60)}`;
 }
 
+const two = (n: number) => String(n).padStart(2, '0');
+
+/** "12:00–20:00": the eating window in 24-hour time. */
+export function window24(f: Fasting): string {
+  const t = (m: number) => {
+    const x = ((Math.round(m) % 1440) + 1440) % 1440;
+    return `${two(Math.floor(x / 60))}:${two(x % 60)}`;
+  };
+  return `${t(f.start)}–${t(f.start + f.eatHours * 60)}`;
+}
+
+/** A countdown, "3:42:15" (hours:minutes:seconds). */
+export function countdown(secs: number): string {
+  const s = Math.max(0, Math.floor(secs));
+  return `${Math.floor(s / 3600)}:${two(Math.floor((s % 3600) / 60))}:${two(s % 60)}`;
+}
+
+/** Seconds until the window next closes (while open) or opens (while fasting), at `secOfDay` seconds after midnight. */
+export function fastSecondsLeft(f: Fasting, secOfDay: number): { open: boolean; secs: number } {
+  const s = fastState(f, Math.floor(secOfDay / 60));
+  return { open: s.open, secs: Math.max(0, s.minsUntil * 60 - (secOfDay % 60)) };
+}
+
 export interface FastState {
   /** Inside the eating window right now. */
   open: boolean;

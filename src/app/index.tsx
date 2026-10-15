@@ -1,9 +1,12 @@
 import { router } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import {
+  countdown,
+  fastSecondsLeft,
+  window24,
   calTarget,
   targetText,
   CARDIO_LABEL,
@@ -16,7 +19,6 @@ import {
   coutFor,
   dayDiff,
   distText,
-  fastHeadline,
   fmt,
   fmtInt,
   fmtTime,
@@ -294,18 +296,36 @@ function MacrosCard() {
   );
 }
 
+/** Seconds since midnight, ticking every second while shown. */
+function useSecondsOfDay(): number {
+  const [s, setS] = useState(secondsOfDay);
+  useEffect(() => {
+    const id = setInterval(() => setS(secondsOfDay()), 1000);
+    return () => clearInterval(id);
+  }, []);
+  return s;
+}
+
+function secondsOfDay(): number {
+  const d = new Date();
+  return d.getHours() * 3600 + d.getMinutes() * 60 + d.getSeconds();
+}
+
+/** The eating window and a live countdown: "12:00–20:00 (3:42:15)". */
 function FastingCard() {
   const c = useColors();
   const { state, today } = useTracker();
-  const now = useClock();
+  const sec = useSecondsOfDay();
   const f = dietFor(state, today).fasting;
-  const head = f ? fastHeadline(f, now) : null;
+  const left = f ? fastSecondsLeft(f, sec) : null;
   return (
     <Tap title="Fasting" to="/food">
-      {head ? (
+      {f && left ? (
         <>
-          <Text style={[st.big, { color: toneColor(c, head.open ? 'ok' : 'warn') }]}>{head.title}</Text>
-          <Text style={{ color: c.ink, fontSize: 15 }}>{head.detail}</Text>
+          <Text style={[st.big, { color: toneColor(c, left.open ? 'ok' : 'warn'), ...tabular }]} accessibilityLabel={`Eating window ${window24(f)}. ${left.open ? 'Time left to eat' : 'Until you can eat'}: ${countdown(left.secs)}`}>
+            {`${window24(f)} (${countdown(left.secs)})`}
+          </Text>
+          <Text style={{ color: c.mute, fontSize: 14 }}>{left.open ? 'Eating window · time left to eat' : 'Fasting · time until your window opens'}</Text>
         </>
       ) : (
         <Mute>No fasting window set.</Mute>

@@ -1,6 +1,6 @@
 import { describe, expect, it } from '@jest/globals';
 
-import { CYCLE_PRESETS, activeCycle, bmr, calTarget, cycleStatus, dayProgress, defaultState, kcalInfo, normalize, onTarget, planFor, startCycle, tdee, type DayLog, type Stats } from '..';
+import { CYCLE_PRESETS, activeCycle, countdown, fastSecondsLeft, window24, bmr, calTarget, cycleStatus, dayProgress, defaultState, kcalInfo, normalize, onTarget, planFor, startCycle, tdee, type DayLog, type Stats } from '..';
 
 const man: Stats = { sex: 'male', age: 30, heightIn: 70, weightLb: 180, activity: 'moderate', goal: 'maintain' };
 const small: Stats = { sex: 'female', age: 40, heightIn: 61, weightLb: 118, activity: 'sedentary', goal: 'maintain' };
@@ -74,5 +74,18 @@ describe('day progress', () => {
     expect(dayProgress(day('2026-10-10', null, null), '2026-10-15', null).result).toBe('rest');
     // The calorie target counts once the day is over.
     expect(dayProgress(day('2026-10-10', 'done', null, 100), '2026-10-15', 500)).toEqual({ total: 2, done: 1, result: 'some' });
+  });
+});
+
+describe('fasting countdown', () => {
+  it('shows the window in 24-hour time and counts down to the next change', () => {
+    const f = { eatHours: 8, start: 12 * 60 };
+    expect(window24(f)).toBe('12:00–20:00');
+    expect(window24({ eatHours: 6, start: 20 * 60 })).toBe('20:00–02:00');
+    // 16:17:45: open, 3 h 42 min 15 s left.
+    expect(fastSecondsLeft(f, 16 * 3600 + 17 * 60 + 45)).toEqual({ open: true, secs: 3 * 3600 + 42 * 60 + 15 });
+    expect(countdown(3 * 3600 + 42 * 60 + 15)).toBe('3:42:15');
+    // 10:00:00: fasting, 2 h until it opens.
+    expect(fastSecondsLeft(f, 10 * 3600)).toEqual({ open: false, secs: 7200 });
   });
 });

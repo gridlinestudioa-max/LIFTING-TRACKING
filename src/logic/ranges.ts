@@ -91,6 +91,28 @@ export function rangeSpan(range: Range, today: string, first?: string | null): R
   return { from: first, to: today, grain: 'month', per: 'month', caption, buckets: monthBuckets(first, today) };
 }
 
+/** Which bar size each range uses for a chart: e.g. days for a week, weeks for a year. */
+export type GrainPlan = Record<Range, Grain>;
+
+/** Bars of one size: like rangeSpan, but with the bucket size the chart asks for in each range. */
+export function spanAt(range: Range, today: string, first: string | null | undefined, plan: GrainPlan): RangeSpan {
+  const base = rangeSpan(range, today, first);
+  const grain = plan[range];
+  if (grain === base.grain) return base;
+  const buckets =
+    grain === 'day'
+      ? dayBuckets(base.from, base.to, (s) => (range === 'week' ? DAY_NAMES[weekdayIndex(s)] : `${mon(s)} ${toD(s).getDate()}`))
+      : grain === 'week'
+        ? weekBuckets(base.from, base.to)
+        : monthBuckets(base.from, base.to);
+  return { ...base, grain, per: grain, buckets };
+}
+
+/** Index of the bucket a date falls in, or -1. */
+export function bucketOf(buckets: Bucket[], s: string): number {
+  return bucketIndex(buckets, s);
+}
+
 /** Adds up a value per bucket. Items outside the range are ignored. */
 export function sumByBucket<T>(items: readonly T[], date: (t: T) => string, value: (t: T) => number, buckets: Bucket[]): number[] {
   const out = buckets.map(() => 0);
