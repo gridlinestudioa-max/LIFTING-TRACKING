@@ -22,7 +22,7 @@ function Chart({ w, h, children, label }: { w: number; h: number; children: Reac
   );
 }
 
-type KeyKind = 'planned' | 'logged' | 'deficit' | 'surplus' | 'goal';
+type KeyKind = 'planned' | 'logged' | 'deficit' | 'surplus' | 'goal' | 'weight' | 'trend' | 'fitness' | 'fatigue';
 
 function Swatch({ kind }: { kind: KeyKind }) {
   const c = useColors();
@@ -30,8 +30,15 @@ function Swatch({ kind }: { kind: KeyKind }) {
     <Svg width={20} height={12} viewBox="0 0 20 12">
       {kind === 'planned' ? (
         <Rect x={1} y={1} width={18} height={10} rx={2} fill="none" stroke={c.mute} strokeWidth={1.25} strokeDasharray="3 2" />
-      ) : kind === 'goal' ? (
-        <Line x1={0} x2={20} y1={6} y2={6} stroke={c.ink} strokeWidth={1.75} strokeDasharray="4 3" />
+      ) : kind === 'goal' || kind === 'fatigue' ? (
+        <Line x1={0} x2={20} y1={6} y2={6} stroke={kind === 'goal' ? c.ink : c.mute} strokeWidth={1.75} strokeDasharray="4 3" />
+      ) : kind === 'trend' || kind === 'fitness' ? (
+        <Line x1={0} x2={20} y1={6} y2={6} stroke={c.ink} strokeWidth={2.5} strokeLinecap="round" />
+      ) : kind === 'weight' ? (
+        <>
+          <Circle cx={5} cy={6} r={2.5} fill={c.mute} />
+          <Circle cx={15} cy={6} r={2.5} fill={c.mute} />
+        </>
       ) : (
         <Rect x={1} y={1} width={18} height={10} rx={2} fill={kind === 'logged' ? c.ink : kind === 'deficit' ? c.ok : c.bad} />
       )}
@@ -45,6 +52,10 @@ const KEY_LABELS: Record<KeyKind, string> = {
   deficit: 'Deficit',
   surplus: 'Surplus',
   goal: 'Your goal',
+  weight: 'Logged weight',
+  trend: 'Weekly trend',
+  fitness: 'Fitness',
+  fatigue: 'Fatigue',
 };
 
 /** What the marks in a chart mean, drawn the way they appear in the chart. */
@@ -177,6 +188,70 @@ export function CumulativeLine({ pts }: { pts: { s: string; v: number }[] }) {
       </SvgText>
       <SvgText fontFamily={SANS} x={W - 10} y={CH - 5} textAnchor="end" fontSize={10.5} fill={c.mute}>
         {dl(last.s)}
+      </SvgText>
+    </Chart>
+  );
+}
+
+export interface LineSeries {
+  pts: { s: string; v: number }[];
+  /** 'line' is the main line, 'dashed' a secondary one, 'dots' the raw readings. */
+  style: 'line' | 'dashed' | 'dots';
+}
+
+/**
+ * Dated values on shared axes. `zero` keeps the bottom of the chart at 0 (for loads); without it the chart
+ * zooms to the data (for weight). Needs two or more points across the series.
+ */
+export function LineChart({ series, zero = false, unit = '', label }: { series: LineSeries[]; zero?: boolean; unit?: string; label: string }) {
+  const c = useColors();
+  const all = series.flatMap((s) => s.pts);
+  if (all.length < 2) return null;
+  const W = 360, H = 164, padT = 18, padB = 22, padX = 10;
+  const dates = all.map((p) => p.s).sort();
+  const first = dates[0];
+  const last = dates[dates.length - 1];
+  const span = Math.max(dayDiff(last, first), 1);
+  const hi = Math.max(...all.map((p) => p.v));
+  const lo = Math.min(...all.map((p) => p.v));
+  let top = hi;
+  let bottom = zero ? Math.min(0, lo) : lo;
+  if (!zero) {
+    const pad = (top - bottom) * 0.15 || 1;
+    top += pad;
+    bottom -= pad;
+  }
+  if (top === bottom) top = bottom + 1;
+  const x = (s: string) => padX + (dayDiff(s, first) / span) * (W - 2 * padX);
+  const y = (v: number) => padT + ((top - v) / (top - bottom)) * (H - padT - padB);
+  const dl = (s: string) => `${toD(s).getDate()} ${MONTHS[toD(s).getMonth()].slice(0, 3)}`;
+  return (
+    <Chart w={W} h={H} label={label}>
+      <SvgText fontFamily={SANS} x={padX} y={11} fontSize={11} fill={c.mute}>
+        {`${fmt(+hi.toFixed(1))}${unit}`}
+      </SvgText>
+      {zero ? <Line x1={0} x2={W} y1={y(0)} y2={y(0)} stroke={c.line} strokeWidth={1.5} /> : null}
+      {series.map((s, i) => {
+        if (s.style === 'dots') return s.pts.map((p) => <Circle key={`${i}${p.s}`} cx={x(p.s)} cy={y(p.v)} r={2.75} fill={c.mute} />);
+        const pts = s.pts.map((p) => `${x(p.s)},${y(p.v)}`).join(' ');
+        return s.pts.length < 2 ? null : (
+          <Polyline
+            key={i}
+            fill="none"
+            stroke={s.style === 'line' ? c.ink : c.mute}
+            strokeWidth={s.style === 'line' ? 2.5 : 1.75}
+            strokeDasharray={s.style === 'dashed' ? '5 3' : undefined}
+            strokeLinejoin="round"
+            strokeLinecap="round"
+            points={pts}
+          />
+        );
+      })}
+      <SvgText fontFamily={SANS} x={padX} y={H - 5} fontSize={10.5} fill={c.mute}>
+        {dl(first)}
+      </SvgText>
+      <SvgText fontFamily={SANS} x={W - padX} y={H - 5} textAnchor="end" fontSize={10.5} fill={c.mute}>
+        {dl(last)}
       </SvgText>
     </Chart>
   );

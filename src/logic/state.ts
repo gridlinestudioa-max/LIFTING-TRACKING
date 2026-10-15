@@ -1,3 +1,4 @@
+import { cleanSleep, cleanSteps, cleanWater, cleanWeight } from './body';
 import { EMPTY_CARDIO, normalizeCardio } from './cardio';
 import { DEFAULT_DIET, normalizeDiet } from './diet';
 import { DEFAULT_HOME, normalizeHome } from './home';
@@ -55,6 +56,14 @@ export function normalize(s: unknown): TrackerState {
       if (typeof x.cin === 'number' && x.cin >= 0) day.cin = x.cin;
       if (typeof x.cout === 'number' && x.cout >= 0) day.cout = x.cout;
       if (typeof x.note === 'string' && x.note) day.note = x.note;
+      const weight = cleanWeight(x.weightLb);
+      if (weight != null) day.weightLb = weight;
+      const water = cleanWater(x.waterOz);
+      if (water != null) day.waterOz = water;
+      const sleep = cleanSleep(x.sleepMins);
+      if (sleep != null) day.sleepMins = sleep;
+      const steps = cleanSteps(x.steps);
+      if (steps != null) day.steps = steps;
       if (Object.keys(day).length) d.days[k] = day;
     });
   }

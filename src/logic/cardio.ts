@@ -42,6 +42,8 @@ export interface CardioSession {
   maxHr?: number;
   /** Calories from a watch or app, when entered. */
   kcal?: number;
+  /** How hard it felt, 1 (very easy) to 10 (all out). Used for the effort score when there's no heart rate. */
+  rpe?: number;
   /** GPS route of a recorded activity, [lat, lng] pairs. */
   route?: LatLng[];
   /** Seconds for each full mile of a recorded activity. */
@@ -356,6 +358,7 @@ export function normalizeCardio(src: unknown): CardioData {
           if (Number(x.hr) >= 40 && Number(x.hr) <= 230) out.hr = Math.round(Number(x.hr));
           if (Number(x.maxHr) >= 40 && Number(x.maxHr) <= 240) out.maxHr = Math.round(Number(x.maxHr));
           if (Number(x.kcal) > 0) out.kcal = Math.round(Number(x.kcal));
+          if (Number.isInteger(Number(x.rpe)) && Number(x.rpe) >= 1 && Number(x.rpe) <= 10) out.rpe = Number(x.rpe);
           if (okDate(x.planDay)) out.planDay = x.planDay;
           const route = normalizeRoute(x.route);
           if (route) out.route = route;

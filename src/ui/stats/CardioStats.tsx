@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import {
@@ -12,16 +12,21 @@ import {
   fmtInt,
   fmtTime,
   groupOf,
+  loadStatus,
+  maxHrFor,
   planTitle,
   planWeekRows,
+  sessionEffort,
   shortDayLabel,
   toD,
+  trainingLoad,
+  weeklyEffort,
   type CardioSession,
   type CardioTotals,
   type SportGroup,
 } from '@/logic';
 
-import { Bars, ChartKey, PlanBars } from '../charts';
+import { Bars, ChartKey, LineChart, PlanBars } from '../charts';
 import { Card, Mute, Section } from '../components';
 import { Sheet } from '../food/kit';
 import { Select } from '../Select';
@@ -56,6 +61,12 @@ export function CardioStatsSheet({ visible, onClose, initial }: { visible: boole
   const { state, today } = useTracker();
   const [g, setG] = useState<G>(initial);
   const r = cardioReport(state.cardio, state.profile, today, g);
+  // Effort and training load for the sport chosen above.
+  const scoped = useMemo(() => ({ ...state.cardio, sessions: r.sessions }), [state.cardio, r.sessions]);
+  const weekly = useMemo(() => weeklyEffort(scoped, state.profile, today, 12), [scoped, state.profile, today]);
+  const load = useMemo(() => trainingLoad(scoped, state.profile, today, 84), [scoped, state.profile, today]);
+  const status = loadStatus(load);
+  const maxHr = maxHrFor(state.profile, scoped, today);
   const { long, sports } = planWeekRows(state.cardio);
   const plan = state.cardio.plan;
   const unitRows = (sport: string, rows: { label: string; planned: number; actual: number }[]) =>
@@ -128,6 +139,33 @@ export function CardioStatsSheet({ visible, onClose, initial }: { visible: boole
             />
           </Section>
 
+          {weekly.some((w) => w.effort > 0) ? (
+            <Section title="Effort and training load">
+              <Bars rows={weekly.map((w) => ({ label: md(w.start), v: w.effort }))} unit="" label="Effort per week, last 12 weeks" />
+              {load.length >= 2 ? (
+                <View style={{ marginTop: space.lg }}>
+                  <LineChart
+                    label="Fitness and fatigue over the last 12 weeks"
+                    zero
+                    series={[
+                      { pts: load.map((d) => ({ s: d.s, v: Math.round(d.fitness) })), style: 'line' },
+                      { pts: load.map((d) => ({ s: d.s, v: Math.round(d.fatigue) })), style: 'dashed' },
+                    ]}
+                  />
+                  <ChartKey items={['fitness', 'fatigue']} />
+                </View>
+              ) : null}
+              {status ? (
+                <Text style={{ color: c.ink, fontSize: 15, fontWeight: '600', marginTop: space.md }}>{`This week: ${status.label.toLowerCase()}`}</Text>
+              ) : (
+                <Mute style={{ marginTop: space.md }}>The trend needs about three weeks of timed workouts.</Mute>
+              )}
+              <Mute style={{ fontSize: 12.5, marginTop: space.xs }}>
+                Effort is roughly minutes weighted by how hard you worked, from heart rate when you log it, otherwise how hard it felt, otherwise a typical value for the sport. Fitness averages the last 6 weeks and fatigue the last week. These are our own estimates, not Strava’s Relative Effort.
+              </Mute>
+            </Section>
+          ) : null}
+
           {plan && sports.length && (g === 'all' || sports.some((x) => x.sport === g)) ? (
             <Section title={planTitle(plan.id)}>
               {long.length ? (
@@ -150,7 +188,7 @@ export function CardioStatsSheet({ visible, onClose, initial }: { visible: boole
 
           <Section title="Activities">
             {r.sessions.slice(0, 30).map((x, i) => (
-              <Activity key={x.id} x={x} first={i === 0} />
+              <Activity key={x.id} x={x} first={i === 0} maxHr={maxHr} />
             ))}
           </Section>
         </>
@@ -203,9 +241,10 @@ function Record({ label, x, value }: { label: string; x: CardioSession | null; v
   );
 }
 
-function Activity({ x, first }: { x: CardioSession; first: boolean }) {
+function Activity({ x, first, maxHr }: { x: CardioSession; first: boolean; maxHr: number }) {
   const c = useColors();
   const g = groupOf(x.type);
+  const effort = sessionEffort(x, maxHr);
   const bits = [
     x.miles ? distFor(g, x.miles) : null,
     x.secs ? fmtTime(x.secs) : null,
@@ -213,6 +252,7 @@ function Activity({ x, first }: { x: CardioSession; first: boolean }) {
     x.elevFt ? `${fmtInt(x.elevFt)} ft` : null,
     x.hr ? `${x.hr} bpm` : null,
     x.kcal ? `${fmtInt(x.kcal)} kcal` : null,
+    effort ? `Effort ${effort.score}` : null,
   ].filter(Boolean);
   return (
     <View style={[st.row, !first && { borderTopWidth: 1, borderTopColor: c.line }]}>

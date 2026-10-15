@@ -1,6 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 
+import { storageKey } from '@/logic';
+
 import { clearLinkFromUrl, cloudConfigured, link, linkTarget, supabase, type Arrival } from './cloud';
 
 /** Remembers "use without an account" on this device. */
@@ -28,6 +30,8 @@ interface Account {
   dismissArrival: () => void;
   /** Returns an error message, or null. */
   updatePassword: (password: string) => Promise<string | null>;
+  /** Deletes the account and everything stored with it on the server, and this device's copy. Returns an error message, or null. */
+  deleteAccount: () => Promise<string | null>;
 }
 
 const Ctx = createContext<Account | null>(null);
@@ -138,6 +142,24 @@ export function AccountProvider({ children }: { children: ReactNode }) {
     return error ? friendly(error.message) : null;
   }, []);
 
+  const deleteAccount = useCallback(async () => {
+    const sb = supabase();
+    if (!sb || !user) return 'Accounts aren’t set up yet.';
+    const { error } = await sb.rpc('delete_my_account');
+    if (error) {
+      const m = error.message.toLowerCase();
+      if (error.code === 'PGRST202' || m.includes('could not find') || m.includes('does not exist'))
+        return 'Deleting accounts isn’t switched on for this app yet. Whoever runs it needs to run supabase/privacy.sql once.';
+      return friendly(error.message);
+    }
+    // The account is gone. Clear this device's copy, then leave (local sign-out: the server session no longer exists).
+    await AsyncStorage.multiRemove([storageKey(user.id), MODE_KEY]).catch(() => {});
+    await sb.auth.signOut({ scope: 'local' }).catch(() => {});
+    setUser(null);
+    setMode('signedOut');
+    return null;
+  }, [user]);
+
   const useWithoutAccount = useCallback(() => {
     AsyncStorage.setItem(MODE_KEY, 'local').catch(() => {});
     setMode('local');
@@ -146,9 +168,9 @@ export function AccountProvider({ children }: { children: ReactNode }) {
   const value = useMemo(
     () => ({
       mode, user, cloud: cloudConfigured, signIn, signUp, resetPassword, signOut, useWithoutAccount,
-      arrival, linkError, dismissArrival, updatePassword,
+      arrival, linkError, dismissArrival, updatePassword, deleteAccount,
     }),
-    [mode, user, signIn, signUp, resetPassword, signOut, useWithoutAccount, arrival, linkError, dismissArrival, updatePassword],
+    [mode, user, signIn, signUp, resetPassword, signOut, useWithoutAccount, arrival, linkError, dismissArrival, updatePassword, deleteAccount],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

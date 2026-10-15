@@ -4,6 +4,9 @@ A phone app (and website) for tracking **food**, **cardio** and **lifting**. Peo
 
 - **Food:** a food log with about 12,900 built-in USDA foods plus branded foods from Open Food Facts, grouped into breakfast, lunch, dinner and snacks. A meal can be copied from an earlier day, all of it or only some items. Foods you create can have details, so two can share a name. A Tally list counts things like mints through the day with + and −. Also: calories in (filled in from the log) and out, diets (fasting, keto, vegan, ...) and suggested daily targets from body stats.
 - **Cardio:** log any run, walk, ride, swim or row. Optional plans put workouts on a calendar and track whether each was done: running (maintenance, 5K, 10K, half marathon, marathon), biking (maintenance, 10, 25, 50, 100 miles), swimming (maintenance, 200, 400, 800, 1500 m) and triathlon (sprint, standard, half and full Ironman).
+- **Cardio extras:** effort scores and a fitness and fatigue trend (our own free estimate, in the spirit of Strava's paid fitness graph), importing GPX and TCX files from a watch or another app, and exporting any recorded route as GPX.
+- **Body log:** weight (with a smoothed weekly trend), water, sleep and steps, entered by hand. All of them are optional cards on the Home tab.
+- **Your data:** download everything as JSON, or activities, food and the body log as CSV; see in plain words where data lives; delete the account and everything stored with it. See [`docs/FEATURE-PARITY.md`](docs/FEATURE-PARITY.md) for how this compares with Fitbit and Strava and what's still missing.
 - **Lifting:** plans for 3 to 7 days a week (push/pull/legs, upper/lower, full body, body part split, or custom), built from a library of 700+ exercises, or an unplanned workout any day. Each exercise has sets × a rep range; the app raises the weight when you hit the top of the range on every set (double progression).
 
 Built with Expo (React Native) + TypeScript. The original 12-week prototype is in [`docs/`](docs/).
@@ -24,13 +27,14 @@ Data saved by the first version of the app (key `mm_tracker_v1`) is brought forw
 | `src/logic/lifting.ts`, `exercises.ts`, `templates.ts` | Routines, schedule, workouts, double progression; the exercise library; lifting plans (splits × days a week). |
 | `src/logic/nutrition.ts`, `diet.ts`, `profile.ts`, `calories.ts` | Food log and totals, diets and on-track checks, body stats and suggested targets, calories in/out. |
 | `src/logic/usda.ts`, `openfoodfacts.ts` | The built-in USDA food list, and online search on Open Food Facts. |
+| `src/logic/body.ts`, `effort.ts`, `portability.ts` | The body log (weight trend, water, sleep, steps); effort, fitness and fatigue; export files and GPX/TCX import. |
 | `src/logic/sync.ts` | Which copy wins when the device and the account are compared. |
 | `src/logic/data/` | Generated data files: `usda-foods.json`, `exercises.json` (loaded only when needed). |
 | `scripts/` | Rebuild the data files from their sources (see below). |
 | `src/app/` | Screens (expo-router): `food`, `cardio`, `lifting`, `progress`, `you`. `_layout.tsx` = sign-in, setup, and the tabs. |
 | `src/ui/` | Components, theme (light/dark follows the system), the store (`store.tsx`: saving and syncing), accounts (`account.tsx`, `cloud.ts`), sign-in and setup screens. `food/`, `cardio/`, `lifting/` = each tab's sheets. |
 | `src/brand.ts`, `assets/brand/` | The app's name and logo (see [Name and logo](#name-and-logo)). |
-| `supabase/schema.sql`, `supabase/social.sql`, `supabase/email-templates/` | The database tables and access rules for accounts and for friends and leaderboards; branded sign-up and password emails. |
+| `supabase/schema.sql`, `supabase/social.sql`, `supabase/privacy.sql`, `supabase/email-templates/` | The database tables and access rules for accounts and for friends and leaderboards; deleting your own account; branded sign-up and password emails. |
 
 ## Develop
 
@@ -100,7 +104,7 @@ Accounts use [Supabase](https://supabase.com) (free tier is enough). Until this 
 
 1. Create a project at supabase.com (any name and region). Wait for it to finish setting up.
 2. **SQL Editor** → New query → paste the contents of [`supabase/schema.sql`](supabase/schema.sql) → Run. This creates the table and the rules that let each person read and write only their own data.
-   Then do the same with [`supabase/social.sql`](supabase/social.sql) to switch on friends and the leaderboard (safe to run again).
+   Then do the same with [`supabase/social.sql`](supabase/social.sql) to switch on friends and the leaderboard, and with [`supabase/privacy.sql`](supabase/privacy.sql) to let people delete their own account from the You tab (both safe to run again). Without `privacy.sql` the delete button explains that it isn't switched on.
 3. Copy the **Project URL** (green **Connect** button, or **Data API**) and the **publishable key** (`sb_publishable_…`, under **Project Settings → API Keys**; older projects call it the **anon / public** key). Never use the secret / `service_role` key.
 4. Put them where the app is built:
    - **Vercel** (the website): Project → Settings → Environment Variables → add `EXPO_PUBLIC_SUPABASE_URL` and `EXPO_PUBLIC_SUPABASE_ANON_KEY`, then redeploy.
@@ -109,7 +113,14 @@ Accounts use [Supabase](https://supabase.com) (free tier is enough). Until this 
 6. **Emails:** paste the branded templates from [`supabase/email-templates/`](supabase/email-templates/) (steps in its README). For real users, also set up your own email sender (SMTP) there.
 7. Optional: **Authentication → Sign In / Providers → Email**. "Confirm email" is on by default (people click a link before their first sign-in); turn it off for instant sign-up.
 
-The publishable (anon) key is safe to ship in the app; the access rules in `schema.sql` are what protect each person's data.
+The publishable (anon) key is safe to ship in the app; the access rules in `schema.sql` are what protect each person's data. They are access rules, not end-to-end encryption: whoever runs the Supabase project can technically read the stored data. The app says so on the You tab.
+
+## Your data: files and privacy
+
+- **Export** (You tab → Your data): `training-tracker-DATE.json` (everything), and CSVs for activities, food and the body log. CSV cells that start with `=`, `+`, `-` or `@` are prefixed so a spreadsheet won't run them as formulas. Distances are in miles and durations in seconds.
+- **Import:** GPX and TCX activity files (Garmin, Strava, most watches). Files over about 20 MB are refused, duplicates of activities already logged are skipped, and FIT files aren't supported yet. The files are read by a small built-in scanner, not an XML library.
+- **Delete:** deleting an account runs `delete_my_account()` (`supabase/privacy.sql`), which removes the sign-in and, through the database's cascade rules, the stored data, friends profile and shared leaderboard stats. Without an account, "Erase everything on this device" resets the app.
+- **What leaves the device:** the account copy (if signed in), the cardio totals shared with friends (if on), map tiles from OpenStreetMap, Open Food Facts searches, and exercise pictures from GitHub. There's no ads or analytics code. Keep the "Where your data lives" text in `src/ui/data/DataSection.tsx` in step with this list when any of it changes.
 
 ## Name and logo
 

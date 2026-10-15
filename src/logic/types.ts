@@ -21,11 +21,21 @@ export interface Settings {
   home: WidgetId[];
 }
 
-/** Calories typed for a day (outside the food log), calories burned, and a note. */
+/**
+ * What's logged for a day outside the food log: calories typed in, calories burned, a note, and the
+ * body log (weight, water, sleep, steps), entered by hand. See body.ts.
+ */
 export interface DayInfo {
   cin?: number;
   cout?: number;
   note?: string;
+  /** Body weight, pounds. */
+  weightLb?: number;
+  /** Water, fluid ounces. */
+  waterOz?: number;
+  /** Time asleep, minutes. */
+  sleepMins?: number;
+  steps?: number;
 }
 
 /** Everything one person tracks. Saved on the device and, when signed in, synced to their account. */
