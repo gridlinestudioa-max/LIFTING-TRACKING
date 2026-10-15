@@ -1,6 +1,6 @@
 import { router } from 'expo-router';
 import { memo, useMemo, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import {
   CARDIO_LABEL,
@@ -71,6 +71,7 @@ export function HomeCalendar() {
   const { state, today } = useTracker();
   const [view, setView] = useState(() => ({ y: toD(today).getFullYear(), m: toD(today).getMonth() }));
   const [open, setOpen] = useState<string | null>(today);
+  const [keyOpen, setKeyOpen] = useState(false);
   const since = useMemo(() => firstWorkout(state), [state]);
 
   const cells = useMemo(() => {
@@ -115,6 +116,9 @@ export function HomeCalendar() {
               }}
             />
           ) : null}
+          <Pressable onPress={() => setKeyOpen(true)} accessibilityRole="button" accessibilityLabel="What the colors mean" hitSlop={6} style={({ pressed }) => [st.nav, { borderColor: c.line, backgroundColor: pressed ? c.soft : c.card }]}>
+            <Text style={{ fontSize: 16, fontWeight: '800', color: c.ink }}>?</Text>
+          </Pressable>
           <Nav label="‹" a11y="Previous month" onPress={() => shift(-1)} />
           <Nav label="›" a11y="Next month" onPress={() => shift(1)} />
         </View>
@@ -148,30 +152,33 @@ export function HomeCalendar() {
           {open && r.some((x) => x?.d.s === open) ? <DayReview d={r.find((x) => x?.d.s === open)!.d} p={r.find((x) => x?.d.s === open)!.p} onClose={() => setOpen(null)} /> : null}
         </View>
       ))}
-      <View style={st.key}>
-        <KeyDisc r="all" label="All done" />
-        <KeyDisc r="some" label="Some done" />
-        <KeyDisc r="missed" label="Missed" />
-        <KeyDisc r="planned" label="To do" />
-      </View>
-      <View style={[st.key, { marginTop: 4 }]}>
-        <View style={st.keyItem}>
-          <CardioIcon color={c.mute} focused={false} size={14} />
-          <Text style={[st.keyText, { color: c.mute }]}>Cardio</Text>
+      <Modal visible={keyOpen} transparent animationType="fade" onRequestClose={() => setKeyOpen(false)}>
+        <Pressable style={st.backdrop} onPress={() => setKeyOpen(false)} accessibilityLabel="Close the key" />
+        <View style={[st.keyCard, { backgroundColor: c.card }]} accessibilityViewIsModal>
+          <Text style={[st.keyTitle, { color: c.ink }]}>What the calendar shows</Text>
+          <KeyRow icon={<KeyDisc r="all" />} title="All done" text="Every workout planned that day was done, and you hit your calorie target." />
+          <KeyRow icon={<KeyDisc r="some" />} title="Some done" text="Part of the day’s plan was done." />
+          <KeyRow icon={<KeyDisc r="missed" />} title="Missed" text="Something was planned and none of it was done." />
+          <KeyRow icon={<KeyDisc r="planned" />} title="To do" text="Planned for today or a day ahead." />
+          <KeyRow icon={<View style={[st.keyBox, { borderColor: c.ink, borderWidth: 2 }]} />} title="Today" text="Outlined. Past days are shaded." />
+          <KeyRow icon={<CardioIcon color={c.ok} focused size={18} />} title="Cardio" text="Green when done, red when missed, grey when planned." />
+          <KeyRow icon={<LiftIcon color={c.ok} focused size={18} />} title="Lifting" text="Green when done, red when missed, grey when planned." />
+          <KeyRow
+            icon={
+              <View style={{ gap: 3 }}>
+                <View style={[st.bar, { width: 18, backgroundColor: c.ok }]} />
+                <View style={[st.bar, { width: 18, backgroundColor: c.bad }]} />
+              </View>
+            }
+            title="Calories"
+            text="The thin bar: green for a deficit, red for a surplus."
+          />
+          <Text style={{ color: c.mute, fontSize: 13, marginTop: space.sm }}>Tap any day for its full review.</Text>
+          <Pressable onPress={() => setKeyOpen(false)} accessibilityRole="button" style={({ pressed }) => [st.keyDone, { backgroundColor: c.ink, opacity: pressed ? 0.8 : 1 }]}>
+            <Text style={{ color: c.card, fontWeight: '700', fontSize: 15 }}>Got it</Text>
+          </Pressable>
         </View>
-        <View style={st.keyItem}>
-          <LiftIcon color={c.mute} focused={false} size={14} />
-          <Text style={[st.keyText, { color: c.mute }]}>Lifting</Text>
-        </View>
-        <View style={st.keyItem}>
-          <View style={[st.bar, { width: 14, backgroundColor: c.ok }]} />
-          <Text style={[st.keyText, { color: c.mute }]}>Deficit</Text>
-        </View>
-        <View style={st.keyItem}>
-          <View style={[st.bar, { width: 14, backgroundColor: c.bad }]} />
-          <Text style={[st.keyText, { color: c.mute }]}>Surplus</Text>
-        </View>
-      </View>
+      </Modal>
     </View>
   );
 }
@@ -185,13 +192,21 @@ function Nav({ label, a11y, onPress }: { label: string; a11y: string; onPress: (
   );
 }
 
-function KeyDisc({ r, label }: { r: DayResult; label: string }) {
+function KeyDisc({ r }: { r: DayResult }) {
   const c = useColors();
   const ds = discStyle(c, r, false);
+  return <View style={{ width: 22, height: 22, borderRadius: 11, backgroundColor: ds.bg, borderWidth: 1.5, borderColor: ds.border }} />;
+}
+
+function KeyRow({ icon, title, text }: { icon: React.ReactNode; title: string; text: string }) {
+  const c = useColors();
   return (
-    <View style={st.keyItem}>
-      <View style={{ width: 12, height: 12, borderRadius: 6, backgroundColor: ds.bg, borderWidth: 1.5, borderColor: ds.border }} />
-      <Text style={[st.keyText, { color: c.mute }]}>{label}</Text>
+    <View style={st.keyRow}>
+      <View style={{ width: 28, alignItems: 'center' }}>{icon}</View>
+      <View style={{ flex: 1 }}>
+        <Text style={{ color: c.ink, fontSize: 15, fontWeight: '700' }}>{title}</Text>
+        <Text style={{ color: c.mute, fontSize: 13.5, lineHeight: 18 }}>{text}</Text>
+      </View>
     </View>
   );
 }
@@ -412,9 +427,12 @@ const st = StyleSheet.create({
   bar: { width: '60%', height: 3, borderRadius: 2 },
   dot: { width: 6, height: 6, borderRadius: 3 },
   todayBar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderRadius: radius.sm, paddingHorizontal: space.md, paddingVertical: space.sm, marginBottom: space.sm },
-  key: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', columnGap: space.md, rowGap: 4, marginTop: space.sm, paddingHorizontal: 4 },
-  keyItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  keyText: { fontSize: 11.5 },
+  backdrop: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.35)' },
+  keyCard: { position: 'absolute', left: space.lg, right: space.lg, top: '12%', maxWidth: 440, alignSelf: 'center', borderRadius: radius.lg, padding: space.lg },
+  keyTitle: { fontFamily: fonts.display, fontSize: 24, lineHeight: 28, marginBottom: space.sm },
+  keyRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: 6 },
+  keyBox: { width: 22, height: 22, borderRadius: 6 },
+  keyDone: { alignItems: 'center', borderRadius: radius.md, paddingVertical: space.md, marginTop: space.md },
   review: { borderWidth: 1, borderRadius: radius.md, padding: space.md, marginVertical: space.sm },
   reviewTitle: { fontFamily: fonts.display, fontSize: 22, lineHeight: 26 },
   block: { borderTopWidth: 1, paddingTop: space.sm, marginTop: space.sm },
