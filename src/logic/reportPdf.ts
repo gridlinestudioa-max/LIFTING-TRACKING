@@ -180,8 +180,8 @@ export async function reportPdf(r: Report, made: string): Promise<Uint8Array> {
         { value: kc(c.avgIn), label: r.span.period === 'day' ? 'Eaten (kcal)' : 'Avg eaten (kcal/day)' },
         { value: kc(c.avgOut), label: r.span.period === 'day' ? 'Burned (kcal)' : 'Avg burned (kcal/day)' },
         r.span.period === 'day'
-          ? { value: c.goal ? fmtInt(c.goal) : '–', label: 'Deficit goal' }
-          : { value: `${c.daysAtGoal}/${c.daysLogged}`, label: c.goal ? 'Days at goal' : 'Days in a deficit' },
+          ? { value: c.goal != null ? (c.goal === 0 ? 'Even' : sgn(c.goal)) : '–', label: 'Target (kcal)' }
+          : { value: `${c.daysAtGoal}/${c.daysLogged}`, label: c.goal != null ? 'Days on target' : 'Days in a deficit' },
         ...(r.span.period !== 'day' ? [{ value: sgn(Math.round(c.totalNet)), label: 'Total deficit (kcal)', color: c.totalNet >= 0 ? OK : BAD }] : []),
         ...(c.macros
           ? [

@@ -6,7 +6,7 @@ import {
   FOOD_TAGS,
   STYLES,
   STYLE_BY_ID,
-  activeDiet,
+  dietFor,
   calorieTarget,
   editOwnLimits,
   fmtClock,
@@ -204,9 +204,9 @@ const LIMIT_ROWS: { key: keyof Limits; label: string; unit: string; note?: strin
 /** The targets suggested from the profile and food style, with where each number comes from. */
 function SuggestedTargets({ onEdit }: { onEdit: () => void }) {
   const c = useColors();
-  const { state } = useTracker();
+  const { state, today } = useTracker();
   const t = suggestTargets(statsOf(state.profile)!, state.diet.style);
-  const active = activeDiet(state.diet, state.profile).limits;
+  const active = dietFor(state, today).limits;
   return (
     <View>
       {LIMIT_ROWS.map((r) => {

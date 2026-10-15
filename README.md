@@ -4,10 +4,11 @@ A phone app (and website) for tracking **food**, **cardio** and **lifting**. Peo
 
 - **Food:** a food log with about 12,900 built-in USDA foods plus branded foods from Open Food Facts, grouped into breakfast, lunch, dinner and snacks. A meal can be copied from an earlier day, all of it or only some items. Foods you create can have details, so two can share a name. A Tally list counts things like mints through the day with + and −. Also: calories in (filled in from the log) and out, diets (fasting, keto, vegan, ...) and suggested daily targets from body stats.
 - **Cardio:** log any run, walk, ride, swim or row. Optional plans put workouts on a calendar and track whether each was done: running (maintenance, 5K, 10K, half marathon, marathon), biking (maintenance, 10, 25, 50, 100 miles), swimming (maintenance, 200, 400, 800, 1500 m) and triathlon (sprint, standard, half and full Ironman).
-- **Cardio extras:** effort scores and a fitness and fatigue trend (our own free estimate, in the spirit of Strava's paid fitness graph), importing GPX and TCX files from a watch or another app, and exporting any recorded route as GPX.
+- **Cardio extras:** importing GPX and TCX files from a watch or another app, and exporting any recorded route as GPX.
+- **Cut, bulk or maintain:** plans that set daily calories and protein from what you burn (gentle, standard and mini cuts; maintain and diet break; lean bulk and bulk), with safety limits and a check on whether your weight trend is on track.
 - **Body log:** weight (with a smoothed weekly trend), water, sleep and steps, entered by hand. All of them are optional cards on the Home tab.
 - **Your data:** download everything as JSON, or activities, food and the body log as CSV; see in plain words where data lives; delete the account and everything stored with it. See [`docs/FEATURE-PARITY.md`](docs/FEATURE-PARITY.md) for how this compares with Fitbit and Strava and what's still missing.
-- **Progress:** calories, cardio and lifting at a glance, then swipe-through graphs for each (deficit, eaten vs burned, protein, weight; distance, time, run pace, effort, fitness and fatigue; workouts, volume, sets and your top lifts), each by week, month, year or all time.
+- **Progress:** calories, cardio and lifting at a glance, then swipe-through graphs for each (deficit, eaten vs burned, protein, weight; distance, time, run pace; workouts, volume, sets and your top lifts), each by week, month, year or all time.
 - **Feed:** every finished run, ride, swim and lifting workout, newest first, with stats, the route map and any personal records. Tap one for everything about it: all stats, splits, every set. It's the center tab; Food, Cardio and Lifting share one **Track** tab that opens a menu to pick one.
 - **Profile and friends:** a profile picture, the city you represent, and a username friends can search for. Friends can also be found by connecting contacts (people who added their phone number) or by number. Friends see what you choose to share (cardio, lifting, food) and a leaderboard.
 - **Reports:** download a PDF report of any day, week, month or year from the Progress tab.
@@ -33,7 +34,7 @@ Data saved by the first version of the app (key `mm_tracker_v1`) is brought forw
 | `src/logic/lifting.ts`, `exercises.ts`, `templates.ts` | Routines, schedule, workouts, double progression; the exercise library; lifting plans (splits × days a week). |
 | `src/logic/nutrition.ts`, `diet.ts`, `profile.ts`, `calories.ts` | Food log and totals, diets and on-track checks, body stats and suggested targets, calories in/out. |
 | `src/logic/usda.ts`, `openfoodfacts.ts` | The built-in USDA food list, and online search on Open Food Facts. |
-| `src/logic/body.ts`, `effort.ts`, `portability.ts` | The body log (weight trend, water, sleep, steps); effort, fitness and fatigue; export files and GPX/TCX import. |
+| `src/logic/body.ts`, `cycle.ts`, `portability.ts` | The body log (weight trend, water, sleep, steps); cut, bulk and maintenance plans; export files and GPX/TCX import. |
 | `src/logic/sync.ts` | Which copy wins when the device and the account are compared. |
 | `src/logic/data/` | Generated data files: `usda-foods.json`, `exercises.json` (loaded only when needed). |
 | `scripts/` | Rebuild the data files from their sources (see below). |

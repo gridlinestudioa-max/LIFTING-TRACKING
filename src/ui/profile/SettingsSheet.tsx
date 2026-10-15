@@ -112,11 +112,12 @@ export function SettingsSheet({ onClose }: { onClose: () => void }) {
       ) : null}
 
       {on.food ? (
-        <Section title="Deficit goal">
+        <Section title="Daily deficit target">
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.sm }}>
-            <CommitNumberField value={state.goal} onCommit={setGoal} accessibilityLabel="Daily deficit goal" placeholder="None" style={{ width: 120, textAlign: 'right' }} />
-            <Text style={{ color: c.mute, fontSize: 15 }}>kcal a day</Text>
+            <CommitNumberField value={state.goal} onCommit={setGoal} accessibilityLabel="Daily deficit target" placeholder="None" style={{ width: 120, textAlign: 'right' }} />
+            <Text style={{ color: c.mute, fontSize: 15 }}>kcal under what you burn, a day</Text>
           </View>
+          <Mute style={{ fontSize: 13, marginTop: space.sm }}>For example 500 to lose about 1 lb a week. A cut, bulk or maintenance plan (on the Progress tab) sets this for you while it runs.</Mute>
         </Section>
       ) : null}
 

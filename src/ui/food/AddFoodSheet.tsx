@@ -11,7 +11,7 @@ import {
   tallyPieces,
   mealAt,
   mealOf,
-  activeDiet,
+  dietFor,
   OffError,
   entryFromFood,
   entryTotals,
@@ -101,9 +101,9 @@ export function AddFoodSheet({
   meal?: MealSlot;
   onClose: () => void;
 }) {
-  const { state, saveEntry, removeEntry, setEntries, saveFood, deleteFood } = useTracker();
+  const { state, today, saveEntry, removeEntry, setEntries, saveFood, deleteFood } = useTracker();
   const usda = useUsdaFoods();
-  const diet = activeDiet(state.diet, state.profile);
+  const diet = dietFor(state, today);
   // Saved foods (yours, and branded foods you've logged) first, then USDA.
   // A USDA food kept on the device (for the tally) is listed once.
   const all = useMemo(() => {

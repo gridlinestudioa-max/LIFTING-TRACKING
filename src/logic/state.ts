@@ -1,5 +1,6 @@
 import { cleanSleep, cleanSteps, cleanWater, cleanWeight } from './body';
 import { EMPTY_CARDIO, normalizeCardio } from './cardio';
+import { normalizeCycle } from './cycle';
 import { DEFAULT_DIET, normalizeDiet } from './diet';
 import { DEFAULT_HOME, normalizeHome } from './home';
 import { DEFAULT_SHARING, normalizeSharing } from './social';
@@ -18,6 +19,7 @@ export function defaultState(): TrackerState {
     updatedAt: 0,
     settings: { name: '', sections: { ...ALL_SECTIONS }, onboarded: false, home: [...DEFAULT_HOME], share: { ...DEFAULT_SHARING }, city: '', photo: '' },
     goal: null,
+    cycle: null,
     days: {},
     foods: [],
     meals: {},
@@ -53,6 +55,7 @@ export function normalize(s: unknown): TrackerState {
   if (typeof st.photo === 'string' && /^https:\/\/[^\s]{1,300}$/.test(st.photo)) d.settings.photo = st.photo;
 
   if (typeof src.goal === 'number' && src.goal > 0) d.goal = src.goal;
+  d.cycle = normalizeCycle(src.cycle);
   if (src.days && typeof src.days === 'object') {
     Object.keys(src.days).forEach((k) => {
       const x = src.days[k];

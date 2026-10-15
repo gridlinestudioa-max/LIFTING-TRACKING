@@ -1,7 +1,7 @@
 // A summary of a day, week, month or year across calories, cardio, lifting and the body log, for the PDF
 // report on the Progress tab. Only the sections the person uses are included. Pure logic, no React.
 
-import { cinFor, net } from './calories';
+import { calTarget, cinFor, net, onTarget } from './calories';
 import { coutFor, workoutMinutes } from './burn';
 import type { CardioType } from './cardio';
 import { MONTHS, addDays, daysInMonth, mondayOf, pad, shortDayLabel, toD } from './dates';
@@ -65,6 +65,7 @@ export interface ReportCalories {
   /** Average daily deficit (positive) or surplus (negative). */
   avgNet: number | null;
   totalNet: number;
+  /** Calorie target as a net (positive deficit, negative surplus), or null. */
   goal: number | null;
   daysAtGoal: number;
   /** Average per logged day. */
@@ -163,7 +164,7 @@ export function buildReport(state: TrackerState, span: ReportSpan, today: string
     const macros = tot.length
       ? (Object.fromEntries(Object.keys(tot[0]).map((k) => [k, Math.round(tot.reduce((t, x) => t + x[k as keyof Totals], 0) / tot.length)])) as unknown as Totals)
       : null;
-    const goal = state.goal;
+    const goal = calTarget(state, last);
     const entries = span.period === 'day' ? (state.meals[span.from] ?? []) : [];
     calories = {
       daysLogged: logged.length,
@@ -172,7 +173,10 @@ export function buildReport(state: TrackerState, span: ReportSpan, today: string
       avgNet: avg(nets.map((d) => d.v)),
       totalNet: nets.reduce((t, d) => t + d.v, 0),
       goal,
-      daysAtGoal: nets.filter((d) => (goal ? d.v >= goal : d.v > 0)).length,
+      daysAtGoal: nets.filter((d) => {
+        const t = calTarget(state, d.s);
+        return t != null ? onTarget(d.v, t) : goal == null && d.v > 0;
+      }).length,
       macros,
       bars: span.period === 'day' ? [] : bars(span, days, (s) => netOf.get(s) ?? null, 'avg'),
       meals: MEALS.map((m) => ({

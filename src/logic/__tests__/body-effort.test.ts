@@ -257,10 +257,10 @@ describe('home cards for the body log', () => {
     expect(normalizeHome(['workout', 'water', 'weight', 'nope'])).toEqual(['workout', 'water', 'weight']);
   });
 
-  it('shows body cards whatever tabs are on, and hides training load without Cardio', () => {
+  it('shows body cards whatever tabs are on, and drops the old training load card', () => {
     const s = defaultState();
-    const home = ['weight', 'water', 'sleep', 'steps', 'load'] as const;
-    expect(visibleWidgets([...home], { ...s.settings.sections, cardio: false })).toEqual(['weight', 'water', 'sleep', 'steps']);
-    expect(visibleWidgets([...home], s.settings.sections)).toEqual([...home]);
+    const home = ['weight', 'water', 'sleep', 'steps'] as const;
+    expect(visibleWidgets([...home], { ...s.settings.sections, cardio: false })).toEqual([...home]);
+    expect(normalizeHome(['weight', 'load'])).toEqual(['weight']);
   });
 });

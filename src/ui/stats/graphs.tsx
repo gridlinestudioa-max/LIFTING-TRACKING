@@ -2,10 +2,10 @@ import { useMemo, useState, type ComponentType } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import {
-  activeDiet,
+  calTarget,
+  dietFor,
   avgByBucket,
   bestSets,
-  dailyEffort,
   dayDiff,
   fmt,
   fmtInt,
@@ -15,7 +15,6 @@ import {
   rangeSpan,
   sumByBucket,
   sumTotals,
-  trainingLoad,
   weightSeries,
   weightTrend,
   type Bucket,
@@ -101,6 +100,7 @@ function useKDays() {
 function DeficitGraph({ range }: { range: Range }) {
   const { state, today } = useTracker();
   const ds = useKDays();
+  const target = calTarget(state, today);
   const span = rangeSpan(range, today, ds[0]?.s);
   const vals = avgByBucket(ds, (d) => d.s, (d) => d.net, span.buckets).map((v) => (v == null ? null : Math.round(v)));
   const inRange = ds.filter((d) => d.s >= span.from);
@@ -108,8 +108,8 @@ function DeficitGraph({ range }: { range: Range }) {
   return (
     <>
       <ChartCaption>{`${span.caption} · kcal ${avgPer(span)}`}</ChartCaption>
-      <BarChart values={vals} labels={labels(span)} unit="kcal" signed goal={state.goal} label={`Calorie deficit, ${span.caption.toLowerCase()}`} />
-      <ChartKey items={state.goal ? ['deficit', 'surplus', 'goal'] : ['deficit', 'surplus']} />
+      <BarChart values={vals} labels={labels(span)} unit="kcal" signed goal={target} label={`Calorie deficit, ${span.caption.toLowerCase()}`} />
+      <ChartKey items={target ? ['deficit', 'surplus', 'goal'] : ['deficit', 'surplus']} />
       {avg != null ? <Total>{`Average ${avg >= 0 ? 'deficit' : 'surplus'}: ${fmtInt(Math.abs(avg))} kcal a day (${inRange.length} days logged)`}</Total> : <NoData />}
     </>
   );
@@ -169,7 +169,7 @@ function MacrosGraph({ range }: { range: Range }) {
   return (
     <>
       <ChartCaption>{`${span.caption} · protein, grams ${avgPer(span)}`}</ChartCaption>
-      <BarChart values={vals} labels={labels(span)} unit="g" goal={activeDiet(state.diet, state.profile).limits.proteinMin ?? null} label={`Protein, ${span.caption.toLowerCase()}`} />
+      <BarChart values={vals} labels={labels(span)} unit="g" goal={dietFor(state, today).limits.proteinMin ?? null} label={`Protein, ${span.caption.toLowerCase()}`} />
       {inRange.length ? <Total>{`Average a day: ${avg('protein')} g protein · ${avg('carbs')} g carbs · ${avg('fat')} g fat`}</Total> : <NoData />}
     </>
   );
@@ -260,52 +260,6 @@ function PaceGraph({ range }: { range: Range }) {
         <NoData two what="timed runs" />
       )}
       {totM ? <Total>{`Average pace ${fmtTime(Math.round(totS / totM))} /mi over ${fmt(Math.round(totM * 10) / 10)} mi`}</Total> : null}
-    </>
-  );
-}
-
-function EffortGraph({ range }: { range: Range }) {
-  const { state, today } = useTracker();
-  const perDay = useMemo(() => dailyEffort(state.cardio, state.profile, today), [state.cardio, state.profile, today]);
-  const days = [...perDay.entries()].map(([s, v]) => ({ s, v })).sort((a, b) => a.s.localeCompare(b.s));
-  const span = rangeSpan(range, today, days[0]?.s);
-  const vals = sumByBucket(days, (d) => d.s, (d) => d.v, span.buckets).map(Math.round);
-  return (
-    <>
-      <ChartCaption>{`${span.caption} · effort points ${per(span)} (time weighted by heart rate or how hard it felt)`}</ChartCaption>
-      <BarChart values={vals} labels={labels(span)} unit="pts" label={`Effort, ${span.caption.toLowerCase()}`} />
-    </>
-  );
-}
-
-function FitnessGraph({ range }: { range: Range }) {
-  const { state, today } = useTracker();
-  const firstDay = state.cardio.sessions.reduce<string | null>((m, x) => (!m || x.date < m ? x.date : m), null);
-  const span = rangeSpan(range, today, firstDay);
-  const load = useMemo(() => trainingLoad(state.cardio, state.profile, today, dayDiff(today, span.from) + 1), [state.cardio, state.profile, today, span.from]);
-  const last = load[load.length - 1];
-  return (
-    <>
-      <ChartCaption>{`${span.caption} · fitness (6-week average) and fatigue (1-week average), effort points a day`}</ChartCaption>
-      {load.length >= 2 ? (
-        <>
-          <LineChart
-            label={`Fitness and fatigue, ${span.caption.toLowerCase()}`}
-            zero
-            unit="pts"
-            from={span.from}
-            to={span.to}
-            series={[
-              { pts: load.map((d) => ({ s: d.s, v: Math.round(d.fitness * 10) / 10 })), style: 'line' },
-              { pts: load.map((d) => ({ s: d.s, v: Math.round(d.fatigue * 10) / 10 })), style: 'dashed' },
-            ]}
-          />
-          <ChartKey items={['fitness', 'fatigue']} />
-        </>
-      ) : (
-        <NoData two what="activities" />
-      )}
-      {last ? <Total>{`Today: fitness ${fmt(Math.round(last.fitness))}, fatigue ${fmt(Math.round(last.fatigue))}${last.fatigue > last.fitness * 1.3 ? ' · take it easier' : ''}`}</Total> : null}
     </>
   );
 }
@@ -405,8 +359,6 @@ const CARDIO_GRAPHS: Graph[] = [
   { id: 'distance', title: 'Distance', Chart: DistanceGraph },
   { id: 'time', title: 'Time', Chart: TimeGraph },
   { id: 'pace', title: 'Run pace', Chart: PaceGraph },
-  { id: 'effort', title: 'Effort', Chart: EffortGraph },
-  { id: 'fitness', title: 'Fitness and fatigue', Chart: FitnessGraph },
 ];
 
 export function CalorieGraphs() {

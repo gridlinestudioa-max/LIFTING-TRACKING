@@ -4,6 +4,7 @@
 //   - a food style: numeric limits (net carbs, protein, ...) and/or food groups to avoid.
 
 import type { Tone } from './calories';
+import { activeCycle, type Cycle } from './cycle';
 import { fmt, fmtInt } from './format';
 import { statsOf, suggestTargets, type Profile } from './profile';
 import { TAG_LABEL, byTime, entryTotals, fatPct, fmtClock, fmtDuration, sumTotals, type FoodEntry, type FoodTag, type Totals } from './nutrition';
@@ -117,9 +118,19 @@ export function usesSuggestions(d: DietSettings, profile: Profile | null): boole
   return d.auto && !!statsOf(profile);
 }
 
-/** The diet with the limits actually in force: suggested from the profile, or the stored ones. */
-export function activeDiet(d: DietSettings, profile: Profile | null): DietSettings {
-  return usesSuggestions(d, profile) ? { ...d, limits: suggestTargets(statsOf(profile)!, d.style).limits } : d;
+/**
+ * The diet with the limits actually in force: suggested from the profile, or the stored ones. While a cut,
+ * bulk or maintenance phase runs, its calories and protein replace the suggested ones.
+ */
+export function activeDiet(d: DietSettings, profile: Profile | null, cycle?: Cycle | null): DietSettings {
+  if (!usesSuggestions(d, profile)) return d;
+  const limits = suggestTargets(statsOf(profile)!, d.style).limits;
+  return { ...d, limits: cycle ? { ...limits, kcalMax: cycle.intake, proteinMin: Math.max(limits.proteinMin ?? 0, cycle.proteinG) } : limits };
+}
+
+/** The diet in force for the app's state today, phase included. */
+export function dietFor(state: { diet: DietSettings; profile: Profile | null; cycle: Cycle | null }, today: string): DietSettings {
+  return activeDiet(state.diet, state.profile, activeCycle(state.cycle, today));
 }
 
 /** Switch to editing your own numbers, starting from what's in force now. */

@@ -1,4 +1,5 @@
 import type { CardioData } from './cardio';
+import type { Cycle } from './cycle';
 import type { DietSettings } from './diet';
 import type { WidgetId } from './home';
 import type { LiftingData } from './lifting';
@@ -51,8 +52,10 @@ export interface TrackerState {
   /** Last change, ms since 1970. Sync keeps whichever copy is newer. */
   updatedAt: number;
   settings: Settings;
-  /** Optional daily deficit goal (kcal). */
+  /** Optional daily deficit goal (kcal). A cut, bulk or maintenance phase (`cycle`) takes over while it runs. */
   goal: number | null;
+  /** The cutting, bulking or maintenance phase, or null. */
+  cycle: Cycle | null;
   days: Record<string, DayInfo>;
   /**
    * Foods saved on the device: ones the user created (`custom`), and Open Food Facts products that were
