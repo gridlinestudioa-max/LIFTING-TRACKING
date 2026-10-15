@@ -2,7 +2,8 @@ import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { MONTHS, byWeek, calorieSummary, cardioReport, fmt, fmtInt, liftSummary, sgn, toD } from '@/logic';
+import { MONTHS, REPORT_PERIODS, byWeek, calorieSummary, cardioReport, fmt, fmtInt, liftSummary, sgn, toD, type ReportPeriod } from '@/logic';
+import { Button } from '@/ui/food/kit';
 import { ReportSheet } from '@/ui/report/ReportSheet';
 import { Header, Mute, Section, StatGrid, StatTile } from '@/ui/components';
 import { CardioStatsSheet, paceFor } from '@/ui/stats/CardioStats';
@@ -20,7 +21,7 @@ export default function ProgressScreen() {
   const c = useColors();
   const { state } = useTracker();
   const on = state.settings.sections;
-  const [exporting, setExporting] = useState(false);
+  const [report, setReport] = useState<ReportPeriod | null>(null);
 
   return (
     <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: c.bg }}>
@@ -28,8 +29,8 @@ export default function ProgressScreen() {
         <Header
           title="Progress"
           right={
-            <Pressable onPress={() => setExporting(true)} accessibilityRole="button" accessibilityLabel="Export a PDF summary" hitSlop={8} style={({ pressed }) => [st.export, { borderColor: c.line, backgroundColor: pressed ? c.soft : c.card }]}>
-              <Text style={{ color: c.ink, fontSize: 14, fontWeight: '700' }}>Export</Text>
+            <Pressable onPress={() => setReport('week')} accessibilityRole="button" accessibilityLabel="Download a PDF report" hitSlop={8} style={({ pressed }) => [st.export, { borderColor: c.line, backgroundColor: pressed ? c.soft : c.card }]}>
+              <Text style={{ color: c.ink, fontSize: 14, fontWeight: '700' }}>Report</Text>
             </Pressable>
           }
         />
@@ -42,9 +43,18 @@ export default function ProgressScreen() {
         {on.cardio ? <CardioGraphs /> : null}
         {on.lifting ? <LiftingGraphs /> : null}
 
+        <Section title="Download a report">
+          <Mute>A PDF of your calories, cardio, lifting and body log, with charts and everything you did. Pick the period, then choose which one.</Mute>
+          <View style={st.reports}>
+            {REPORT_PERIODS.map((p) => (
+              <Button key={p.id} label={p.every} onPress={() => setReport(p.id)} style={{ flexBasis: '47%', flexGrow: 1 }} />
+            ))}
+          </View>
+        </Section>
+
         {on.food ? <WeekTable /> : null}
       </ScrollView>
-      {exporting ? <ReportSheet visible onClose={() => setExporting(false)} /> : null}
+      {report ? <ReportSheet visible initial={report} onClose={() => setReport(null)} /> : null}
     </SafeAreaView>
   );
 }
@@ -161,6 +171,7 @@ function WeekTable() {
 }
 
 const st = StyleSheet.create({
+  reports: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm, marginTop: space.md },
   export: { borderWidth: 1, borderRadius: 18, paddingHorizontal: space.md, paddingVertical: 7 },
   h2: { fontFamily: fonts.display, fontSize: 26, lineHeight: 30, marginTop: space.md, marginBottom: space.md },
   krow: { flexDirection: 'row', borderBottomWidth: 1, paddingVertical: space.sm + 1 },

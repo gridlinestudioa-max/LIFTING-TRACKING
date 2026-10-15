@@ -1,7 +1,5 @@
 // A summary of a day, week, month or year across calories, cardio, lifting and the body log, for the PDF
-// export and the emailed summary. Only the sections the person uses are included.
-// Pure logic, no React. Also bundled into the email function (supabase/functions/send-reports), so keep
-// imports to other pure logic files.
+// report on the Progress tab. Only the sections the person uses are included. Pure logic, no React.
 
 import { cinFor, net } from './calories';
 import { coutFor, workoutMinutes } from './burn';
@@ -48,7 +46,7 @@ export function reportSpan(period: ReportPeriod, anchor: string): ReportSpan {
   return { period, from: `${y}-01-01`, to: `${y}-12-31`, title: String(y) };
 }
 
-/** The last finished period before `today`: yesterday, last week, last month or last year. For emails. */
+/** The last finished period before `today`: yesterday, last week, last month or last year. */
 export function lastFinished(period: ReportPeriod, today: string): ReportSpan {
   const cur = reportSpan(period, today);
   return reportSpan(period, addDays(cur.from, -1));

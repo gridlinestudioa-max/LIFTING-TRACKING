@@ -195,9 +195,6 @@ export function PrivacySection() {
       <Fact title="Friends (optional)">
         If you turn it on, friends see your name and only what you choose to share on your profile: cardio totals and bests, lifting counts and your top lifts, and food averages for the last 7 days. Never your routes, what you ate, your weight or notes. A phone number, if you add one, is stored scrambled.
       </Fact>
-      <Fact title="Emailed summaries (optional)">
-        If you sign up on Progress → Export, the app’s server makes your summary from your account copy and sends it to your email through an email service, which handles the message and its PDF. Turn them off there any time.
-      </Fact>
       <Fact title="Other services">
         Maps load tiles from OpenStreetMap, branded food searches go to Open Food Facts, and exercise pictures load from GitHub. They can see your IP address. The USDA food data is built into the app.
       </Fact>

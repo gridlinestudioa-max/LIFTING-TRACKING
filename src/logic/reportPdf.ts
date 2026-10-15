@@ -1,6 +1,6 @@
 // Draws a Report (report.ts) as a PDF: a heading, then calories, cardio, lifting and body sections with
-// key numbers, a bar chart and the list of what was done. Uses pdf-lib, which is plain JavaScript, so the
-// same file makes the PDF in the app and in the email function.
+// key numbers, a bar chart and the list of what was done. Uses pdf-lib, which is plain JavaScript and works on
+// the web and on phones.
 
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage, type RGB } from 'pdf-lib';
 
