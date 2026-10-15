@@ -9,12 +9,14 @@ import {
   fmt,
   fmtInt,
   fmtTime,
+  muscleLoad,
   paceText,
   repsDone,
   sessionBurn,
   setsDone,
   shortDayLabel,
   volume,
+  workoutBurn,
   type CardioSession,
   type FeedItem,
   type Workout,
@@ -23,6 +25,8 @@ import {
 import { RouteMap } from '../cardio/RouteMap';
 import { Card, Mute } from '../components';
 import { LinkButton, Sheet } from '../food/kit';
+import { MuscleMap } from '../lifting/MuscleMap';
+import { useLibrary } from '../lifting/library';
 import { MedalBadge, MedalList } from '../Medal';
 import { Avatar } from '../social/Avatar';
 import { useTracker } from '../store';
@@ -122,20 +126,32 @@ function CardioDetail({ x }: { x: CardioSession }) {
 
 function LiftDetail({ w }: { w: Workout }) {
   const c = useColors();
+  const { state, today } = useTracker();
+  const { byId } = useLibrary();
   const mins = w.start && w.end && w.end > w.start ? Math.round((w.end - w.start) / 60000) : null;
   const v = volume(w);
+  const b = baseInputs(state.profile, today);
+  const kcal = b ? workoutBurn(w, b.weightLb) : null;
+  const load = muscleLoad(w, byId);
   const stats = [
     mins ? { label: 'Time', value: mins < 60 ? `${mins} min` : `${Math.floor(mins / 60)}h ${mins % 60}m` } : null,
     { label: 'Exercises', value: String(w.exercises.filter((e) => e.sets.some((s) => s.done)).length) },
     { label: 'Sets', value: String(setsDone(w)) },
     { label: 'Reps', value: fmtInt(repsDone(w)) },
     v ? { label: 'Volume', value: `${fmtInt(Math.round(v))} lb` } : null,
+    kcal ? { label: 'Calories (est.)', value: `${fmtInt(kcal)} kcal` } : null,
   ].filter((s): s is { label: string; value: string } => !!s);
   return (
     <>
       <Card style={{ marginTop: space.lg }}>
         <Grid items={stats} />
       </Card>
+      {Object.keys(load).length ? (
+        <Card>
+          <Text style={[st.h, { color: c.ink }]}>Muscles worked</Text>
+          <MuscleMap load={load} />
+        </Card>
+      ) : null}
       {w.exercises.map((e, i) => {
         const done = e.sets.filter((s) => s.done);
         const u = e.unit === 'plates' ? 'pl' : e.unit === 'lb' ? 'lb' : '';
