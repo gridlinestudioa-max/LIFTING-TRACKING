@@ -124,7 +124,12 @@ export interface DayProgress {
   result: DayResult;
 }
 
-export function dayProgress(d: DayLog, today: string, target: number | null): DayProgress {
+/**
+ * How a day went. Workouts planned (or done) count, and so does food: from the first day you logged
+ * calories, each day up to today needs calories in and out logged, and on target when you have one. So
+ * a day is only "all done" when every part of it is.
+ */
+export function dayProgress(d: DayLog, today: string, food: { target: number | null; since: string | null } | null): DayProgress {
   let total = 0;
   let done = 0;
   let partial = false;
@@ -134,9 +139,10 @@ export function dayProgress(d: DayLog, today: string, target: number | null): Da
     if (m === 'done') done++;
     if (m === 'partial') partial = true;
   }
-  if (target != null && d.net != null && d.s < today) {
+  // Food counts once you've started logging it, and only for days that have begun.
+  if (food && food.since != null && d.s >= food.since && d.s <= today) {
     total++;
-    if (onTarget(d.net, target)) done++;
+    if (d.net != null && (food.target == null || onTarget(d.net, food.target))) done++;
   }
   let result: DayResult;
   if (!total) result = 'rest';

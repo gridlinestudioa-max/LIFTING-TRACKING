@@ -72,8 +72,15 @@ describe('day progress', () => {
     expect(dayProgress(day('2026-10-10', 'missed', null), '2026-10-15', null).result).toBe('missed');
     expect(dayProgress(day('2026-10-15', 'planned', null), '2026-10-15', null).result).toBe('planned');
     expect(dayProgress(day('2026-10-10', null, null), '2026-10-15', null).result).toBe('rest');
-    // The calorie target counts once the day is over.
-    expect(dayProgress(day('2026-10-10', 'done', null, 100), '2026-10-15', 500)).toEqual({ total: 2, done: 1, result: 'some' });
+    // Food counts from the first day calories were logged: off target, or not logged, isn't done.
+    const food = { target: 500, since: '2026-10-01' };
+    expect(dayProgress(day('2026-10-10', 'done', null, 100), '2026-10-15', food)).toEqual({ total: 2, done: 1, result: 'some' });
+    expect(dayProgress(day('2026-10-10', 'done', null), '2026-10-15', food)).toEqual({ total: 2, done: 1, result: 'some' });
+    expect(dayProgress(day('2026-10-10', 'done', null, 600), '2026-10-15', food).result).toBe('all');
+    // Before you started logging food, workouts alone decide it.
+    expect(dayProgress(day('2026-09-20', 'done', null), '2026-10-15', food).result).toBe('all');
+    // No target: logging calories is enough.
+    expect(dayProgress(day('2026-10-10', 'done', null, -300), '2026-10-15', { target: null, since: '2026-10-01' }).result).toBe('all');
   });
 });
 
