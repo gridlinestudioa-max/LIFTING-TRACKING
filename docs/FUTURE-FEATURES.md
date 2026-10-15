@@ -11,6 +11,13 @@ Ideas for what the app could do next. Nothing here is built yet. When one ships,
 - **Term reports by email.** People choose a term length (daily, weekly, monthly, a training block, or the
   length of their plan) and get a PDF report emailed at the end of each term. The PDF report already exists
   (Progress → Download a report); this needs an email sender on a domain the app owns and a scheduled job.
+- **Connect fitness devices:** Garmin, Fitbit, Apple Watch, Whoop, Oura, Polar, Coros and Bluetooth heart-rate
+  straps, so activities, heart rate, sleep and steps come in on their own.
+- **Meal prep:** plan meals for the week, build recipes from ingredients with calories and macros worked out,
+  scale portions, and make a shopping list. Logging a prepped meal is one tap.
+- **Fitness AI:** ask questions and get recommendations from your own data: what to eat to hit today's
+  calories and protein, meals from the ingredients you have, how hard to train today based on fatigue and
+  sleep, and adjustments to your plan.
 
 ## Social
 
@@ -22,7 +29,8 @@ Ideas for what the app could do next. Nothing here is built yet. When one ships,
 
 ## Tracking
 
-- **Apple Health and Health Connect sync:** steps, sleep, heart rate and workouts without typing.
+- **Apple Health and Health Connect sync:** steps, sleep, heart rate and workouts without typing (the first step
+  toward connecting devices above).
 - **FIT file import** from Garmin and other watches.
 - **Heart-rate zones** per activity, from a watch or a Bluetooth strap.
 - **Segments:** timed stretches of road or trail with personal bests.

@@ -6,10 +6,10 @@ import Svg, { Circle, Path } from 'react-native-svg';
 import { fmt, liftSummary, mondayOf, weeklyTotals } from '@/logic';
 import { useAccount } from '@/ui/account';
 import { Header, Mute } from '@/ui/components';
-import { LinkButton } from '@/ui/food/kit';
+import { EditProfileSheet } from '@/ui/profile/EditProfileSheet';
 import { SettingsSheet } from '@/ui/profile/SettingsSheet';
 import { Avatar } from '@/ui/social/Avatar';
-import { FriendsArea, SharingSection } from '@/ui/social/FriendsBoard';
+import { FriendsArea } from '@/ui/social/FriendsBoard';
 import { PersonalBoard } from '@/ui/social/PersonalBoard';
 import { useSocial } from '@/ui/social/SocialProvider';
 import { useTracker } from '@/ui/store';
@@ -48,6 +48,9 @@ export default function YouScreen() {
   const { state, today } = useTracker();
   const social = useSocial();
   const [settings, setSettings] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const city = state.settings.city.trim();
+  const username = social.status === 'on' ? social.profile?.username : null;
   const on = state.settings.sections;
   const name = state.settings.name.trim();
   const friends = social.friends?.filter((f) => f.status === 'friends').length ?? 0;
@@ -71,16 +74,19 @@ export default function YouScreen() {
         <Header title="Profile" right={<GearButton onPress={() => setSettings(true)} />} />
 
         <View style={[st.hero, { backgroundColor: c.card }]}>
-          <Avatar name={name || 'You'} size={84} />
+          <Pressable onPress={() => setEditing(true)} accessibilityRole="button" accessibilityLabel="Change your profile picture">
+            <Avatar name={name || 'You'} uri={state.settings.photo} size={96} />
+          </Pressable>
           <Text style={[st.name, { color: c.ink }]}>{name || 'Your name'}</Text>
+          {username || city ? (
+            <Text style={{ color: c.ink, fontSize: 15, fontWeight: '600' }}>{[username ? `@${username}` : null, city || null].filter(Boolean).join(' · ')}</Text>
+          ) : null}
           <Text style={{ color: c.mute, fontSize: 14 }}>
             {social.status === 'on' ? `${friends} friend${friends === 1 ? '' : 's'}` : mode === 'account' ? 'Signed in' : 'On this device'}
           </Text>
-          {!name ? (
-            <View style={{ marginTop: space.sm }}>
-              <LinkButton label="Add your name" onPress={() => setSettings(true)} />
-            </View>
-          ) : null}
+          <Pressable onPress={() => setEditing(true)} accessibilityRole="button" style={({ pressed }) => [st.edit, { borderColor: c.line, backgroundColor: pressed ? c.soft : c.card }]}>
+            <Text style={{ color: c.ink, fontSize: 14, fontWeight: '700' }}>{name ? 'Edit profile' : 'Add your name, picture and city'}</Text>
+          </Pressable>
           {stats.length ? (
             <>
               <View style={[st.divider, { backgroundColor: c.line }]} />
@@ -95,12 +101,12 @@ export default function YouScreen() {
         </View>
 
         <FriendsArea />
-        <SharingSection />
         {on.cardio ? <PersonalBoard /> : null}
 
         {mode !== 'account' ? <Mute style={{ textAlign: 'center', marginTop: space.sm }}>Settings, your data and sign-in are behind the gear.</Mute> : null}
       </ScrollView>
       {settings ? <SettingsSheet onClose={() => setSettings(false)} /> : null}
+      {editing ? <EditProfileSheet onClose={() => setEditing(false)} /> : null}
     </SafeAreaView>
   );
 }
@@ -109,6 +115,7 @@ const st = StyleSheet.create({
   gear: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
   hero: { alignItems: 'center', borderRadius: radius.lg, padding: space.lg, marginBottom: space.lg },
   name: { fontFamily: fonts.display, fontSize: 30, lineHeight: 34, marginTop: space.sm },
+  edit: { borderWidth: 1, borderRadius: 18, paddingHorizontal: space.lg, paddingVertical: 8, marginTop: space.md },
   divider: { alignSelf: 'stretch', height: 1, marginVertical: space.md },
   statVal: { fontFamily: fonts.display, fontSize: 26, lineHeight: 30, ...tabular },
 });

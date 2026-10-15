@@ -1,6 +1,6 @@
 import { describe, expect, it } from '@jest/globals';
 
-import { avgByBucket, defaultState, niceTicks, normalize, rangeSpan, readSummary, shareSummary, sumByBucket, type TrackerState } from '..';
+import { avgByBucket, defaultState, niceTicks, normalize, normalizeUsername, rangeSpan, readSummary, shareSummary, sumByBucket, type TrackerState } from '..';
 
 describe('chart ranges', () => {
   const today = '2026-10-15'; // a Thursday
@@ -85,5 +85,18 @@ describe('sharing', () => {
     // Nothing about single foods leaves the device.
     expect(JSON.stringify(rest)).not.toContain('Oats');
     expect(readSummary(JSON.parse(JSON.stringify(rest)))).not.toBeNull();
+  });
+});
+
+describe('usernames and profile fields', () => {
+  it('normalizes usernames and rejects bad ones', () => {
+    expect(normalizeUsername(' @Sam.Rivera ')).toBe('sam.rivera');
+    expect(normalizeUsername('sam_runs')).toBe('sam_runs');
+    for (const bad of ['ab', 'a'.repeat(21), 'sam runs', '.sam', 'sam_', 'sa..m', 'sam!']) expect(normalizeUsername(bad)).toBeNull();
+  });
+
+  it('keeps city and only https picture addresses', () => {
+    expect(normalize({ settings: { city: '  Austin, TX ', photo: 'https://x.supabase.co/a.jpg' } }).settings).toMatchObject({ city: 'Austin, TX', photo: 'https://x.supabase.co/a.jpg' });
+    expect(normalize({ settings: { photo: 'javascript:alert(1)' } }).settings.photo).toBe('');
   });
 });

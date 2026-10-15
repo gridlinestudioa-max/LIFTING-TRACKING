@@ -1,4 +1,5 @@
--- Friends and leaderboards. Run this once in your Supabase project after schema.sql:
+-- Friends and leaderboards. Run this once in your Supabase project after schema.sql (and profiles.sql
+-- after it; if you run this file again, run profiles.sql again too):
 -- Dashboard -> SQL Editor -> New query -> paste -> Run. Safe to run again.
 --
 -- What's stored:
@@ -58,7 +59,8 @@ drop policy if exists "Own stats: change" on public.board_stats;
 create policy "Own stats: change" on public.board_stats for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
 -- People with these phone hashes who have turned on Friends, and where you stand with each.
-create or replace function public.find_by_phone(hashes text[])
+drop function if exists public.find_by_phone(text[]);
+create function public.find_by_phone(hashes text[])
 returns table (user_id uuid, name text, phone_hash text, status text)
 language plpgsql stable security definer set search_path = public
 as $$
@@ -79,7 +81,8 @@ begin
 end $$;
 
 -- Your friends and requests, with names: status is 'friends', 'sent' (waiting on them) or 'received'.
-create or replace function public.my_friends()
+drop function if exists public.my_friends();
+create function public.my_friends()
 returns table (user_id uuid, name text, status text)
 language sql stable security definer set search_path = public
 as $$
@@ -126,7 +129,8 @@ as $$
 $$;
 
 -- You and your friends, with each person's shared stats, for the leaderboard.
-create or replace function public.friend_board()
+drop function if exists public.friend_board();
+create function public.friend_board()
 returns table (user_id uuid, name text, stats jsonb, updated_at timestamptz)
 language sql stable security definer set search_path = public
 as $$

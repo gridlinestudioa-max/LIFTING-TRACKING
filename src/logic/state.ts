@@ -16,7 +16,7 @@ export function defaultState(): TrackerState {
   return {
     v: 2,
     updatedAt: 0,
-    settings: { name: '', sections: { ...ALL_SECTIONS }, onboarded: false, home: [...DEFAULT_HOME], share: { ...DEFAULT_SHARING } },
+    settings: { name: '', sections: { ...ALL_SECTIONS }, onboarded: false, home: [...DEFAULT_HOME], share: { ...DEFAULT_SHARING }, city: '', photo: '' },
     goal: null,
     days: {},
     foods: [],
@@ -48,6 +48,9 @@ export function normalize(s: unknown): TrackerState {
   d.settings.onboarded = st.onboarded === true;
   d.settings.home = normalizeHome(st.home);
   d.settings.share = normalizeSharing(st.share);
+  if (typeof st.city === 'string') d.settings.city = st.city.trim().slice(0, 60);
+  // Only a web address the app made (https), never anything else.
+  if (typeof st.photo === 'string' && /^https:\/\/[^\s]{1,300}$/.test(st.photo)) d.settings.photo = st.photo;
 
   if (typeof src.goal === 'number' && src.goal > 0) d.goal = src.goal;
   if (src.days && typeof src.days === 'object') {

@@ -193,7 +193,7 @@ export function PrivacySection() {
         </Fact>
       ) : null}
       <Fact title="Friends (optional)">
-        If you turn it on, friends see your name and only what you choose to share on your profile: cardio totals and bests, lifting counts and your top lifts, and food averages for the last 7 days. Never your routes, what you ate, your weight or notes. A phone number, if you add one, is stored scrambled.
+        If you turn it on, friends see your name, picture, city and username, and only what you choose to share on your profile: cardio totals and bests, lifting counts and your top lifts, and food averages for the last 7 days. Never your routes, what you ate, your weight or notes. People who search your username, or have your number in their contacts, can see your name, picture and city so they can add you. A phone number, if you add one, is stored scrambled. Your picture is stored at a web address that anyone with the link could open.
       </Fact>
       <Fact title="Other services">
         Maps load tiles from OpenStreetMap, branded food searches go to Open Food Facts, and exercise pictures load from GitHub. They can see your IP address. The USDA food data is built into the app.

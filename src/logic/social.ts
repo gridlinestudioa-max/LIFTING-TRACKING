@@ -42,6 +42,15 @@ export function normalizePhone(raw: string): string | null {
   return d.length >= 8 && d.length <= 15 ? `+${d}` : null;
 }
 
+/** Usernames: 3 to 20 letters, numbers, dots or underscores, stored lowercase. */
+export const USERNAME_RULE = '3 to 20 letters, numbers, dots or underscores';
+
+/** A username as stored ("@Sam.Rivera " → "sam.rivera"), or null if it breaks the rule. */
+export function normalizeUsername(raw: string): string | null {
+  const u = raw.trim().replace(/^@/, '').toLowerCase();
+  return /^[a-z0-9_.]{3,20}$/.test(u) && !/^[._]|[._]$|\.\./.test(u) ? u : null;
+}
+
 /** What gets hashed for a number, so other apps' hashes of the same number don't match ours. */
 export const phoneHashInput = (e164: string) => `training-tracker:phone:${e164}`;
 
@@ -216,6 +225,10 @@ export function metricValue(s: BoardSummary, sport: BoardSport, m: BoardMetric, 
 export interface BoardPerson {
   id: string;
   name: string;
+  /** Username, city and picture, when they've added them. */
+  username?: string | null;
+  city?: string;
+  photo?: string;
   me: boolean;
   summary: BoardSummary | null;
 }

@@ -132,15 +132,32 @@ export function SharedStats({ s }: { s: BoardSummary | null }) {
 }
 
 /** A friend's profile: who they are and what they share. */
-export function FriendProfile({ name, summary, onClose, onRemove }: { name: string; summary: BoardSummary | null; onClose: () => void; onRemove?: () => void }) {
+export function FriendProfile({
+  name,
+  summary,
+  photo,
+  city,
+  username,
+  onClose,
+  onRemove,
+}: {
+  name: string;
+  summary: BoardSummary | null;
+  photo?: string;
+  city?: string;
+  username?: string | null;
+  onClose: () => void;
+  onRemove?: () => void;
+}) {
   const c = useColors();
   const [confirm, setConfirm] = useState(false);
   return (
     <Sheet visible title={name} onClose={onClose}>
       <View style={{ alignItems: 'center', marginBottom: space.lg }}>
-        <Avatar name={name} size={84} />
+        <Avatar name={name} uri={photo} size={96} />
         <Text style={[st.name, { color: c.ink }]}>{name}</Text>
-        <Mute>Friend</Mute>
+        {username || city ? <Text style={{ color: c.ink, fontSize: 15, fontWeight: '600' }}>{[username ? `@${username}` : null, city || null].filter(Boolean).join(' · ')}</Text> : null}
+        <Mute>{onRemove ? 'Friend' : 'How friends see you'}</Mute>
       </View>
       <SharedStats s={summary} />
       {onRemove ? (

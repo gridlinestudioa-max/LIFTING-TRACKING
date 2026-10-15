@@ -3,7 +3,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { MONTHS, REPORT_PERIODS, byWeek, calorieSummary, cardioReport, fmt, fmtInt, liftSummary, sgn, toD, type ReportPeriod } from '@/logic';
-import { Button } from '@/ui/food/kit';
+import { Button, LinkButton } from '@/ui/food/kit';
 import { ReportSheet } from '@/ui/report/ReportSheet';
 import { Header, Mute, Section, StatGrid, StatTile } from '@/ui/components';
 import { CardioStatsSheet, paceFor } from '@/ui/stats/CardioStats';
@@ -52,7 +52,6 @@ export default function ProgressScreen() {
           </View>
         </Section>
 
-        {on.food ? <WeekTable /> : null}
       </ScrollView>
       {report ? <ReportSheet visible initial={report} onClose={() => setReport(null)} /> : null}
     </SafeAreaView>
@@ -128,6 +127,7 @@ function CaloriesSection() {
   const sum = calorieSummary(state);
   const n = sum.days;
   const col = (v: number) => (v >= 0 ? c.ok : c.bad);
+  const [byWeekOpen, setByWeekOpen] = useState(false);
   return (
     <Section title="Calories" action={goal ? <Text style={{ color: c.mute, fontSize: 13 }}>{`Goal ${fmtInt(goal)}/day`}</Text> : undefined}>
       <StatGrid>
@@ -137,11 +137,17 @@ function CaloriesSection() {
         <StatTile value={String(sum.hit)} sub={`/${n}`} label={goal ? 'Days at goal' : 'Days in a deficit'} />
       </StatGrid>
       {!n ? <Mute>Add calories in and burned on the Food tab.</Mute> : null}
+      {n ? (
+        <View style={{ flexDirection: 'row', marginTop: space.md }}>
+          <LinkButton label={byWeekOpen ? 'Hide weeks' : 'Show by week'} onPress={() => setByWeekOpen(!byWeekOpen)} />
+        </View>
+      ) : null}
+      {byWeekOpen ? <WeekTable /> : null}
     </Section>
   );
 }
 
-/** Calories averaged by week, newest first. */
+/** Calories averaged by week, newest first (inside the Calories card). */
 function WeekTable() {
   const c = useColors();
   const { state } = useTracker();
@@ -149,7 +155,7 @@ function WeekTable() {
   const col = (v: number) => (v >= 0 ? c.ok : c.bad);
   if (!weeks.length) return null;
   return (
-    <Section title="Calories by week">
+    <View style={{ marginTop: space.md }}>
       <View style={[st.krow, { borderBottomColor: c.line }]}>
         {['Week of', 'Days', 'Avg in', 'Avg out', 'Deficit'].map((h, i) => (
           <Text key={h} style={[st.kcell, i === 0 && st.kfirst, { color: c.mute, fontSize: 12.5, fontWeight: '600' }]}>
@@ -166,7 +172,7 @@ function WeekTable() {
           <Text style={[st.kcell, { color: col(w.avgNet), fontWeight: '700' }]}>{sgn(w.avgNet)}</Text>
         </View>
       ))}
-    </Section>
+    </View>
   );
 }
 

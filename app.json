@@ -51,6 +51,12 @@
         {
           "contactsPermission": "Allow $(PRODUCT_NAME) to find friends from your contacts. Numbers are scrambled (hashed) before they leave your phone."
         }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow $(PRODUCT_NAME) to use a photo you pick as your profile picture."
+        }
       ]
     ],
     "experiments": {

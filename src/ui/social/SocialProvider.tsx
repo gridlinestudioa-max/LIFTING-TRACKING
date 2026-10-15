@@ -13,10 +13,12 @@ interface Social {
   error: string | null;
   profile: MyProfile | null;
   userId: string | null;
-  /** Turn on Friends with this name and (optionally) your number. Returns an error message or null. */
-  join: (name: string, phone: string | null) => Promise<string | null>;
+  /** Turn on Friends with this name and (optionally) your number and username. Returns an error message or null. */
+  join: (name: string, phone: string | null, username?: string | null) => Promise<string | null>;
   /** Add, change (a number) or remove (null) your phone number. */
   setPhone: (phone: string | null) => Promise<string | null>;
+  /** Change your username (null removes it). Returns an error message or null. */
+  setUsername: (username: string | null) => Promise<string | null>;
   leave: () => Promise<string | null>;
   reload: () => void;
   /** Goes up after your stats are shared, so the leaderboard can refresh. */
@@ -73,15 +75,23 @@ export function SocialProvider({ children }: { children: ReactNode }) {
   const share = state.settings.share;
   const summary = useMemo(() => JSON.stringify(shareSummary(state, today, share)), [state, today, share]);
   const name = state.settings.name.trim();
+  const city = state.settings.city.trim();
+  const photo = state.settings.photo;
   useEffect(() => {
     if (status !== 'on' || !userId) return;
-    const key = `${name}|${summary}`;
+    const key = `${name}|${city}|${photo}|${summary}`;
     if (sent.current === key) return;
     const t = setTimeout(async () => {
       try {
-        if (name && profile && name !== profile.name) {
-          await saveProfile(userId, name);
-          setProfile({ ...profile, name });
+        // Name, city and picture follow what's set on the Profile tab.
+        if (profile && ((name && name !== profile.name) || city !== profile.city || photo !== profile.photo)) {
+          const patch = { ...(name ? { name } : {}), city, photo };
+          await saveProfile(userId, patch).catch(async (e) => {
+            // Before profiles.sql there's no city or picture column: keep the name in step anyway.
+            if (name && name !== profile.name) await saveProfile(userId, { name });
+            else throw e;
+          });
+          setProfile({ ...profile, ...patch });
         }
         await publishStats(userId, JSON.parse(summary));
         sent.current = key;
@@ -91,7 +101,7 @@ export function SocialProvider({ children }: { children: ReactNode }) {
       }
     }, 2500);
     return () => clearTimeout(t);
-  }, [status, userId, summary, name, profile]);
+  }, [status, userId, summary, name, city, photo, profile]);
 
   const [friends, setFriends] = useState<Friend[] | null>(null);
   const [board, setBoard] = useState<BoardPerson[] | null>(null);
@@ -114,11 +124,11 @@ export function SocialProvider({ children }: { children: ReactNode }) {
   }, [status, userId, m, published]);
 
   const join = useCallback(
-    async (nm: string, phone: string | null) => {
+    async (nm: string, phone: string | null, username?: string | null) => {
       if (!userId) return 'Sign in to use Friends.';
       try {
-        await saveProfile(userId, nm, phone);
-        setProfile({ name: nm.trim(), hasPhone: !!phone });
+        await saveProfile(userId, { name: nm, phone, ...(username ? { username } : {}) });
+        setProfile({ name: nm.trim(), hasPhone: !!phone, username: username ?? null, city: '', photo: '' });
         setStatus('on');
         return null;
       } catch (e) {
@@ -132,8 +142,22 @@ export function SocialProvider({ children }: { children: ReactNode }) {
     async (phone: string | null) => {
       if (!userId || !profile) return 'Turn on Friends first.';
       try {
-        await saveProfile(userId, profile.name, phone);
+        await saveProfile(userId, { phone });
         setProfile({ ...profile, hasPhone: !!phone });
+        return null;
+      } catch (e) {
+        return message(e);
+      }
+    },
+    [userId, profile],
+  );
+
+  const setUsername = useCallback(
+    async (username: string | null) => {
+      if (!userId || !profile) return 'Turn on Friends first.';
+      try {
+        await saveProfile(userId, { username });
+        setProfile({ ...profile, username });
         return null;
       } catch (e) {
         return message(e);
@@ -163,6 +187,7 @@ export function SocialProvider({ children }: { children: ReactNode }) {
       userId,
       join,
       setPhone,
+      setUsername,
       leave,
       reload: () => setN((v) => v + 1),
       published,
@@ -171,7 +196,7 @@ export function SocialProvider({ children }: { children: ReactNode }) {
       listError,
       refresh: () => setM((v) => v + 1),
     }),
-    [userId, status, error, profile, join, setPhone, leave, published, friends, board, listError],
+    [userId, status, error, profile, join, setPhone, setUsername, leave, published, friends, board, listError],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
