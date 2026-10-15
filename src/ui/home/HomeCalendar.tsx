@@ -1,4 +1,3 @@
-import { router } from 'expo-router';
 import { memo, useMemo, useState } from 'react';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 
@@ -6,15 +5,12 @@ import {
   CARDIO_LABEL,
   DAY_NAMES,
   KIND_LABEL,
-  MEALS,
   MONTHS,
   SPORT_LABEL,
   dayDiff,
   calTarget,
   dayLog,
   dayProgress,
-  onTarget,
-  targetText,
   weekdayIndex,
   daysInMonth,
   distText,
@@ -24,23 +20,17 @@ import {
   fmtSleep,
   fmtTime,
   fmtWater,
-  mealEntries,
   monthOffset,
   pad,
-  paceText,
   sgn,
   shortDayLabel,
-  sumTotals,
   toD,
-  workoutLine,
-  workoutStatus,
   type DayLog,
   type DayMark,
   type DayProgress,
   type DayResult,
 } from '@/logic';
 
-import { RouteMap } from '../cardio/RouteMap';
 import { LinkButton } from '../food/kit';
 import { CardioIcon, LiftIcon } from '../TabBar';
 import { useTracker } from '../store';
@@ -149,7 +139,7 @@ export function HomeCalendar() {
               ),
             )}
           </View>
-          {open && r.some((x) => x?.d.s === open) ? <DayReview d={r.find((x) => x?.d.s === open)!.d} p={r.find((x) => x?.d.s === open)!.p} onClose={() => setOpen(null)} /> : null}
+          {open && r.some((x) => x?.d.s === open) ? <DayReview d={r.find((x) => x?.d.s === open)!.d} p={r.find((x) => x?.d.s === open)!.p} /> : null}
         </View>
       ))}
       <Modal visible={keyOpen} transparent animationType="fade" onRequestClose={() => setKeyOpen(false)}>
@@ -288,70 +278,38 @@ function Stat({ value, label, color }: { value: string; label: string; color?: s
 }
 
 /** A full look at one day: cardio, lifting, food, calories and the body log. */
-function DayReview({ d, p, onClose }: { d: DayLog; p: DayProgress; onClose: () => void }) {
+function DayReview({ d, p }: { d: DayLog; p: DayProgress }) {
   const c = useColors();
-  const { state, today } = useTracker();
+  const { today } = useTracker();
   const diff = dayDiff(d.s, today);
   const when = diff === 0 ? 'Today' : diff === -1 ? 'Yesterday' : diff === 1 ? 'Tomorrow' : diff < 0 ? `${-diff} days ago` : `In ${diff} days`;
-  const goal = calTarget(state, d.s);
   const empty = !d.cardio?.label && !d.lift?.label && !d.food && d.net == null && !Object.keys(d.info).length;
-  const route = d.cardio?.sessions.find((x) => x.route)?.route;
 
   return (
     <View style={[st.review, { backgroundColor: c.bg, borderColor: c.line }]}>
       <View style={{ flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' }}>
         <Text style={[st.reviewTitle, { color: c.ink }]}>{shortDayLabel(d.s)}</Text>
-        <View style={{ flexDirection: 'row', gap: space.md, alignItems: 'baseline' }}>
-          <Text style={{ color: c.mute, fontSize: 13, fontWeight: '600' }}>{when}</Text>
-          <LinkButton label="Close" onPress={onClose} />
-        </View>
+        <Text style={{ color: c.mute, fontSize: 13, fontWeight: '600' }}>{when}</Text>
       </View>
 
       {p.total ? (
         <Text style={{ color: p.result === 'all' ? c.ok : p.result === 'some' ? c.warn : p.result === 'missed' ? c.bad : c.mute, fontSize: 14, fontWeight: '800', marginTop: 2 }}>
-          {`${RESULT_TEXT[p.result]} · ${p.done} of ${p.total}${d.s < today && calTarget(state, d.s) != null && d.net != null ? ' (workouts and calories)' : ''}`}
+          {`${RESULT_TEXT[p.result]} · ${p.done} of ${p.total}`}
         </Text>
       ) : null}
       {empty ? <Text style={{ color: c.mute, fontSize: 14, marginTop: space.sm }}>{d.s > today ? 'Nothing planned.' : 'Nothing logged.'}</Text> : null}
 
       {d.cardio && (d.cardio.planned.length || d.cardio.sessions.length) ? (
         <Block title="Cardio" mark={d.cardio.mark}>
-          {d.cardio.planned.map((wk) => (
-            <Small key={wk.sport}>
-              {`Plan: ${wk.race ? 'Race' : KIND_LABEL[wk.kind]} ${SPORT_LABEL[wk.sport].toLowerCase()} · ${distText(wk.sport, wk.miles)}${workoutStatus(state.cardio, wk, today) === 'moved' ? ' · done another day' : ''}`}
-            </Small>
-          ))}
-          {d.cardio.sessions.map((x) => (
-            <Small key={x.id}>
-              {[CARDIO_LABEL[x.type], x.miles ? distText(x.type, x.miles) : null, x.secs ? fmtTime(x.secs) : null, x.miles && x.secs && x.type !== 'bike' && x.type !== 'swim' ? paceText(x.miles, x.secs) : null, x.hr ? `${x.hr} bpm` : null]
-                .filter(Boolean)
-                .join(' · ')}
-            </Small>
-          ))}
-          {route ? <RouteMap route={route} height={130} style={{ marginTop: space.sm }} /> : null}
+          {d.cardio.sessions.length
+            ? d.cardio.sessions.map((x) => <Small key={x.id}>{[CARDIO_LABEL[x.type], x.miles ? distText(x.type, x.miles) : x.secs ? fmtTime(x.secs) : null].filter(Boolean).join(' · ')}</Small>)
+            : d.cardio.planned.map((wk) => <Small key={wk.sport}>{`${wk.race ? 'Race' : `${KIND_LABEL[wk.kind]} ${SPORT_LABEL[wk.sport].toLowerCase()}`} · ${distText(wk.sport, wk.miles)}`}</Small>)}
         </Block>
       ) : null}
 
       {d.lift && (d.lift.routine || d.lift.workout) ? (
         <Block title="Lifting" mark={d.lift.mark}>
-          {d.lift.workout ? (
-            <>
-              <Small>{`${d.lift.workout.name} · ${workoutLine(d.lift.workout)}`}</Small>
-              {d.lift.workout.exercises
-                .filter((x) => x.sets.some((s) => s.done))
-                .map((x, i) => {
-                  const done = x.sets.filter((s) => s.done);
-                  const top = done.reduce<number | null>((m, s) => (s.w != null && (m == null || s.w > m) ? s.w : m), null);
-                  return (
-                    <Text key={`${x.exId}${i}`} style={{ color: c.mute, fontSize: 13, ...tabular }}>
-                      {`${x.name}: ${done.length} × ${done.map((s) => s.reps ?? 0).join('/')}${top != null ? ` @ ${fmt(top)} ${x.unit === 'plates' ? 'pl' : 'lb'}` : ''}`}
-                    </Text>
-                  );
-                })}
-            </>
-          ) : (
-            <Small>{`${d.lift.routine!.name} scheduled`}</Small>
-          )}
+          <Small>{d.lift.workout ? d.lift.workout.name : d.lift.routine!.name}</Small>
         </Block>
       ) : null}
 
@@ -363,27 +321,15 @@ function DayReview({ d, p, onClose }: { d: DayLog; p: DayProgress; onClose: () =
             <Stat value={`${fmtInt(d.food.totals.carbs)} g`} label="Carbs" />
             <Stat value={`${fmtInt(d.food.totals.fat)} g`} label="Fat" />
           </View>
-          <Text style={{ color: c.mute, fontSize: 13, marginTop: 4 }}>
-            {MEALS.map((m) => ({ m, k: sumTotals(mealEntries(d.food!.entries, m.id)).kcal }))
-              .filter((x) => x.k > 0)
-              .map((x) => `${x.m.label} ${fmtInt(x.k)}`)
-              .join(' · ')}
-          </Text>
         </Block>
       ) : null}
 
       {d.cin != null || d.cout != null ? (
         <Block title="Calories">
           <View style={{ flexDirection: 'row' }}>
-            <Stat value={d.cin != null ? fmtInt(d.cin) : '–'} label="In" />
             <Stat value={d.cout != null ? fmtInt(d.cout) : '–'} label="Out" />
             <Stat value={d.net != null ? sgn(Math.round(d.net)) : '–'} label={d.net != null && d.net < 0 ? 'Surplus' : 'Deficit'} color={d.net == null ? undefined : d.net >= 0 ? c.ok : c.bad} />
           </View>
-          {goal != null && d.net != null ? (
-            <Text style={{ color: onTarget(d.net, goal) ? c.ok : c.mute, fontSize: 13, marginTop: 4, fontWeight: '600' }}>
-              {`${onTarget(d.net, goal) ? 'On target' : 'Off target'} (${targetText(goal).toLowerCase()})`}
-            </Text>
-          ) : null}
         </Block>
       ) : null}
 
@@ -404,11 +350,6 @@ function DayReview({ d, p, onClose }: { d: DayLog; p: DayProgress; onClose: () =
         </Block>
       ) : null}
 
-      <View style={{ flexDirection: 'row', gap: space.lg, marginTop: space.md, flexWrap: 'wrap' }}>
-        {d.cardio ? <LinkButton label="Cardio ›" onPress={() => router.navigate('/cardio')} /> : null}
-        {d.lift ? <LinkButton label="Lifting ›" onPress={() => router.navigate('/lifting')} /> : null}
-        {state.settings.sections.food ? <LinkButton label="Food ›" onPress={() => router.navigate('/food')} /> : null}
-      </View>
     </View>
   );
 }

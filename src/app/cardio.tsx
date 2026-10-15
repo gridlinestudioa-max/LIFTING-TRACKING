@@ -5,7 +5,6 @@ import { router } from 'expo-router';
 
 import {
   CARDIO_LABEL,
-  PLAN_BY_ID,
   addDays,
   mondayOf,
   KIND_LABEL,
@@ -42,6 +41,7 @@ import { RouteMap } from '@/ui/cardio/RouteMap';
 import { Card, Header, Mute, Section, WeekBar } from '@/ui/components';
 import { Button, LinkButton } from '@/ui/food/kit';
 import { MedalBadge } from '@/ui/Medal';
+import { HistoryRow, WeekTiles } from '@/ui/PlanGraphics';
 import { StatusMark } from '@/ui/marks';
 import { useTracker } from '@/ui/store';
 import { fonts, radius, space, tabular, useColors, type Palette } from '@/ui/theme';
@@ -68,9 +68,6 @@ export default function CardioScreen() {
   const planned = plannedOn(plan, selected);
   const [shown, setShown] = useState(15);
   const history = cardio.sessions.filter((x) => x.date <= today).sort((a, b) => b.date.localeCompare(a.date));
-  const weekPlan = Array.from({ length: 7 }, (_, i) => addDays(mondayOf(today), i)).flatMap((d) =>
-    plannedOn(plan, d).map((p) => `${shortDayLabel(d).slice(0, 3)} ${p.race ? 'race' : `${KIND_LABEL[p.kind].toLowerCase()} ${SPORT_LABEL[p.sport].toLowerCase()}`} ${distText(p.sport, p.miles)}`),
-  );
   const sessions = cardio.sessions.filter((x) => x.date === selected);
   const toggleSkip = (wk: PlannedWorkout) =>
     update((s) => {
@@ -125,63 +122,57 @@ export default function CardioScreen() {
             <Button label="Log cardio" onPress={() => open(null)} style={{ marginTop: space.lg }} />
           </Card>
         </View>
-        <Section title="Your plan">
+        <Section title="Your plan" action={<LinkButton label={plan ? 'Change plan' : 'Choose a plan'} onPress={() => router.navigate('/you')} />}>
           {plan ? (
             <>
               <View style={st.weekline}>
-                <Text style={[st.planName, { color: c.ink }]}>{planTitle(plan.id)}</Text>
-                <Text style={{ color: c.ink, fontSize: 15, fontWeight: '700' }}>
-                  {today < plan.start
-                    ? `Starts ${shortDayLabel(plan.start)}`
-                    : w == null
-                      ? 'Complete'
-                      : weeks != null
-                        ? `Week ${w + 1} of ${weeks}`
-                        : `Week ${w + 1}`}
+                <Text style={[st.planName, { color: c.ink, flexShrink: 1 }]}>{planTitle(plan.id)}</Text>
+                <Text style={{ color: c.mute, fontSize: 14, fontWeight: '700' }}>
+                  {today < plan.start ? `Starts ${shortDayLabel(plan.start)}` : w == null ? 'Complete' : weeks != null ? `Week ${w + 1}/${weeks}` : `Week ${w + 1}`}
                 </Text>
               </View>
               {weeks != null ? (
-                <View style={{ marginTop: space.md }}>
+                <View style={{ marginTop: space.sm, marginBottom: space.md }}>
                   <WeekBar weeks={weeks} current={w ?? (today < plan.start ? -1 : weeks)} />
                 </View>
-              ) : null}
+              ) : (
+                <View style={{ height: space.md }} />
+              )}
+              <WeekTiles
+                days={Array.from({ length: 7 }, (_, i) => {
+                  const d = addDays(mondayOf(today), i);
+                  const ps = plannedOn(plan, d);
+                  const p = ps[0];
+                  return {
+                    label: !p ? null : p.race ? 'Race' : ps.length > 1 ? `${ps.length}×` : distText(p.sport, p.miles).replace(' ', '\n'),
+                    color: p ? kindColor(c, p.race ? 'race' : p.kind) : undefined,
+                  };
+                })}
+              />
             </>
           ) : (
-            <View style={st.weekline}>
-              <Text style={[st.planName, { color: c.ink }]}>No plan</Text>
-              <LinkButton label="Choose a plan" onPress={() => router.navigate('/you')} />
-            </View>
+            <Text style={[st.planName, { color: c.ink }]}>No plan</Text>
           )}
           <View style={[st.stats, { borderTopColor: c.line }]}>
             <Stat label="This week" value={`${fmt(+thisWeek.miles.toFixed(1))} mi`} c={c} />
             {thisWeek.secs ? <Stat label="Time" value={fmtTime(thisWeek.secs)} c={c} /> : null}
             {race && today <= race ? <Stat label="Race day" value={shortDayLabel(race).replace(/^\w+, /, '')} c={c} /> : null}
           </View>
-          {plan ? (
-            <>
-              <Text style={{ color: c.ink, fontSize: 15, lineHeight: 21, marginTop: space.md }}>{PLAN_BY_ID[plan.id].blurb}</Text>
-              {weekPlan.length ? (
-                <Text style={{ color: c.ink, fontSize: 15, lineHeight: 21, marginTop: space.sm }}>
-                  <Text style={{ fontWeight: '700' }}>This week: </Text>
-                  {weekPlan.join(' · ')}
-                </Text>
-              ) : null}
-              <Mute style={{ fontSize: 13.5, lineHeight: 19, marginTop: space.sm }}>
-                How it works: distances build a little each week, with an easier week every few weeks so you recover. Easy days should feel conversational; tempo is comfortably hard; the long one is slow and steady. Swipe ahead in the week row to see what’s coming.
-              </Mute>
-              <View style={[st.foot, { borderTopColor: c.line }]}>
-                <LinkButton label="Change plan" onPress={() => router.navigate('/you')} />
-              </View>
-            </>
-          ) : (
-            <Mute style={{ marginTop: space.sm }}>Follow a plan for a 5K, half marathon, century ride, triathlon and more, or just log what you do.</Mute>
-          )}
         </Section>
 
         <Section title="History">
           {history.length ? null : <Mute>No activities yet.</Mute>}
           {history.slice(0, shown).map((x, i) => (
-            <SessionRow key={x.id} x={x} medals={medals.get(x.id) ?? []} first={i === 0} date onPress={() => open(x)} c={c} />
+            <HistoryRow
+              key={x.id}
+              date={x.date}
+              title={CARDIO_LABEL[x.type]}
+              value={x.miles ? distText(x.type, x.miles) : x.secs ? fmtTime(x.secs) : undefined}
+              badge={<MedalBadge medals={medals.get(x.id) ?? []} />}
+              first={i === 0}
+              onPress={() => open(x)}
+              a11y={`${CARDIO_LABEL[x.type]}, ${shortDayLabel(x.date)}. Edit`}
+            />
           ))}
           {history.length > shown ? (
             <View style={{ flexDirection: 'row', marginTop: space.sm }}>

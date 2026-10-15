@@ -8,7 +8,6 @@ import {
   fastSecondsLeft,
   window24,
   calTarget,
-  targetText,
   CARDIO_LABEL,
   KIND_LABEL,
   SPORT_LABEL,
@@ -226,8 +225,11 @@ function CaloriesCard() {
         />
       </View>
       {target != null && target > 0 && net != null ? <Meter value={Math.max(0, net)} max={target} good /> : null}
-      {target != null ? <Text style={{ color: c.mute, fontSize: 13, marginTop: space.xs }}>{`Target: ${targetText(target).toLowerCase()}`}</Text> : null}
-      {net != null && target != null ? <Text style={{ color: toneColor(c, k.tone), fontSize: 13, fontWeight: '700' }}>{k.text.split(' · ')[1] ?? ''}</Text> : null}
+      {target != null ? (
+        <Text style={{ color: c.ink, fontSize: 14, fontWeight: '600', marginTop: space.sm }}>
+          {target === 0 ? 'Goal: eat what you burn' : `${target > 0 ? 'Deficit' : 'Surplus'} goal: ${fmtInt(Math.abs(target))} kcal`}
+        </Text>
+      ) : null}
     </Tap>
   );
 }
@@ -325,7 +327,6 @@ function FastingCard() {
           <Text style={[st.big, { color: toneColor(c, left.open ? 'ok' : 'warn'), ...tabular }]} accessibilityLabel={`Eating window ${window24(f)}. ${left.open ? 'Time left to eat' : 'Until you can eat'}: ${countdown(left.secs)}`}>
             {`${window24(f)} (${countdown(left.secs)})`}
           </Text>
-          <Text style={{ color: c.mute, fontSize: 14 }}>{left.open ? 'Eating window · time left to eat' : 'Fasting · time until your window opens'}</Text>
         </>
       ) : (
         <Mute>No fasting window set.</Mute>
@@ -357,7 +358,8 @@ function WeekCard() {
   const cardio = weeklyTotals(state.cardio, today, 1)[0];
   const sessions = state.cardio.sessions.filter((x) => x.date >= mondayOf(today) && x.date <= today).length;
   return (
-    <Tap title="This week" to="/progress">
+    <Tap title="Progress" to="/progress">
+      <Mute style={{ fontSize: 13, marginTop: -space.xs, marginBottom: space.sm }}>This week so far</Mute>
       <View style={{ flexDirection: 'row' }}>
         {on.lifting ? <Big value={`${lifted}${scheduled ? `/${scheduled}` : ''}`} label="Lifts" /> : null}
         {on.cardio ? <Big value={String(sessions)} label="Cardio sessions" /> : null}

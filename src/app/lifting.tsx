@@ -3,21 +3,15 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import {
-  DAY_NAMES,
   activeWorkout,
   firstWorkout,
   liftDay,
   liftMedals,
-  ORDINAL,
   applyTemplate,
-  defaultIncrement,
-  fmtW,
   liftingPlan,
   newId,
-  nextTarget,
   scheduledRoutine,
   shortDayLabel,
-  workoutLine,
   workoutFromRoutine,
   type Routine,
   type Workout,
@@ -31,9 +25,10 @@ import { useLibrary } from '@/ui/lifting/library';
 import { RoutineSheet } from '@/ui/lifting/RoutineSheet';
 import { WorkoutSheet } from '@/ui/lifting/WorkoutSheet';
 import { MedalBadge } from '@/ui/Medal';
+import { HistoryRow, WeekTiles, routineColor } from '@/ui/PlanGraphics';
 import { StatusMark } from '@/ui/marks';
 import { useTracker } from '@/ui/store';
-import { fonts, radius, space, tabular, useColors } from '@/ui/theme';
+import { fonts, radius, space, useColors } from '@/ui/theme';
 
 type Open = { kind: 'workout' | 'routine'; id: string } | { kind: 'library' } | { kind: 'start' } | { kind: 'plan' } | null;
 
@@ -76,7 +71,6 @@ export default function LiftingScreen() {
 
   const day = liftDay(state, selected, today, firstWorkout(state));
   const dayWorkouts = L.workouts.filter((w) => w.date === selected && (w.done || w.id === active?.id));
-  const scheduled = L.schedule.filter(Boolean).length;
 
   return (
     <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: c.bg }}>
@@ -103,14 +97,10 @@ export default function LiftingScreen() {
               style={({ pressed }) => [st.row, i > 0 && { borderTopWidth: 1, borderTopColor: c.line }, { opacity: pressed ? 0.6 : 1 }]}>
               <View style={{ flex: 1 }}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.sm }}>
-                  <Text style={[st.big, { color: c.ink, flexShrink: 1 }]}>{w.done ? `${w.name} ✓` : `${w.name} (in progress)`}</Text>
+                  <Text style={[st.big, { color: c.ink, flexShrink: 1 }]}>{w.done ? `${w.name} ✓` : w.name}</Text>
                   <MedalBadge medals={medals.get(w.id) ?? []} />
                 </View>
-                <Mute style={{ fontSize: 13 }}>
-                  {w.done
-                    ? workoutLine(w)
-                    : `${w.exercises.reduce((t, x) => t + x.sets.filter((z) => z.done).length, 0)} of ${w.exercises.reduce((t, x) => t + x.sets.length, 0)} sets done`}
-                </Mute>
+                {!w.done ? <Mute style={{ fontSize: 13 }}>In progress</Mute> : null}
               </View>
               <Text style={{ color: c.mute, fontSize: 22 }}>›</Text>
             </Pressable>
@@ -126,73 +116,41 @@ export default function LiftingScreen() {
                   </View>
                 ) : null}
               </View>
-              {day.routine.items.map((it) => {
-                const ex = byId(it.exId);
-                const inc = it.inc ?? (ex ? defaultIncrement(ex) : 5);
-                const t = nextTarget(it.exId, L.workouts, { ...it, inc });
-                return (
-                  <View key={it.exId} style={st.planRow}>
-                    <Text style={{ flex: 1, color: c.ink, fontSize: 15 }}>
-                      {ex?.name ?? 'Exercise'} <Text style={{ color: c.mute }}>{it.sets}×{it.repMin}–{it.repMax}</Text>
-                    </Text>
-                    <Text style={{ color: t.reason === 'up' ? c.ok : c.ink, fontSize: 15, fontWeight: '700', ...tabular }}>
-                      {t.weight != null ? `${fmtW(t.weight)} ${ex?.unit === 'plates' ? 'pl' : 'lb'}` : '–'}
-                      {t.reason === 'up' && t.weight != null ? ' ↑' : ''}
-                    </Text>
-                  </View>
-                );
-              })}
               {selected === today && !active ? <Button label="Start workout" primary onPress={() => start(day.routine)} style={{ marginTop: space.md }} /> : null}
-              {selected > today ? <Mute style={{ fontSize: 13, marginTop: space.sm }}>Weights are what you’d lift if you did it today. ↑ means it’s time to go up.</Mute> : null}
             </>
           ) : null}
-          {!dayWorkouts.length && !day.routine ? <Text style={[st.big, { color: c.ink }]}>None</Text> : null}
-          {!dayWorkouts.length && !day.routine ? <Mute>{selected === today ? 'Rest day. Record a workout above if you train anyway.' : 'Rest day.'}</Mute> : null}
+          {!dayWorkouts.length && !day.routine ? <Text style={[st.big, { color: c.ink }]}>Rest day</Text> : null}
         </Section>
 
-        <Section title="Your plan" action={L.routines.length ? <LinkButton label="New routine" onPress={newRoutine} /> : undefined}>
+        <Section title="Your plan" action={L.routines.length ? <LinkButton label="Change plan" onPress={() => show({ kind: 'plan' })} /> : undefined}>
           {L.routines.length ? (
             <>
-              <Text style={{ color: c.ink, fontSize: 15, lineHeight: 21 }}>
-                {scheduled
-                  ? `${scheduled} ${scheduled === 1 ? 'workout' : 'workouts'} a week: ${L.schedule
-                      .map((id, j) => (id ? `${DAY_NAMES[j]} ${L.routines.find((r) => r.id === id)?.name ?? ''}` : null))
-                      .filter(Boolean)
-                      .join(' · ')}.`
-                  : 'No days scheduled yet. Open a routine to pick its days.'}
-              </Text>
-              <Mute style={{ fontSize: 13.5, lineHeight: 19, marginTop: space.sm }}>
-                How it works: each exercise has a rep range, like 3 sets of 8–12. When you reach the top of the range on every set, the weight goes up next time. Until then, keep the weight and aim for one more rep.
-              </Mute>
+              <WeekTiles
+                days={L.schedule.map((id) => {
+                  const r = id ? L.routines.find((x) => x.id === id) : null;
+                  return { label: r?.name ?? null, color: routineColor(c, r?.name ?? '') };
+                })}
+              />
+              <View style={st.chips}>
+                {L.routines.map((r) => (
+                  <Pressable
+                    key={r.id}
+                    onPress={() => show({ kind: 'routine', id: r.id })}
+                    accessibilityRole="button"
+                    accessibilityLabel={`${r.name}. Edit`}
+                    style={({ pressed }) => [st.chip, { borderColor: c.line, opacity: pressed ? 0.6 : 1 }]}>
+                    <View style={[st.chipDot, { backgroundColor: routineColor(c, r.name) }]} />
+                    <Text style={{ color: c.ink, fontSize: 14, fontWeight: '700' }}>{r.name}</Text>
+                  </Pressable>
+                ))}
+              </View>
+              <View style={[st.foot, { borderTopColor: c.line }]}>
+                <LinkButton label="New routine" onPress={newRoutine} />
+                <LinkButton label="Exercises" onPress={() => show({ kind: 'library' })} color={c.mute} />
+              </View>
             </>
-          ) : null}
-          {L.routines.map((r, i) => {
-            const days = L.schedule.map((id, j) => (id === r.id ? DAY_NAMES[j] : null)).filter(Boolean);
-            return (
-              <Pressable
-                key={r.id}
-                onPress={() => show({ kind: 'routine', id: r.id })}
-                accessibilityRole="button"
-                accessibilityLabel={`${r.name}. Edit`}
-                style={({ pressed }) => [st.row, { borderTopWidth: 1, borderTopColor: c.line, marginTop: i === 0 ? space.md : 0 }, { opacity: pressed ? 0.6 : 1 }]}>
-                <View style={{ flex: 1 }}>
-                  <Text style={{ color: c.ink, fontSize: 16, fontWeight: '700' }}>{r.name}</Text>
-                  <Mute style={{ fontSize: 13 }}>
-                    {r.items.length} {r.items.length === 1 ? 'exercise' : 'exercises'}{days.length ? ` · ${days.join(', ')}` : ''}
-                  </Mute>
-                </View>
-                <Text style={{ color: c.mute, fontSize: 22 }}>›</Text>
-              </Pressable>
-            );
-          })}
-          {L.routines.length ? (
-            <View style={[st.foot, { borderTopColor: c.line }]}>
-              <LinkButton label="Change plan" onPress={() => show({ kind: 'plan' })} />
-              <LinkButton label="Exercises" onPress={() => show({ kind: 'library' })} color={c.mute} />
-            </View>
           ) : (
             <View style={{ gap: space.sm }}>
-              <Mute style={{ marginBottom: space.xs }}>Pick a ready-made plan (push/pull/legs, upper/lower, full body…) or build your own routines.</Mute>
               <Button label="Choose a plan" primary onPress={() => show({ kind: 'plan' })} />
               <Button label="Build my own" onPress={newRoutine} />
             </View>
@@ -202,21 +160,15 @@ export default function LiftingScreen() {
         <Section title="History">
           {history.length ? null : <Mute>No workouts yet.</Mute>}
           {history.slice(0, shown).map((w, i) => (
-            <Pressable
+            <HistoryRow
               key={w.id}
+              date={w.date}
+              title={w.name}
+              badge={<MedalBadge medals={medals.get(w.id) ?? []} />}
+              first={i === 0}
               onPress={() => show({ kind: 'workout', id: w.id })}
-              accessibilityRole="button"
-              style={({ pressed }) => [st.row, i > 0 && { borderTopWidth: 1, borderTopColor: c.line }, { opacity: pressed ? 0.6 : 1 }]}>
-              <View style={{ flex: 1 }}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.sm }}>
-                  <Text style={{ color: c.ink, fontSize: 16, fontWeight: '700', flexShrink: 1 }}>{w.name}</Text>
-                  <MedalBadge medals={medals.get(w.id) ?? []} />
-                </View>
-                <Mute style={{ fontSize: 13 }}>{`${shortDayLabel(w.date)} · ${workoutLine(w)}`}</Mute>
-                {medals.get(w.id)?.length ? <Mute style={{ fontSize: 13, fontWeight: '600' }}>{medals.get(w.id)!.map((m) => `${ORDINAL[m.rank - 1]} ${m.label}`).join(' · ')}</Mute> : null}
-              </View>
-              <Text style={{ color: c.mute, fontSize: 22 }}>›</Text>
-            </Pressable>
+              a11y={`${w.name}, ${shortDayLabel(w.date)}. Open`}
+            />
           ))}
           {history.length > shown ? (
             <View style={{ flexDirection: 'row', marginTop: space.sm }}>
@@ -274,9 +226,11 @@ function PlanSheet({ onClose }: { onClose: () => void }) {
 }
 
 const st = StyleSheet.create({
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm, marginTop: space.lg },
+  chip: { flexDirection: 'row', alignItems: 'center', gap: 6, borderWidth: 1, borderRadius: radius.pill, paddingHorizontal: space.md, paddingVertical: 7 },
+  chipDot: { width: 10, height: 10, borderRadius: 5 },
   big: { fontFamily: fonts.semi, fontSize: 22, lineHeight: 26 },
   foot: { flexDirection: 'row', justifyContent: 'space-between', borderTopWidth: 1, paddingTop: space.md, marginTop: space.xs },
-  planRow: { flexDirection: 'row', alignItems: 'baseline', gap: space.md, paddingVertical: 3 },
   row: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.md },
   badge: { flexDirection: 'row', alignItems: 'center', gap: 5, borderRadius: radius.pill, paddingHorizontal: space.md, paddingVertical: 4 },
 });
