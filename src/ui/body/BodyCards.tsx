@@ -16,9 +16,11 @@ import {
   weightChange,
   weightSeries,
   weightTrend,
+  rangeSpan,
+  type Range,
 } from '@/logic';
 
-import { ChartKey, LineChart } from '../charts';
+import { ChartCaption, ChartKey, LineChart, RangeTabs } from '../charts';
 import { CommitNumberField, Field, Mute, Section } from '../components';
 import { Pill } from '../food/kit';
 import { useTracker } from '../store';
@@ -58,6 +60,12 @@ export function WeightCard() {
   const trend = useMemo(() => weightTrend(series), [series]);
   const change = weightChange(series, 28);
   const latest = series[series.length - 1];
+  const [range, setRange] = useState<Range>('month');
+  // The chart can go back as far as weights were logged.
+  const allSeries = useMemo(() => weightSeries(state.days, today, 100000), [state.days, today]);
+  const allTrend = useMemo(() => weightTrend(allSeries), [allSeries]);
+  const span = rangeSpan(range, today, allSeries[0]?.s);
+  const shown = allSeries.filter((p) => p.s >= span.from);
   const smooth = trend[trend.length - 1];
   const { min, max } = BODY_LIMITS.weightLb;
   return (
@@ -84,16 +92,24 @@ export function WeightCard() {
         }}
       />
       <ErrorText>{err}</ErrorText>
-      {trend.length >= 2 ? (
+      {allSeries.length >= 2 ? (
         <View style={{ marginTop: space.lg }}>
-          <LineChart
-            label="Weight over the last 90 days"
-            unit=" lb"
-            series={[
-              { pts: series, style: 'dots' },
-              { pts: trend, style: 'line' },
-            ]}
-          />
+          <RangeTabs value={range} onChange={setRange} />
+          <ChartCaption>{`${span.caption} · pounds`}</ChartCaption>
+          {shown.length >= 2 ? (
+            <LineChart
+              label={`Weight, ${span.caption.toLowerCase()}`}
+              unit="lb"
+              from={span.from}
+              to={span.to}
+              series={[
+                { pts: shown, style: 'dots' },
+                { pts: allTrend.filter((p) => p.s >= span.from), style: 'line' },
+              ]}
+            />
+          ) : (
+            <Mute style={{ marginVertical: space.lg }}>Fewer than two weights in this range. Try a longer one.</Mute>
+          )}
           <ChartKey items={['weight', 'trend']} />
         </View>
       ) : (

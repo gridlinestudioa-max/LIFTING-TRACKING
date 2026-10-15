@@ -317,10 +317,10 @@ function TallyCard() {
   const { today } = useTracker();
   const now = useClock();
   const { state } = useTracker();
-  if (!state.foods.some((f) => f.tally)) {
+  if (!(state.meals[today] ?? []).some((e) => e.tally)) {
     return (
       <Tap title="Tally" to="/food">
-        <Mute>Add a food to your Tally list from Add food.</Mute>
+        <Mute>Nothing tallied today. Add a food to today’s Tally from Add food.</Mute>
       </Tap>
     );
   }

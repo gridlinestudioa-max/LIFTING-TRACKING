@@ -204,11 +204,10 @@ export function TallyList({ day, isToday, now }: { day: string; isToday: boolean
   const { state, setEntries, saveFood } = useTracker();
   const [editing, setEditing] = useState(false);
   const entries = state.meals[day] ?? [];
-  const foods: Food[] = state.foods.filter((f) => f.tally);
-  // A tally kept for a food that's since been removed from the list still shows for its day.
-  entries
-    .filter((e) => e.tally && e.foodId && !foods.some((f) => f.id === e.foodId))
-    .forEach((e) => foods.push({ id: e.foodId!, name: e.name, serving: e.serving, n: e.n, tags: e.tags, ...(e.note ? { note: e.note } : {}) }));
+  // Only what was tallied on this day: a tally doesn't carry over to other days.
+  const foods: Food[] = entries
+    .filter((e) => e.tally && e.foodId)
+    .map((e) => state.foods.find((f) => f.id === e.foodId) ?? { id: e.foodId!, name: e.name, serving: e.serving, n: e.n, tags: e.tags, ...(e.note ? { note: e.note } : {}) });
   if (!foods.length) return null;
 
   const setPieces = (f: Food, v: number) => {
@@ -230,7 +229,7 @@ export function TallyList({ day, isToday, now }: { day: string; isToday: boolean
       {foods.map((f) => {
         const e = tallyEntry(entries, f.id);
         const n = e ? tallyCount(e, f) : 0;
-        const listed = state.foods.some((x) => x.id === f.id && x.tally);
+        const saved = state.foods.some((x) => x.id === f.id);
         const k = tallyPieces(f);
         return (
           <View key={f.id} style={st.tally}>
@@ -239,14 +238,15 @@ export function TallyList({ day, isToday, now }: { day: string; isToday: boolean
               <Text style={{ color: c.mute, fontSize: 13, ...tabular }}>
                 {[f.note, k > 1 ? `${k} per serving` : 'by the serving', e ? `${fmtInt(entryTotals(e).kcal)} kcal` : null].filter(Boolean).join(' · ')}
               </Text>
-              {editing && listed ? (
+              {editing ? (
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.md, marginTop: 6 }}>
-                  <Text style={{ color: c.mute, fontSize: 13, fontWeight: '600' }}>Pieces per serving</Text>
-                  <PiecesField start={k} label={`${f.name}: pieces per serving`} onSet={(v) => setPieces(f, v)} />
-                  <LinkButton label="Remove" color={c.bad} onPress={() => {
-                      const { tally: _t, tallyPortion: _p, ...rest } = f;
-                      saveFood(rest);
-                    }} />
+                  {saved ? (
+                    <>
+                      <Text style={{ color: c.mute, fontSize: 13, fontWeight: '600' }}>Pieces per serving</Text>
+                      <PiecesField start={k} label={`${f.name}: pieces per serving`} onSet={(v) => setPieces(f, v)} />
+                    </>
+                  ) : null}
+                  <LinkButton label="Remove" color={c.bad} onPress={() => setEntries(day, (l) => l.filter((x) => !(x.tally && x.foodId === f.id)))} />
                 </View>
               ) : null}
             </View>

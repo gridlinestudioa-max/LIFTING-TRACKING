@@ -2,8 +2,8 @@ import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { MONTHS, byWeek, calorieSummary, cardioReport, cumulative, dailyWindow, fmt, fmtInt, liftSummary, sgn, toD } from '@/logic';
-import { ChartKey, CumulativeLine, DeficitBars } from '@/ui/charts';
+import { MONTHS, avgByBucket, byWeek, calorieSummary, cardioReport, fmt, fmtInt, kDays, liftSummary, rangeSpan, sgn, toD, type Range } from '@/logic';
+import { BarChart, ChartCaption, ChartKey, LineChart, RangeTabs } from '@/ui/charts';
 import { Header, Mute, Section, StatGrid, StatTile } from '@/ui/components';
 import { CardioStatsSheet, paceFor } from '@/ui/stats/CardioStats';
 import { LiftStatsSheet } from '@/ui/stats/LiftStats';
@@ -96,12 +96,11 @@ function Big({ value, unit, label }: { value: string; unit?: string; label: stri
 
 function CaloriesSection() {
   const c = useColors();
-  const { state, today } = useTracker();
+  const { state } = useTracker();
   const goal = state.goal;
   const sum = calorieSummary(state);
   const n = sum.days;
   const col = (v: number) => (v >= 0 ? c.ok : c.bad);
-  const cum = cumulative(state);
   const weeks = byWeek(state);
 
   return (
@@ -116,18 +115,7 @@ function CaloriesSection() {
         {!n ? <Mute>Add calories in and burned on the Food tab.</Mute> : null}
       </Section>
 
-      {n ? (
-        <Section title="Daily deficit">
-          <DeficitBars vals={dailyWindow(state, today)} goal={goal} />
-          <ChartKey items={goal ? ['deficit', 'surplus', 'goal'] : ['deficit', 'surplus']} />
-        </Section>
-      ) : null}
-
-      {cum.length >= 2 ? (
-        <Section title="Total over time">
-          <CumulativeLine pts={cum} />
-        </Section>
-      ) : null}
+      {n ? <DeficitCharts /> : null}
 
       {weeks.length ? (
         <Section title="By week">
@@ -149,6 +137,51 @@ function CaloriesSection() {
           ))}
         </Section>
       ) : null}
+    </>
+  );
+}
+
+/** Deficit by day (or averaged by week or month) and the running total, for the chosen range. */
+function DeficitCharts() {
+  const { state, today } = useTracker();
+  const [range, setRange] = useState<Range>('month');
+  const [range2, setRange2] = useState<Range>('month');
+  const ds = kDays(state);
+  const first = ds[0]?.s;
+  const span = rangeSpan(range, today, first);
+  const vals = span.grain === 'day'
+    ? span.buckets.map((b) => ds.find((d) => d.s === b.start)?.net ?? null)
+    : avgByBucket(ds, (d) => d.s, (d) => d.net, span.buckets);
+  const span2 = rangeSpan(range2, today, first);
+  const cum = ds
+    .filter((d) => d.s >= span2.from && d.s <= today)
+    .reduce<{ s: string; v: number }[]>((acc, d) => [...acc, { s: d.s, v: (acc[acc.length - 1]?.v ?? 0) + d.net }], []);
+  return (
+    <>
+      <Section title="Calorie deficit">
+        <RangeTabs value={range} onChange={setRange} />
+        <ChartCaption>
+          {span.grain === 'day' ? `${span.caption} · kcal per day` : `${span.caption} · average kcal per day, by ${span.grain}`}
+        </ChartCaption>
+        <BarChart
+          values={vals.map((v) => (v == null ? null : Math.round(v)))}
+          labels={span.buckets.map((b) => b.label)}
+          unit="kcal"
+          signed
+          goal={state.goal}
+          label={`Calorie deficit, ${span.caption.toLowerCase()}`}
+        />
+        <ChartKey items={state.goal ? ['deficit', 'surplus', 'goal'] : ['deficit', 'surplus']} />
+      </Section>
+      <Section title="Total deficit">
+        <RangeTabs value={range2} onChange={setRange2} />
+        <ChartCaption>{`${span2.caption} · running total, kcal`}</ChartCaption>
+        {cum.length >= 2 ? (
+          <LineChart label={`Total deficit, ${span2.caption.toLowerCase()}`} zero unit="kcal" from={span2.from} to={span2.to} series={[{ pts: cum, style: 'line' }]} />
+        ) : (
+          <Mute>Log at least two days in this range to see the total.</Mute>
+        )}
+      </Section>
     </>
   );
 }

@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { useState } from 'react';
+import { Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 
 import {
   BEST_LABEL,
@@ -8,9 +8,11 @@ import {
   fmtTime,
   normalizePhone,
   rankBoard,
+  shareSummary,
+  todayString,
   type BoardMetric,
-  type BoardPerson,
   type BoardSport,
+  type Sharing,
 } from '@/logic';
 
 import { Field, Mute, Section } from '../components';
@@ -18,7 +20,9 @@ import { Button, LinkButton, Pill } from '../food/kit';
 import { useTracker } from '../store';
 import { fonts, radius, space, tabular, useColors } from '../theme';
 import { FriendsSheet } from './FriendsSheet';
-import { friendBoard, myFriends, type Friend } from './api';
+import { removeFriend } from './api';
+import { Avatar } from './Avatar';
+import { FriendProfile } from './FriendProfile';
 import { Rank, SportPills } from './PersonalBoard';
 import { useSocial } from './SocialProvider';
 
@@ -30,55 +34,33 @@ function metricText(sport: BoardSport, m: BoardMetric, v: number): string {
   return sport === 'swim' ? `${Math.round(v * 1609.344).toLocaleString('en-US')} m` : `${fmt(Math.round(v * 10) / 10)} mi`;
 }
 
-/** You and your friends, ranked for a sport. Lives on the You tab. */
-export function FriendsBoard() {
+/**
+ * Friends on the profile: a row of friends to tap into, then the leaderboard. Handles every state:
+ * signed out, not set up on the server, Friends off (join), and on.
+ */
+export function FriendsArea() {
   const c = useColors();
-  const { today } = useTracker();
   const social = useSocial();
-  const [sport, setSport] = useState<BoardSport>('run');
-  const [metric, setMetric] = useState<BoardMetric>('week');
-  const [people, setPeople] = useState<BoardPerson[] | null>(null);
-  const [friends, setFriends] = useState<Friend[]>([]);
-  const [err, setErr] = useState<string | null>(null);
   const [sheet, setSheet] = useState(false);
-  const [n, setN] = useState(0);
-  const refresh = useCallback(() => setN((v) => v + 1), []);
-
-  const on = social.status === 'on';
-  const me = social.userId;
-  useEffect(() => {
-    if (!on || !me) return;
-    let live = true;
-    Promise.all([friendBoard(me), myFriends()])
-      .then(([b, f]) => {
-        if (!live) return;
-        setPeople(b);
-        setFriends(f);
-        setErr(null);
-      })
-      .catch((e) => live && setErr(e instanceof Error ? e.message : 'Couldn’t load the leaderboard.'));
-    return () => {
-      live = false;
-    };
-  }, [on, me, n, social.published]);
+  const [viewing, setViewing] = useState<string | null>(null);
 
   if (social.status === 'signedOut') {
     return (
-      <Section title="Friends leaderboard">
-        <Mute>Sign in to add friends and compete on runs, rides and swims.</Mute>
+      <Section title="Friends">
+        <Mute>Sign in to add friends, see their stats and compete on runs, rides and swims.</Mute>
       </Section>
     );
   }
   if (social.status === 'loading') {
     return (
-      <Section title="Friends leaderboard">
+      <Section title="Friends">
         <Mute>Loading…</Mute>
       </Section>
     );
   }
   if (social.status === 'setup' || social.status === 'error') {
     return (
-      <Section title="Friends leaderboard">
+      <Section title="Friends">
         <Text style={{ color: c.ink, fontSize: 15 }}>{social.error}</Text>
         {social.status === 'error' ? <Button label="Try again" onPress={social.reload} style={{ marginTop: space.md }} /> : null}
       </Section>
@@ -86,12 +68,84 @@ export function FriendsBoard() {
   }
   if (social.status === 'off') return <JoinCard />;
 
-  const rows = people ? rankBoard(people, sport, metric, today) : [];
+  const friends = social.friends ?? [];
+  const mates = friends.filter((f) => f.status === 'friends');
   const requests = friends.filter((f) => f.status === 'received').length;
-  const count = friends.filter((f) => f.status === 'friends').length;
+  const person = viewing ? social.board?.find((p) => p.id === viewing) : null;
+  const viewingName = person?.name ?? friends.find((f) => f.id === viewing)?.name ?? '';
 
   return (
-    <Section title="Friends leaderboard" action={<LinkButton label={requests ? `Requests (${requests})` : 'Friends'} onPress={() => setSheet(true)} />}>
+    <>
+      <Section
+        title={`Friends${mates.length ? ` (${mates.length})` : ''}`}
+        action={<LinkButton label={requests ? `Requests (${requests})` : 'Add friends'} onPress={() => setSheet(true)} />}>
+        {social.listError ? (
+          <View style={{ gap: space.sm }}>
+            <Text style={{ color: c.bad }}>{social.listError}</Text>
+            <Button label="Try again" onPress={social.refresh} />
+          </View>
+        ) : !social.friends ? (
+          <Mute>Loading…</Mute>
+        ) : (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: space.md, paddingVertical: space.xs }}>
+            {mates.map((f) => (
+              <Pressable key={f.id} onPress={() => setViewing(f.id)} accessibilityRole="button" accessibilityLabel={`${f.name}'s profile`} style={({ pressed }) => [st.friend, { opacity: pressed ? 0.6 : 1 }]}>
+                <Avatar name={f.name} size={56} />
+                <Text style={{ color: c.ink, fontSize: 13, fontWeight: '600', marginTop: 4 }} numberOfLines={1}>
+                  {f.name.split(/\s+/)[0]}
+                </Text>
+              </Pressable>
+            ))}
+            <Pressable onPress={() => setSheet(true)} accessibilityRole="button" accessibilityLabel="Add friends" style={({ pressed }) => [st.friend, { opacity: pressed ? 0.6 : 1 }]}>
+              <View style={[st.add, { borderColor: c.line }]}>
+                <Text style={{ color: c.mute, fontSize: 26, lineHeight: 30 }}>+</Text>
+              </View>
+              <Text style={{ color: c.mute, fontSize: 13, fontWeight: '600', marginTop: 4 }}>Add</Text>
+            </Pressable>
+          </ScrollView>
+        )}
+      </Section>
+
+      <Leaderboard />
+
+      {sheet ? (
+        <FriendsSheet
+          friends={friends}
+          onChanged={social.refresh}
+          onClose={() => {
+            setSheet(false);
+            social.refresh();
+          }}
+        />
+      ) : null}
+      {viewing ? (
+        <FriendProfile
+          name={viewingName}
+          summary={person?.summary ?? null}
+          onClose={() => setViewing(null)}
+          onRemove={async () => {
+            await removeFriend(viewing).catch(() => {});
+            setViewing(null);
+            social.refresh();
+          }}
+        />
+      ) : null}
+    </>
+  );
+}
+
+/** You and your friends, ranked for a sport and a measure. */
+function Leaderboard() {
+  const c = useColors();
+  const { today } = useTracker();
+  const social = useSocial();
+  const [sport, setSport] = useState<BoardSport>('run');
+  const [metric, setMetric] = useState<BoardMetric>('week');
+  const people = social.board;
+  const rows = people ? rankBoard(people, sport, metric, today) : [];
+  if (!people || people.length < 2) return null;
+  return (
+    <Section title="Leaderboard">
       <SportPills value={sport} onChange={setSport} />
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space.xs, marginTop: space.sm }}>
         {BOARD_METRICS.map((m) => (
@@ -99,43 +153,60 @@ export function FriendsBoard() {
         ))}
       </View>
       {metric === 'best' ? <Mute style={{ marginTop: space.sm }}>{BEST_LABEL[sport]}</Mute> : null}
+      <View style={{ marginTop: space.md }}>
+        {rows.map((r, i) => (
+          <View key={r.p.id} style={[st.row, i > 0 && { borderTopWidth: 1, borderTopColor: c.line }, r.p.me && { backgroundColor: c.soft, borderRadius: radius.sm }]}>
+            {r.rank != null ? <Rank n={r.rank} /> : <View style={{ width: 26 }} />}
+            <Avatar name={r.p.name} size={28} />
+            <Text style={{ flex: 1, color: c.ink, fontSize: 16, fontWeight: r.p.me ? '800' : '600' }} numberOfLines={1}>
+              {r.p.me ? `${r.p.name} (you)` : r.p.name}
+            </Text>
+            <Text style={[st.value, { color: r.value != null ? c.ink : c.mute }]}>{r.value != null ? metricText(sport, metric, r.value) : '–'}</Text>
+          </View>
+        ))}
+      </View>
+      <Mute style={{ fontSize: 12.5, marginTop: space.sm }}>Friends who don’t share cardio show a dash.</Mute>
+    </Section>
+  );
+}
 
-      {err ? (
-        <View style={{ marginTop: space.md, gap: space.sm }}>
-          <Text style={{ color: c.bad }}>{err}</Text>
-          <Button label="Try again" onPress={refresh} />
+/** What friends can see: cardio, lifting and food, each on or off. */
+export function SharingSection() {
+  const c = useColors();
+  const { state, setSettings } = useTracker();
+  const social = useSocial();
+  const [preview, setPreview] = useState(false);
+  const share = state.settings.share;
+  if (social.status !== 'on') return null;
+  const rows: { k: keyof Sharing; title: string; what: string }[] = [
+    { k: 'cardio', title: 'Cardio', what: 'Distance this week, month and year, longest and fastest by sport. Also puts you on the leaderboard.' },
+    { k: 'lifting', title: 'Lifting', what: 'Workouts this week and month, your streak and your top 5 lifts.' },
+    { k: 'food', title: 'Food', what: 'Last 7 days: days logged and average calories, protein and deficit. Never what you ate.' },
+  ];
+  const all = share.cardio && share.lifting && share.food;
+  return (
+    <Section title="What friends see" action={<LinkButton label={all ? 'Share less' : 'Share all'} onPress={() => setSettings({ share: all ? { cardio: false, lifting: false, food: false } : { cardio: true, lifting: true, food: true } })} />}>
+      {rows.map((r, i) => (
+        <View key={r.k} style={[st.share, i > 0 && { borderTopWidth: 1, borderTopColor: c.line }]}>
+          <View style={{ flex: 1 }}>
+            <Text style={{ color: c.ink, fontSize: 16, fontWeight: '600' }}>{r.title}</Text>
+            <Text style={{ color: c.mute, fontSize: 13, lineHeight: 18 }}>{r.what}</Text>
+          </View>
+          <Switch
+            value={share[r.k]}
+            onValueChange={(v) => setSettings({ share: { ...share, [r.k]: v } })}
+            accessibilityLabel={`Share ${r.title.toLowerCase()} with friends`}
+            trackColor={{ true: c.ok, false: c.line }}
+            thumbColor="#ffffff"
+            {...({ activeThumbColor: '#ffffff' } as object)}
+          />
         </View>
-      ) : !people ? (
-        <Mute style={{ marginTop: space.md }}>Loading…</Mute>
-      ) : (
-        <View style={{ marginTop: space.md }}>
-          {rows.map((r, i) => (
-            <View key={r.p.id} style={[st.row, i > 0 && { borderTopWidth: 1, borderTopColor: c.line }, r.p.me && { backgroundColor: c.soft, borderRadius: radius.sm }]}>
-              {r.rank != null ? <Rank n={r.rank} /> : <View style={{ width: 26 }} />}
-              <Text style={{ flex: 1, color: c.ink, fontSize: 16, fontWeight: r.p.me ? '800' : '600' }} numberOfLines={1}>
-                {r.p.me ? `${r.p.name} (you)` : r.p.name}
-              </Text>
-              <Text style={[st.value, { color: r.value != null ? c.ink : c.mute }]}>{r.value != null ? metricText(sport, metric, r.value) : '–'}</Text>
-            </View>
-          ))}
-          {count === 0 ? (
-            <View style={{ marginTop: space.md, gap: space.sm }}>
-              <Mute>Add friends to see how you stack up.</Mute>
-              <Button label="Add friends" primary onPress={() => setSheet(true)} />
-            </View>
-          ) : null}
-        </View>
-      )}
-      {sheet ? (
-        <FriendsSheet
-          friends={friends}
-          onChanged={refresh}
-          onClose={() => {
-            setSheet(false);
-            refresh();
-          }}
-        />
-      ) : null}
+      ))}
+      <Mute style={{ fontSize: 12.5, marginTop: space.sm }}>Only your friends can see these. Your name always shows to friends and to people who look up your number.</Mute>
+      <View style={{ flexDirection: 'row', marginTop: space.sm }}>
+        <LinkButton label="Preview your profile as a friend" onPress={() => setPreview(true)} />
+      </View>
+      {preview ? <FriendProfile name={state.settings.name || 'You'} summary={shareSummary(state, todayString(), share)} onClose={() => setPreview(false)} /> : null}
     </Section>
   );
 }
@@ -170,7 +241,7 @@ function JoinCard() {
       <Text style={[st.lbl, { color: c.mute, marginTop: space.md }]}>Your phone number (so friends can find you)</Text>
       <Field value={phone} onChangeText={setPhone} placeholder="e.g. (555) 123-4567" keyboardType="phone-pad" autoComplete="tel" accessibilityLabel="Your phone number" />
       <Text style={{ color: c.mute, fontSize: 13, lineHeight: 18, marginTop: space.sm }}>
-        Friends see your name and your cardio totals and bests. Never your routes, food or anything else. Your number is scrambled (hashed) before it’s stored.
+        Friends see your name and what you choose to share: cardio (on to start), lifting and food summaries. Never your routes, what you ate, your weight or notes. Your number is scrambled (hashed) before it’s stored.
       </Text>
       {err ? <Text style={{ color: c.bad, fontWeight: '700', marginTop: space.md }}>{err}</Text> : null}
       <Button label={busy ? 'Turning on…' : 'Turn on Friends'} primary onPress={() => !busy && go()} style={{ marginTop: space.lg }} />
@@ -179,6 +250,9 @@ function JoinCard() {
 }
 
 const st = StyleSheet.create({
+  friend: { width: 64, alignItems: 'center' },
+  add: { width: 56, height: 56, borderRadius: 28, borderWidth: 1.5, borderStyle: 'dashed', alignItems: 'center', justifyContent: 'center' },
+  share: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.sm + 2 },
   row: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.sm + 2, paddingHorizontal: space.xs },
   value: { fontFamily: fonts.display, fontSize: 20, lineHeight: 24, ...tabular },
   lbl: { fontSize: 13, fontWeight: '600', marginBottom: 6 },

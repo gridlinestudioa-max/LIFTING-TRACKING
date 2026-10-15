@@ -1,159 +1,114 @@
 import { useState } from 'react';
-import { ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import Svg, { Circle, Path } from 'react-native-svg';
 
-import { EMPTY_CARDIO, EMPTY_LIFTING, type Sections } from '@/logic';
+import { fmt, liftSummary, mondayOf, weeklyTotals } from '@/logic';
 import { useAccount } from '@/ui/account';
-import { CommitNumberField, Field, Header, Mute, Section } from '@/ui/components';
-import { Button, LinkButton } from '@/ui/food/kit';
-import { ProfileForm } from '@/ui/food/ProfileForm';
-import { ProfileLines } from '@/ui/food/ProfileLines';
-import { SECTION_INFO } from '@/ui/Onboarding';
-import { PlanPicker } from '@/ui/cardio/PlanPicker';
-import { DataSection, DeleteSection, PrivacySection } from '@/ui/data/DataSection';
-import { FriendsBoard } from '@/ui/social/FriendsBoard';
+import { Header, Mute } from '@/ui/components';
+import { LinkButton } from '@/ui/food/kit';
+import { SettingsSheet } from '@/ui/profile/SettingsSheet';
+import { Avatar } from '@/ui/social/Avatar';
+import { FriendsArea, SharingSection } from '@/ui/social/FriendsBoard';
 import { PersonalBoard } from '@/ui/social/PersonalBoard';
+import { useSocial } from '@/ui/social/SocialProvider';
 import { useTracker } from '@/ui/store';
-import { space, useColors } from '@/ui/theme';
+import { fonts, radius, space, tabular, useColors } from '@/ui/theme';
 
+/** A gear: opens Settings. */
+function GearButton({ onPress }: { onPress: () => void }) {
+  const c = useColors();
+  return (
+    <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel="Settings" hitSlop={10} style={({ pressed }) => [st.gear, { backgroundColor: c.card, opacity: pressed ? 0.6 : 1 }]}>
+      <Svg width={22} height={22} viewBox="0 0 24 24" fill="none" stroke={c.ink} strokeWidth={1.9} strokeLinecap="round" strokeLinejoin="round">
+        <Circle cx={12} cy={12} r={3} />
+        <Path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+      </Svg>
+    </Pressable>
+  );
+}
+
+function WeekStat({ value, unit, label }: { value: string; unit?: string; label: string }) {
+  const c = useColors();
+  return (
+    <View style={{ flex: 1, alignItems: 'center' }}>
+      <Text style={[st.statVal, { color: c.ink }]} numberOfLines={1} adjustsFontSizeToFit>
+        {value}
+        {unit ? <Text style={{ fontFamily: fonts.semi, fontSize: 14, color: c.mute }}>{` ${unit}`}</Text> : null}
+      </Text>
+      <Text style={{ color: c.mute, fontSize: 12.5, fontWeight: '600' }}>{label}</Text>
+    </View>
+  );
+}
+
+/** You: your profile (who you are, your week, your records, your friends). Settings live behind the gear. */
 export default function YouScreen() {
   const c = useColors();
-  const { mode, user, cloud, signOut } = useAccount();
-  const { state, today, update, setSettings, setProfile, setGoal } = useTracker();
-  const [editStats, setEditStats] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
-  const [confirmReset, setConfirmReset] = useState(false);
-  // Training starts fresh; food, profile and diet are kept. Setup runs again to pick new plans.
-  const startOver = () => {
-    update((s) => ({
-      ...s,
-      cardio: { ...EMPTY_CARDIO, sessions: [], skips: [] },
-      lifting: { ...EMPTY_LIFTING, exercises: [], routines: [], schedule: [...EMPTY_LIFTING.schedule], workouts: [] },
-      settings: { ...s.settings, onboarded: false },
-    }));
-    setConfirmReset(false);
-  };
+  const { mode } = useAccount();
+  const { state, today } = useTracker();
+  const social = useSocial();
+  const [settings, setSettings] = useState(false);
   const on = state.settings.sections;
-  const p = state.profile;
+  const name = state.settings.name.trim();
+  const friends = social.friends?.filter((f) => f.status === 'friends').length ?? 0;
 
-  const toggle = (k: keyof Sections) => {
-    const next = { ...on, [k]: !on[k] };
-    if (!next.food && !next.cardio && !next.lifting) return setErr('Keep at least one turned on.');
-    setErr(null);
-    setSettings({ sections: next });
-  };
+  const lift = on.lifting ? liftSummary(state.lifting, today) : null;
+  const week = on.cardio ? weeklyTotals(state.cardio, today, 1)[0] : null;
+  const monday = mondayOf(today);
+  const cardioN = on.cardio ? state.cardio.sessions.filter((x) => x.date >= monday && x.date <= today).length : 0;
+  const foodDays = on.food ? Object.entries(state.meals).filter(([d, l]) => d >= monday && d <= today && l.length).length : 0;
+  const stats = [
+    lift ? { value: String(lift.thisWeek), label: 'Workouts' } : null,
+    week ? { value: fmt(Math.round(week.miles * 10) / 10), unit: 'mi', label: 'Cardio' } : null,
+    on.cardio && !on.lifting ? { value: String(cardioN), label: 'Activities' } : null,
+    on.food ? { value: `${foodDays}`, unit: '/7', label: 'Days logged' } : null,
+    lift ? { value: String(lift.streak), unit: 'wk', label: 'Streak' } : null,
+  ].filter((x): x is { value: string; unit?: string; label: string } => !!x).slice(0, 4);
 
   return (
     <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: c.bg }}>
-      <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 48 }} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets>
-        <Header title={state.settings.name ? state.settings.name : 'You'} />
+      <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 48 }} keyboardShouldPersistTaps="handled">
+        <Header title="Profile" right={<GearButton onPress={() => setSettings(true)} />} />
 
-        <Section title="Account">
-          {mode === 'account' ? (
+        <View style={[st.hero, { backgroundColor: c.card }]}>
+          <Avatar name={name || 'You'} size={84} />
+          <Text style={[st.name, { color: c.ink }]}>{name || 'Your name'}</Text>
+          <Text style={{ color: c.mute, fontSize: 14 }}>
+            {social.status === 'on' ? `${friends} friend${friends === 1 ? '' : 's'}` : mode === 'account' ? 'Signed in' : 'On this device'}
+          </Text>
+          {!name ? (
+            <View style={{ marginTop: space.sm }}>
+              <LinkButton label="Add your name" onPress={() => setSettings(true)} />
+            </View>
+          ) : null}
+          {stats.length ? (
             <>
-              <Text style={{ color: c.ink, fontSize: 16, fontWeight: '600' }}>{user?.email}</Text>
-              <Mute>Synced to your account</Mute>
-              <Button label="Sign out" onPress={signOut} style={{ marginTop: space.md }} />
+              <View style={[st.divider, { backgroundColor: c.line }]} />
+              <Text style={{ color: c.mute, fontSize: 12.5, fontWeight: '700', letterSpacing: 0.5, marginBottom: space.sm }}>THIS WEEK</Text>
+              <View style={{ flexDirection: 'row', alignSelf: 'stretch' }}>
+                {stats.map((x) => (
+                  <WeekStat key={x.label} {...x} />
+                ))}
+              </View>
             </>
-          ) : (
-            <>
-              <Text style={{ color: c.ink, fontSize: 16, fontWeight: '600' }}>Saved on this device only</Text>
-              {cloud ? <Button label="Sign in to sync" primary onPress={signOut} style={{ marginTop: space.md }} /> : null}
-            </>
-          )}
-        </Section>
+          ) : null}
+        </View>
 
-        <Section title="Profile" action={p && !editStats ? <LinkButton label="Edit" onPress={() => setEditStats(true)} /> : undefined}>
-          <Text style={[st.lbl, { color: c.mute }]}>Name</Text>
-          <Field
-            value={state.settings.name}
-            onChangeText={(name) => setSettings({ name })}
-            placeholder="First name"
-            autoCapitalize="words"
-            accessibilityLabel="Your name"
-          />
-          <View style={{ marginTop: space.lg }}>
-            {p && !editStats ? (
-              <ProfileLines profile={p} />
-            ) : (
-              <ProfileForm
-                initial={p}
-                onSave={(np) => {
-                  setProfile(np);
-                  setEditStats(false);
-                }}
-                onCancel={p ? () => setEditStats(false) : undefined}
-              />
-            )}
-          </View>
-        </Section>
+        <FriendsArea />
+        <SharingSection />
+        {on.cardio ? <PersonalBoard /> : null}
 
-        {on.cardio ? (
-          <>
-            <PersonalBoard />
-            <FriendsBoard />
-          </>
-        ) : null}
-
-        <Section title="Tabs">
-          {SECTION_INFO.map((x, i) => (
-            <View key={x.id} style={[st.switchRow, i > 0 && { borderTopWidth: 1, borderTopColor: c.line }]}>
-              <Text style={{ flex: 1, color: c.ink, fontSize: 16, fontWeight: '600' }}>{x.title}</Text>
-              <Switch
-                value={on[x.id]}
-                onValueChange={() => toggle(x.id)}
-                accessibilityLabel={`Show the ${x.title} tab`}
-                trackColor={{ true: c.ok, false: c.line }}
-                thumbColor="#ffffff"
-                {...({ activeThumbColor: '#ffffff' } as object)}
-              />
-            </View>
-          ))}
-          {err ? <Text style={{ color: c.bad, fontWeight: '700', marginTop: space.sm }}>{err}</Text> : null}
-        </Section>
-
-        {on.cardio ? (
-          <Section title="Cardio plan">
-            <PlanPicker plan={state.cardio.plan} today={today} onChange={(plan) => update((s) => ({ ...s, cardio: { ...s.cardio, plan } }))} />
-          </Section>
-        ) : null}
-
-        {on.food ? (
-          <Section title="Deficit goal">
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.sm }}>
-              <CommitNumberField value={state.goal} onCommit={setGoal} accessibilityLabel="Daily deficit goal" placeholder="None" style={{ width: 120, textAlign: 'right' }} />
-              <Text style={{ color: c.mute, fontSize: 15 }}>kcal a day</Text>
-            </View>
-          </Section>
-        ) : null}
-
-        <Section title="Start a new plan">
-          {confirmReset ? (
-            <View style={{ gap: space.sm }}>
-              <Text style={{ color: c.ink, fontSize: 15 }}>
-                This clears your cardio plan and sessions, and your lifting routines and workouts, then walks you through setup again. Food, your profile and your diet stay.
-              </Text>
-              <Button label="Clear training and start over" danger onPress={startOver} />
-              <Button label="Cancel" onPress={() => setConfirmReset(false)} />
-            </View>
-          ) : (
-            <Button label="Start a new plan" onPress={() => setConfirmReset(true)} />
-          )}
-        </Section>
-
-        <DataSection />
-        <PrivacySection />
-        <DeleteSection />
-
-        <Text style={{ color: c.mute, fontSize: 12, lineHeight: 17, marginTop: space.sm, paddingHorizontal: space.xs }}>
-          Food data: USDA FoodData Central and Open Food Facts (ODbL). Exercises: free-exercise-db. Targets are general guidance, not medical advice.
-        </Text>
+        {mode !== 'account' ? <Mute style={{ textAlign: 'center', marginTop: space.sm }}>Settings, your data and sign-in are behind the gear.</Mute> : null}
       </ScrollView>
+      {settings ? <SettingsSheet onClose={() => setSettings(false)} /> : null}
     </SafeAreaView>
   );
 }
 
 const st = StyleSheet.create({
-  lbl: { fontSize: 13, fontWeight: '600', marginBottom: 6 },
-  switchRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: space.sm + 2 },
+  gear: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
+  hero: { alignItems: 'center', borderRadius: radius.lg, padding: space.lg, marginBottom: space.lg },
+  name: { fontFamily: fonts.display, fontSize: 30, lineHeight: 34, marginTop: space.sm },
+  divider: { alignSelf: 'stretch', height: 1, marginVertical: space.md },
+  statVal: { fontFamily: fonts.display, fontSize: 26, lineHeight: 30, ...tabular },
 });

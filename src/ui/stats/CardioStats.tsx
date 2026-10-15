@@ -4,10 +4,13 @@ import { StyleSheet, Text, View } from 'react-native';
 import {
   CARDIO_LABEL,
   METERS_PER_MILE,
-  MONTHS,
   SPORT_GROUPS,
   SPORT_LABEL,
   cardioReport,
+  dailyEffort,
+  dayDiff,
+  rangeSpan,
+  sumByBucket,
   fmt,
   fmtInt,
   fmtTime,
@@ -18,25 +21,20 @@ import {
   planWeekRows,
   sessionEffort,
   shortDayLabel,
-  toD,
   trainingLoad,
   weeklyEffort,
   type CardioSession,
   type CardioTotals,
+  type Range,
   type SportGroup,
 } from '@/logic';
 
-import { Bars, ChartKey, LineChart, PlanBars } from '../charts';
+import { BarChart, ChartCaption, ChartKey, LineChart, PlanBars, RangeTabs } from '../charts';
 import { Card, Mute, Section } from '../components';
 import { Sheet } from '../food/kit';
 import { Select } from '../Select';
 import { useTracker } from '../store';
 import { fonts, space, tabular, useColors } from '../theme';
-
-const md = (s: string) => {
-  const d = toD(s);
-  return `${MONTHS[d.getMonth()].slice(0, 3)} ${d.getDate()}`;
-};
 
 type G = SportGroup | 'all';
 
@@ -64,8 +62,7 @@ export function CardioStatsSheet({ visible, onClose, initial }: { visible: boole
   // Effort and training load for the sport chosen above.
   const scoped = useMemo(() => ({ ...state.cardio, sessions: r.sessions }), [state.cardio, r.sessions]);
   const weekly = useMemo(() => weeklyEffort(scoped, state.profile, today, 12), [scoped, state.profile, today]);
-  const load = useMemo(() => trainingLoad(scoped, state.profile, today, 84), [scoped, state.profile, today]);
-  const status = loadStatus(load);
+  const status = useMemo(() => loadStatus(trainingLoad(scoped, state.profile, today, 84)), [scoped, state.profile, today]);
   const maxHr = maxHrFor(state.profile, scoped, today);
   const { long, sports } = planWeekRows(state.cardio);
   const plan = state.cardio.plan;
@@ -131,30 +128,11 @@ export function CardioStatsSheet({ visible, onClose, initial }: { visible: boole
             </Section>
           ) : null}
 
-          <Section title={g === 'swim' ? 'Meters per week' : 'Miles per week'}>
-            <Bars
-              rows={r.weeks.map((w) => ({ label: md(w.start), v: g === 'swim' ? Math.round(w.miles * METERS_PER_MILE) : Math.round(w.miles * 10) / 10 }))}
-              unit={g === 'swim' ? 'm' : 'mi'}
-              label="Distance per week, last 12 weeks"
-            />
-          </Section>
+          <DistanceChart g={g} sessions={r.sessions} today={today} />
 
           {weekly.some((w) => w.effort > 0) ? (
             <Section title="Effort and training load">
-              <Bars rows={weekly.map((w) => ({ label: md(w.start), v: w.effort }))} unit="" label="Effort per week, last 12 weeks" />
-              {load.length >= 2 ? (
-                <View style={{ marginTop: space.lg }}>
-                  <LineChart
-                    label="Fitness and fatigue over the last 12 weeks"
-                    zero
-                    series={[
-                      { pts: load.map((d) => ({ s: d.s, v: Math.round(d.fitness) })), style: 'line' },
-                      { pts: load.map((d) => ({ s: d.s, v: Math.round(d.fatigue) })), style: 'dashed' },
-                    ]}
-                  />
-                  <ChartKey items={['fitness', 'fatigue']} />
-                </View>
-              ) : null}
+              <EffortCharts sessions={r.sessions} today={today} />
               {status ? (
                 <Text style={{ color: c.ink, fontSize: 15, fontWeight: '600', marginTop: space.md }}>{`This week: ${status.label.toLowerCase()}`}</Text>
               ) : (
@@ -171,7 +149,7 @@ export function CardioStatsSheet({ visible, onClose, initial }: { visible: boole
               {long.length ? (
                 <>
                   <Text style={[st.sub, { color: c.ink }]}>{`Long ${SPORT_LABEL[sports[0].sport].toLowerCase()} by week`}</Text>
-                  <PlanBars rows={unitRows(sports[0].sport, long)} label="Long session by plan week" />
+                  <PlanBars rows={unitRows(sports[0].sport, long)} unit={sports[0].sport === 'swim' ? 'm' : 'mi'} label="Long session by plan week" />
                 </>
               ) : null}
               {sports
@@ -179,7 +157,7 @@ export function CardioStatsSheet({ visible, onClose, initial }: { visible: boole
                 .map((x) => (
                   <View key={x.sport} style={{ marginTop: space.md }}>
                     <Text style={[st.sub, { color: c.ink }]}>{`${SPORT_LABEL[x.sport]} distance by week`}</Text>
-                    <PlanBars rows={unitRows(x.sport, x.rows)} label={`${SPORT_LABEL[x.sport]} by plan week`} />
+                    <PlanBars rows={unitRows(x.sport, x.rows)} unit={x.sport === 'swim' ? 'm' : 'mi'} label={`${SPORT_LABEL[x.sport]} by plan week`} />
                   </View>
                 ))}
               <ChartKey items={['planned', 'logged']} />
@@ -194,6 +172,62 @@ export function CardioStatsSheet({ visible, onClose, initial }: { visible: boole
         </>
       )}
     </Sheet>
+  );
+}
+
+/** Distance in each day, week or month of the chosen range. */
+function DistanceChart({ g, sessions, today }: { g: G; sessions: CardioSession[]; today: string }) {
+  const c = useColors();
+  const [range, setRange] = useState<Range>('month');
+  const first = sessions.length ? sessions[sessions.length - 1].date : null;
+  const span = rangeSpan(range, today, first);
+  const swim = g === 'swim';
+  const vals = sumByBucket(sessions, (x) => x.date, (x) => (x.miles ?? 0) * (swim ? METERS_PER_MILE : 1), span.buckets).map((v) => (swim ? Math.round(v) : Math.round(v * 10) / 10));
+  const total = vals.reduce((a, b) => a + b, 0);
+  const unit = swim ? 'm' : 'mi';
+  return (
+    <Section title="Distance" action={<Text style={{ color: c.mute, fontSize: 14, fontWeight: '700', ...tabular }}>{`${swim ? fmtInt(total) : fmt(Math.round(total * 10) / 10)} ${unit} in range`}</Text>}>
+      <RangeTabs value={range} onChange={setRange} />
+      <ChartCaption>{`${span.caption} · ${swim ? 'meters' : 'miles'} per ${span.per}`}</ChartCaption>
+      <BarChart values={vals} labels={span.buckets.map((b) => b.label)} unit={unit} label={`Distance per ${span.per}, ${span.caption.toLowerCase()}`} />
+    </Section>
+  );
+}
+
+/** Effort per bucket, and fitness and fatigue as lines, for the chosen range. */
+function EffortCharts({ sessions, today }: { sessions: CardioSession[]; today: string }) {
+  const { state } = useTracker();
+  const [range, setRange] = useState<Range>('month');
+  const scoped = useMemo(() => ({ ...state.cardio, sessions }), [state.cardio, sessions]);
+  const per = useMemo(() => dailyEffort(scoped, state.profile, today), [scoped, state.profile, today]);
+  const days = [...per.entries()].map(([s, v]) => ({ s, v }));
+  const first = days.map((d) => d.s).sort()[0];
+  const span = rangeSpan(range, today, first);
+  const vals = sumByBucket(days, (d) => d.s, (d) => d.v, span.buckets).map(Math.round);
+  const load = useMemo(() => trainingLoad(scoped, state.profile, today, dayDiff(today, span.from) + 1), [scoped, state.profile, today, span.from]);
+  return (
+    <>
+      <RangeTabs value={range} onChange={setRange} />
+      <ChartCaption>{`${span.caption} · effort points per ${span.per}`}</ChartCaption>
+      <BarChart values={vals} labels={span.buckets.map((b) => b.label)} unit="pts" label={`Effort per ${span.per}, ${span.caption.toLowerCase()}`} />
+      {load.length >= 2 ? (
+        <View style={{ marginTop: space.lg }}>
+          <ChartCaption>{`${span.caption} · fitness and fatigue, effort points per day`}</ChartCaption>
+          <LineChart
+            label={`Fitness and fatigue, ${span.caption.toLowerCase()}`}
+            zero
+            unit="pts"
+            from={span.from}
+            to={span.to}
+            series={[
+              { pts: load.map((d) => ({ s: d.s, v: Math.round(d.fitness * 10) / 10 })), style: 'line' },
+              { pts: load.map((d) => ({ s: d.s, v: Math.round(d.fatigue * 10) / 10 })), style: 'dashed' },
+            ]}
+          />
+          <ChartKey items={['fitness', 'fatigue']} />
+        </View>
+      ) : null}
+    </>
   );
 }
 

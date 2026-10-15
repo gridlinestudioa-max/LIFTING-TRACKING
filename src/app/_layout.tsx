@@ -64,7 +64,7 @@ function AppTabs() {
       <Tabs.Screen name="cardio" options={{ href: on.cardio ? undefined : null, title: 'Cardio', tabBarIcon: (p) => <CardioIcon color={String(p.color)} focused={p.focused} /> }} />
       <Tabs.Screen name="lifting" options={{ href: on.lifting ? undefined : null, title: 'Lifting', tabBarIcon: (p) => <LiftIcon color={String(p.color)} focused={p.focused} /> }} />
       <Tabs.Screen name="progress" options={{ title: 'Progress', tabBarIcon: (p) => <ChartIcon color={String(p.color)} focused={p.focused} /> }} />
-      <Tabs.Screen name="you" options={{ title: 'You', tabBarIcon: (p) => <YouIcon color={String(p.color)} focused={p.focused} /> }} />
+      <Tabs.Screen name="you" options={{ title: 'Profile', tabBarIcon: (p) => <YouIcon color={String(p.color)} focused={p.focused} /> }} />
     </Tabs>
   );
 }
