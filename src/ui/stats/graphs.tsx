@@ -1,5 +1,5 @@
 import { createContext, useContext, useMemo, useState, type ComponentType, type ReactNode } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import {
   METERS_PER_MILE,
@@ -7,12 +7,18 @@ import {
   MICROS,
   MUSCLE_GROUPS,
   SPORT_GROUPS,
+  CYCLE_KIND_LABEL,
+  CYCLE_PRESETS,
+  activeCycle,
+  addDays,
   avgBars,
   avgByBucket,
   dayDiff,
   calTarget,
+  cycleEnd,
+  cycleLine,
+  cycleStatus,
   cardioBars,
-  cardioRecordHistory,
   dietFor,
   e1rmBars,
   fiberTarget,
@@ -23,7 +29,6 @@ import {
   groupOf,
   kDays,
   liftBars,
-  liftRecordHistory,
   liftedExercises,
   macroCalories,
   macroTargets,
@@ -31,14 +36,16 @@ import {
   microDay,
   microOf,
   microTarget,
+  mondayOf,
   muscleBars,
   muscleGroupOf,
+  plannedOn,
   rangeSpan,
-  recordsIn,
   shortDayLabel,
   spanAt,
   statsOf,
   suggestTargets,
+  targetText,
   weightSeries,
   weightTrend,
   type Bucket,
@@ -47,14 +54,14 @@ import {
   type MicroKey,
   type Range,
   type RangeSpan,
-  type RecordPoint,
   type SportGroup,
 } from '@/logic';
 
 import { BarChart, ChartCaption, ChartKey, Legend, LineChart, RangeTabs, SERIES, StackedBarChart } from '../charts';
 import { Mute, Section } from '../components';
-import { Pill } from '../food/kit';
+import { LinkButton } from '../food/kit';
 import { useLibrary } from '../lifting/library';
+import { ChecklistDialog, Select } from '../Select';
 import { useTracker } from '../store';
 import { fonts, radius, space, tabular, useColors } from '../theme';
 
@@ -64,46 +71,130 @@ const DAY_WEEK_WEEK: GrainPlan = { week: 'day', month: 'week', year: 'week', all
 const DAY_WEEK_MONTH: GrainPlan = { week: 'day', month: 'week', year: 'month', all: 'month' };
 const DAY_DAY_MONTH: GrainPlan = { week: 'day', month: 'day', year: 'month', all: 'month' };
 
-/** One chart in a deck: a title and the chart for a range. */
+/** What the info button shows: your target for this graph (if it has one) and what the graph means. */
+export interface GraphInfo {
+  /** Your target, in a sentence or a few lines. Null when the graph has none. */
+  target?: string | null;
+  about: string;
+}
+
+/** One chart in a deck: a title, the chart for a range, and its info. */
 export interface Graph {
   id: string;
   title: string;
   Chart: ComponentType<{ range: Range }>;
+  /** A hook: may read your data and settings. */
+  useInfo: () => GraphInfo;
 }
 
 /**
- * A card that holds several charts for one area (calories, cardio, lifting). Arrows (or the dots) move
- * between them; the Week / Month / Year / All choice stays the same as you go.
+ * A card that holds several charts for one area (food, cardio, lifting). Arrows (or the dots) move between
+ * them; the Week / Month / Year / All choice stays the same as you go. "Choose" turns graphs on and off,
+ * and the (i) next to a title explains it and shows your target.
  */
-export function GraphDeck({ title, graphs, header }: { title: string; graphs: Graph[]; header?: ReactNode }) {
+export function GraphDeck({ deck, title, graphs: all, header }: { deck: string; title: string; graphs: Graph[]; header?: ReactNode }) {
   const c = useColors();
+  const { state, update } = useTracker();
+  const hidden = state.settings.hiddenGraphs;
+  const graphs = all.filter((g) => !hidden.includes(`${deck}:${g.id}`));
   const [i, setI] = useState(0);
-  const [range, setRange] = useState<Range>('month');
-  if (!graphs.length) return null;
+  const [range, setRange] = useState<Range>('week');
+  const [choosing, setChoosing] = useState(false);
+  const [info, setInfo] = useState(false);
+  const toggle = (id: string) =>
+    update((s) => {
+      const key = `${deck}:${id}`;
+      const h = s.settings.hiddenGraphs;
+      return { ...s, settings: { ...s.settings, hiddenGraphs: h.includes(key) ? h.filter((x) => x !== key) : [...h, key] } };
+    });
+  const chooser = (
+    <ChecklistDialog
+      visible={choosing}
+      title={`Graphs to show`}
+      options={all.map((g) => ({ value: g.id, label: g.title }))}
+      isSelected={(id) => !hidden.includes(`${deck}:${id}`)}
+      onPick={toggle}
+      onClose={() => setChoosing(false)}
+    />
+  );
+  const action = <LinkButton label="Choose" onPress={() => setChoosing(true)} />;
+  if (!graphs.length) {
+    return (
+      <Section title={title} action={action}>
+        <Mute>All of these graphs are turned off. Tap Choose to pick the ones you want.</Mute>
+        {chooser}
+      </Section>
+    );
+  }
   const n = graphs.length;
   const at = Math.min(i, n - 1);
   const g = graphs[at];
   const go = (d: number) => setI((at + d + n) % n);
   return (
-    <Section title={title} action={<Text style={{ color: c.mute, fontSize: 13, fontWeight: '700', ...tabular }}>{`${at + 1} of ${n}`}</Text>}>
+    <Section title={title} action={action}>
       <View style={st.nav}>
-        <Arrow label="‹" a11y={`Previous chart: ${graphs[(at - 1 + n) % n].title}`} onPress={() => go(-1)} />
-        <Text style={[st.gtitle, { color: c.ink }]} numberOfLines={1} accessibilityRole="header">
-          {g.title}
-        </Text>
-        <Arrow label="›" a11y={`Next chart: ${graphs[(at + 1) % n].title}`} onPress={() => go(1)} />
+        {n > 1 ? <Arrow label="‹" a11y={`Previous chart: ${graphs[(at - 1 + n) % n].title}`} onPress={() => go(-1)} /> : <View style={st.arrowGap} />}
+        <View style={st.titleWrap}>
+          <Text style={[st.gtitle, { color: c.ink }]} numberOfLines={1} accessibilityRole="header">
+            {g.title}
+          </Text>
+          <InfoButton title={g.title} onPress={() => setInfo(true)} />
+        </View>
+        {n > 1 ? <Arrow label="›" a11y={`Next chart: ${graphs[(at + 1) % n].title}`} onPress={() => go(1)} /> : <View style={st.arrowGap} />}
       </View>
-      <View style={st.dots}>
-        {graphs.map((x, j) => (
-          <Pressable key={x.id} onPress={() => setI(j)} accessibilityRole="button" accessibilityLabel={`Show ${x.title}`} hitSlop={6}>
-            <View style={[st.dot, { backgroundColor: j === at ? c.ink : c.line }]} />
-          </Pressable>
-        ))}
-      </View>
+      {n > 1 ? (
+        <View style={st.dots}>
+          {graphs.map((x, j) => (
+            <Pressable key={x.id} onPress={() => setI(j)} accessibilityRole="button" accessibilityLabel={`Show ${x.title}`} hitSlop={6}>
+              <View style={[st.dot, { backgroundColor: j === at ? c.ink : c.line }]} />
+            </Pressable>
+          ))}
+        </View>
+      ) : (
+        <View style={{ height: space.md }} />
+      )}
       {header}
       <RangeTabs value={range} onChange={setRange} />
       <g.Chart key={g.id} range={range} />
+      {info ? <InfoCard key={`info-${g.id}`} g={g} onClose={() => setInfo(false)} /> : null}
+      {chooser}
     </Section>
+  );
+}
+
+/** The (i) next to a graph's title. */
+function InfoButton({ title, onPress }: { title: string; onPress: () => void }) {
+  const c = useColors();
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={`About ${title} and your target`}
+      hitSlop={10}
+      style={({ pressed }) => [st.info, { borderColor: c.mute, opacity: pressed ? 0.6 : 1 }]}>
+      <Text style={{ color: c.mute, fontSize: 13, fontWeight: '800', fontStyle: 'italic', lineHeight: 15 }}>i</Text>
+    </Pressable>
+  );
+}
+
+/** A card over the page: your target for the graph, then what it shows and how it's worked out. */
+function InfoCard({ g, onClose }: { g: Graph; onClose: () => void }) {
+  const c = useColors();
+  const info = g.useInfo();
+  return (
+    <Modal visible transparent animationType="fade" onRequestClose={onClose}>
+      <Pressable style={st.backdrop} onPress={onClose} accessibilityLabel="Close" />
+      <View style={[st.card, { backgroundColor: c.card }]} accessibilityViewIsModal>
+        <Text style={[st.cardTitle, { color: c.ink }]}>{g.title}</Text>
+        <Text style={[st.cardHead, { color: c.mute }]}>YOUR TARGET</Text>
+        <Text style={{ color: c.ink, fontSize: 15, lineHeight: 21 }}>{info.target ?? 'This graph has no target. It shows how things change over time.'}</Text>
+        <Text style={[st.cardHead, { color: c.mute }]}>ABOUT THIS GRAPH</Text>
+        <Text style={{ color: c.ink, fontSize: 15, lineHeight: 21 }}>{info.about}</Text>
+        <Pressable onPress={onClose} accessibilityRole="button" style={({ pressed }) => [st.cardDone, { backgroundColor: c.ink, opacity: pressed ? 0.8 : 1 }]}>
+          <Text style={{ color: c.card, fontWeight: '700', fontSize: 15 }}>Got it</Text>
+        </Pressable>
+      </View>
+    </Modal>
   );
 }
 
@@ -141,15 +232,9 @@ const avgOf = (vals: (number | null)[]) => {
 const cap = (span: RangeSpan, what: string) => `${span.caption} · ${what}`;
 const byWhat = (span: RangeSpan, avg = false) => (avg ? `average per day, by ${span.grain}` : `per ${span.grain}`);
 
-/** A row of choices that scrolls sideways (sports, exercises, nutrients). */
-function Choices<T extends string>({ options, value, onChange }: { options: { id: T; label: string }[]; value: T; onChange: (v: T) => void }) {
-  return (
-    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: space.xs, paddingVertical: 2 }} style={{ marginBottom: space.sm }}>
-      {options.map((o) => (
-        <Pill key={o.id} label={o.label} selected={o.id === value} onPress={() => onChange(o.id)} style={{ paddingHorizontal: space.md, minHeight: 34, paddingVertical: 5 }} />
-      ))}
-    </ScrollView>
-  );
+/** A dropdown of choices (sports, exercises, nutrients). */
+function Choices<T extends string>({ label, options, value, onChange }: { label: string; options: { id: T; label: string }[]; value: T; onChange: (v: T) => void }) {
+  return <Select label={label} value={value} options={options.map((o) => ({ value: o.id, label: o.label }))} onChange={onChange} style={{ marginBottom: space.sm }} />;
 }
 
 // ---------- Cardio ----------
@@ -187,7 +272,6 @@ function DistanceGraph({ range }: { range: Range }) {
       <ChartCaption>{cap(span, `${swim ? 'meters' : 'miles'} ${byWhat(span)}`)}</ChartCaption>
       <BarChart values={vals} labels={labels(span)} unit={distUnit(swim)} label={`Distance, ${span.caption.toLowerCase()}`} />
       <Total>{`${swim ? fmtInt(sumOf(vals)) : fmt(Math.round(sumOf(vals) * 10) / 10)} ${distUnit(swim)} in ${fmtInt(sumOf(b.count))} ${w.many}`}</Total>
-      <Why>Total training volume: whether your distance is building or slipping.</Why>
     </>
   );
 }
@@ -215,7 +299,6 @@ function PaceGraph({ range }: { range: Range }) {
         <NoData what={`timed ${w.many}`} />
       )}
       {overall != null ? <Total>{`Average ${bike ? 'speed' : 'pace'}: ${show(overall)}`}</Total> : null}
-      <Why>{`Time divided by distance (moving time when recorded), so longer ${w.many} count more. ${bike ? 'Higher is faster.' : 'Lower is faster.'}`}</Why>
     </>
   );
 }
@@ -230,7 +313,6 @@ function FrequencyGraph({ range }: { range: Range }) {
       <ChartCaption>{cap(span, `${w.many} ${byWhat(span)}`)}</ChartCaption>
       <BarChart values={b.count} labels={labels(span)} unit={w.many} label={`Number of ${w.many}, ${span.caption.toLowerCase()}`} />
       <Total>{`${fmtInt(sumOf(b.count))} ${w.many} · ${fmt(Math.round((sumOf(b.count) / weeks) * 10) / 10)} a week`}</Total>
-      <Why>Consistency: showing up often usually comes before getting faster.</Why>
     </>
   );
 }
@@ -248,7 +330,6 @@ function AvgDistanceGraph({ range }: { range: Range }) {
       <ChartCaption>{cap(span, `average ${distUnit(swim) === 'm' ? 'meters' : 'miles'} per ${w.one}, by ${span.grain}`)}</ChartCaption>
       {pts.length ? <LineChart label={`Average distance per ${w.one}`} zero unit={distUnit(swim)} from={span.from} to={span.to} series={[{ pts, style: 'line' }, { pts, style: 'dots' }]} /> : <NoData />}
       {n ? <Total>{`${swim ? fmtInt(total * METERS_PER_MILE) : fmt(Math.round((total / n) * 10) / 10)} ${swim ? 'm total' : `mi per ${w.one} on average`}`}</Total> : null}
-      <Why>{`Endurance: whether a typical ${w.one} is getting longer, apart from how often you go.`}</Why>
     </>
   );
 }
@@ -267,7 +348,6 @@ function HeartRateGraph({ range }: { range: Range }) {
       <ChartCaption>{cap(span, `average heart rate (bpm), by ${span.grain}`)}</ChartCaption>
       {pts.length ? <LineChart label={`Average heart rate, ${span.caption.toLowerCase()}`} unit="bpm" from={span.from} to={span.to} series={[{ pts, style: 'line' }, { pts, style: 'dots' }]} /> : <NoData what={`${w.many} with heart rate`} />}
       {avg != null ? <Total>{`Average ${avg} bpm over ${inRange.length} ${inRange.length === 1 ? w.one : w.many}`}</Total> : null}
-      <Why>Averaged by duration. A lower heart rate at the same pace usually means better aerobic fitness. Add heart rate when you log, or import from a watch.</Why>
     </>
   );
 }
@@ -284,7 +364,6 @@ function TimeGraph({ range }: { range: Range }) {
       <ChartCaption>{cap(span, `${hours ? 'hours' : 'minutes'} ${byWhat(span)}`)}</ChartCaption>
       <BarChart values={vals} labels={labels(span)} unit={hours ? 'h' : 'min'} label={`Time, ${span.caption.toLowerCase()}`} />
       <Total>{`${Math.floor(mins / 60)} h ${mins % 60} min of ${w.many}`}</Total>
-      <Why>Time counts effort that distance misses, like hills and easy days.</Why>
     </>
   );
 }
@@ -300,7 +379,7 @@ function useDone() {
 function useExercises(all: boolean) {
   const { state } = useTracker();
   const list = useMemo(() => liftedExercises(state.lifting), [state.lifting]);
-  const opts = list.slice(0, 15).map((e) => ({ id: e.exId, label: e.name }));
+  const opts = list.map((e) => ({ id: e.exId, label: e.name }));
   return all ? [{ id: '*', label: 'All exercises' }, ...opts] : opts;
 }
 
@@ -315,7 +394,6 @@ function WorkoutsGraph({ range }: { range: Range }) {
       <ChartCaption>{cap(span, `workouts ${byWhat(span)}`)}</ChartCaption>
       <BarChart values={b.workouts} labels={labels(span)} unit="workouts" label={`Workouts, ${span.caption.toLowerCase()}`} />
       <Total>{`${sumOf(b.workouts)} workouts · ${fmt(Math.round((sumOf(b.workouts) / weeks) * 10) / 10)} a week`}</Total>
-      <Why>Whether you’re keeping your routine, even when strength numbers bounce around.</Why>
     </>
   );
 }
@@ -335,11 +413,10 @@ function OneRepMaxGraph({ range }: { range: Range }) {
   const ch = known.length >= 2 ? known[known.length - 1] - known[0] : null;
   return (
     <>
-      <Choices options={opts} value={id} onChange={setEx} />
+      <Choices label="Exercise" options={opts} value={id} onChange={setEx} />
       <ChartCaption>{cap(span, `best estimated one-rep max (lb), by ${span.grain === 'day' ? 'workout' : span.grain}`)}</ChartCaption>
       {pts.length ? <LineChart label="Estimated one-rep max" unit="lb" from={span.from} to={span.to} series={[{ pts, style: 'line' }, { pts, style: 'dots' }]} /> : <NoData what="sets of 12 reps or fewer" />}
       {known.length ? <Total>{`Best ${fmtInt(Math.max(...known))} lb${ch != null ? ` · ${ch >= 0 ? '+' : '−'}${fmtInt(Math.abs(ch))} lb in this range` : ''}`}</Total> : null}
-      <Why>Weight × (1 + reps ÷ 30), from sets of 12 reps or fewer. Going from 135 × 8 to 155 × 8 shows up here without testing a max.</Why>
     </>
   );
 }
@@ -358,7 +435,6 @@ function MuscleGraph({ range }: { range: Range }) {
       <StackedBarChart series={series} labels={labels(span)} unit="sets" label={`Sets per muscle group, ${span.caption.toLowerCase()}`} />
       <Legend items={series.filter((x) => x.values.some((v) => v)).map((x) => ({ label: x.label, color: x.color }))} />
       {totals.length ? <Total>{totals.map((t) => `${t.label} ${t.n}`).join(' · ')}</Total> : <NoData />}
-      <Why>Each finished set counts once, toward the exercise’s main muscle (a bench press counts for chest, not triceps too), so nothing is counted twice.</Why>
     </>
   );
 }
@@ -374,11 +450,10 @@ function RepsGraph({ range }: { range: Range }) {
   const avg = avgOf(b.reps);
   return (
     <>
-      <Choices options={opts} value={ex} onChange={setEx} />
+      <Choices label="Exercise" options={opts} value={ex} onChange={setEx} />
       <ChartCaption>{cap(span, `average reps per set, by ${span.grain === 'day' ? 'workout' : span.grain}`)}</ChartCaption>
       {pts.length ? <LineChart label="Average reps per set" zero unit="reps" from={span.from} to={span.to} series={[{ pts, style: 'line' }, { pts, style: 'dots' }]} /> : <NoData />}
       {avg != null ? <Total>{`About ${fmt(Math.round(avg * 10) / 10)} reps a set`}</Total> : null}
-      <Why>Low reps (1–5) lean toward strength, middle (6–12) toward size, high (13+) toward endurance. Read it with the weight you lifted.</Why>
     </>
   );
 }
@@ -394,7 +469,6 @@ function DurationGraph({ range }: { range: Range }) {
       <ChartCaption>{cap(span, `average minutes per workout, ${byWhat(span)}`)}</ChartCaption>
       <BarChart values={b.minutes} labels={labels(span)} unit="min" label={`Workout length, ${span.caption.toLowerCase()}`} />
       {avg != null ? <Total>{`About ${fmtInt(Math.round(avg))} min a workout`}</Total> : <NoData what="timed workouts" />}
-      <Why>From start to finish, for workouts recorded with the timer. Longer isn’t always more productive.</Why>
     </>
   );
 }
@@ -423,7 +497,6 @@ function CaloriesGraph({ range }: { range: Range }) {
       <BarChart values={vals} labels={labels(span)} unit="kcal" goal={kcal} label={`Calories eaten, ${span.caption.toLowerCase()}`} />
       {kcal ? <ChartKey items={['logged', 'goal']} /> : null}
       {avg != null ? <Total>{`Average ${fmtInt(Math.round(avg))} kcal a day${kcal ? ` · target ${fmtInt(kcal)}` : ''} (${n} days logged)`}</Total> : <NoData />}
-      <Why>Only days with food logged count toward averages.</Why>
     </>
   );
 }
@@ -474,7 +547,6 @@ function MacroGoalGraph({ range }: { range: Range }) {
       <ChartCaption>{cap(span, `% of each daily target, ${byWhat(span, span.grain !== 'day')}`)}</ChartCaption>
       {series.some((s) => s.pts.length) ? <LineChart label="Macro targets reached" zero unit="%" from={span.from} to={span.to} refs={[{ v: 100 }]} series={series} /> : <NoData />}
       <Legend items={[...lines.map((x) => ({ label: x.label, color: x.color, shape: 'line' as const })), { label: '100% of target', color: '#888888', shape: 'dash' }]} />
-      <Why>Percent of target, so protein and fat compare fairly. Carbs and fat come from your calorie target (fat 30% of calories, carbs the rest) unless your diet sets them.</Why>
     </>
   );
 }
@@ -492,7 +564,6 @@ function ProteinGraph({ range }: { range: Range }) {
       <BarChart values={vals} labels={labels(span)} unit="g" goal={target} label={`Protein, ${span.caption.toLowerCase()}`} />
       {target ? <ChartKey items={['logged', 'goal']} /> : null}
       {inRange.length ? <Total>{`Average ${fmtInt(Math.round(avgOf(vals) ?? 0))} g a day${hit != null ? ` · target met ${hit} of ${inRange.length} days` : ''}`}</Total> : <NoData />}
-      <Why>Steady protein matters most for building and keeping muscle.</Why>
     </>
   );
 }
@@ -519,7 +590,6 @@ function SourcesGraph({ range }: { range: Range }) {
       <StackedBarChart series={series} labels={labels(span)} percent label={`Calorie sources, ${span.caption.toLowerCase()}`} />
       <Legend items={series.map((x) => ({ label: x.label, color: x.color }))} />
       {all ? <Total>{`Protein ${pc(tot.p)} · carbs ${pc(tot.c)} · fat ${pc(tot.f)}`}</Total> : <NoData />}
-      <Why>4 kcal per gram of protein and carbs, 9 per gram of fat. It may not match logged calories exactly (fiber, alcohol and label rounding).</Why>
     </>
   );
 }
@@ -536,7 +606,6 @@ function FiberGraph({ range }: { range: Range }) {
       <BarChart values={vals} labels={labels(span)} unit="g" goal={target} label={`Fiber, ${span.caption.toLowerCase()}`} />
       <ChartKey items={['logged', 'goal']} />
       {avg != null ? <Total>{`Average ${fmtInt(Math.round(avg))} g a day · aim for ${target} g`}</Total> : <NoData />}
-      <Why>About 14 g per 1,000 kcal. Fiber is a good sign of overall diet quality.</Why>
     </>
   );
 }
@@ -571,7 +640,6 @@ function SugarGraph({ range }: { range: Range }) {
         <NoData />
       )}
       <Legend items={[{ label: 'Total sugar', color: SERIES.carbs, shape: 'line' }, { label: 'Added sugar', color: SERIES.fat, shape: 'line' }, { label: `Added sugar limit (${limit} g)`, color: SERIES.fat, shape: 'dash' }]} />
-      <Why>Total sugar includes fruit and milk. Added sugar is what’s put in; keep it under 10% of calories. Only packaged foods that list added sugar count toward it.</Why>
     </>
   );
 }
@@ -604,7 +672,6 @@ function MealGraph({ range }: { range: Range }) {
       <StackedBarChart series={series} labels={labels(span)} unit="kcal" label={`Calories by meal, ${span.caption.toLowerCase()}`} />
       <Legend items={series.map((x) => ({ label: x.label, color: x.color }))} />
       {inRange.length ? <Total>{avgMeal.map((m) => `${m.label} ${fmtInt(Math.round(m.v))}`).join(' · ')}</Total> : <NoData />}
-      <Why>Average calories at each meal on days you logged.</Why>
     </>
   );
 }
@@ -624,7 +691,7 @@ function MicroGraph({ range }: { range: Range }) {
   const avg = avgOf(vals);
   return (
     <>
-      <Choices options={MICRO_CHOICES.map((m) => ({ id: m.key, label: m.label }))} value={key} onChange={setKey} />
+      <Choices label="Nutrient" options={MICRO_CHOICES.map((m) => ({ id: m.key, label: m.label }))} value={key} onChange={setKey} />
       <ChartCaption>{cap(span, `${def.unit} of ${def.label.toLowerCase()} ${byWhat(span, span.grain !== 'day')}`)}</ChartCaption>
       <BarChart values={vals} labels={labels(span)} unit={def.unit} goal={target} label={`${def.label}, ${span.caption.toLowerCase()}`} />
       <ChartKey items={['logged', 'goal']} />
@@ -654,96 +721,6 @@ function Coverage({ pct }: { pct: number | null }) {
         ? 'Built-in foods and most packaged foods list this.'
         : `Counts foods that list it: ${Math.round(pct * 100)}% of your logged calories here. Quick adds and foods without it are left out, so the real amount is likely higher.`}
     </Why>
-  );
-}
-
-// ---------- Personal records ----------
-
-type RecordPick = { kind: 'lift'; id: string } | { kind: 'cardio'; sport: SportGroup; what: 'longest' | 'fastest' };
-
-function RecordsGraph({ range }: { range: Range }) {
-  const c = useColors();
-  const { state, today } = useTracker();
-  const on = state.settings.sections;
-  const lifts = useExercises(false);
-  const sports = SPORT_GROUPS.filter((g) => g.id !== 'other' && state.cardio.sessions.some((x) => groupOf(x.type) === g.id));
-  const options = [
-    ...(on.lifting ? lifts.map((l) => ({ id: `lift:${l.id}`, label: l.label })) : []),
-    ...(on.cardio
-      ? sports.flatMap((g) => [
-          { id: `cardio:${g.id}:longest`, label: `${g.label}: longest` },
-          { id: `cardio:${g.id}:fastest`, label: `${g.label}: fastest` },
-        ])
-      : []),
-  ];
-  const [pickId, setPick] = useState<string | null>(null);
-  const id = pickId ?? options[0]?.id ?? null;
-  if (!id) return <NoData what="records" />;
-  const parts = id.split(':');
-  const pick: RecordPick = parts[0] === 'lift' ? { kind: 'lift', id: parts.slice(1).join(':') } : { kind: 'cardio', sport: parts[1] as SportGroup, what: parts[2] as 'longest' | 'fastest' };
-  let span: RangeSpan;
-  let lines: { pts: RecordPoint[]; color: string; label: string }[] = [];
-  let unit = 'lb';
-  let tick: ((v: number) => string) | undefined;
-  let fmtV = (v: number) => `${fmtInt(v)} lb`;
-  if (pick.kind === 'lift') {
-    const h = liftRecordHistory(state.lifting, pick.id);
-    span = rangeSpan(range, today, h.estimated[0]?.s ?? h.actual[0]?.s);
-    lines = [
-      { pts: h.estimated, color: c.ink, label: 'Estimated one-rep max' },
-      { pts: h.actual, color: SERIES.fat, label: 'Actual single (1 rep)' },
-    ];
-  } else {
-    const xs = state.cardio.sessions.filter((x) => groupOf(x.type) === pick.sport);
-    const swim = pick.sport === 'swim';
-    const bike = pick.sport === 'bike';
-    const h = cardioRecordHistory(xs, swim ? 100 / METERS_PER_MILE : bike ? 5 : 1);
-    const pts = pick.what === 'longest' ? h.longest : h.fastest;
-    span = rangeSpan(range, today, pts[0]?.s);
-    if (pick.what === 'longest') {
-      unit = swim ? 'm' : 'mi';
-      lines = [{ pts: pts.map((p) => ({ ...p, v: swim ? Math.round(p.v * METERS_PER_MILE) : p.v })), color: c.ink, label: 'Longest' }];
-      fmtV = (v) => (swim ? `${fmtInt(v)} m` : `${fmt(v)} mi`);
-    } else if (bike) {
-      unit = 'mph';
-      lines = [{ pts: pts.map((p) => ({ ...p, v: Math.round((3600 / p.v) * 10) / 10 })), color: c.ink, label: 'Fastest average speed' }];
-      fmtV = (v) => `${fmt(v)} mph`;
-    } else {
-      unit = swim ? '/100m' : '/mi';
-      const conv = (p: number) => Math.round(swim ? p / (METERS_PER_MILE / 100) : p);
-      lines = [{ pts: pts.map((p) => ({ ...p, v: conv(p.v) })), color: c.ink, label: swim ? 'Fastest pace per 100 m' : 'Fastest pace (1 mi or more)' }];
-      tick = (v) => fmtTime(Math.round(v));
-      fmtV = (v) => `${fmtTime(v)} ${unit}`;
-    }
-  }
-  const inRange = lines.map((l) => ({ ...l, pts: recordsIn(l.pts, span.from, span.to) }));
-  const any = inRange.some((l) => l.pts.length);
-  const best = lines.map((l) => ({ label: l.label, p: l.pts[l.pts.length - 1] })).filter((x) => x.p);
-  return (
-    <>
-      <Choices options={options} value={id} onChange={setPick} />
-      <ChartCaption>{cap(span, range === 'all' ? 'every new record, by date' : 'records set in this range')}</ChartCaption>
-      {any ? (
-        <LineChart
-          label="Personal records"
-          unit={unit}
-          from={span.from}
-          to={span.to}
-          tick={tick}
-          series={inRange.flatMap((l) => [
-            { pts: l.pts, style: 'line' as const, color: l.color },
-            { pts: l.pts, style: 'dots' as const, color: l.color },
-          ])}
-        />
-      ) : (
-        <Mute style={{ marginVertical: space.lg }}>No new records in this range. Try a longer one.</Mute>
-      )}
-      {lines.length > 1 ? <Legend items={lines.map((l) => ({ label: l.label, color: l.color, shape: 'line' as const }))} /> : null}
-      {best.map((b) => (
-        <Total key={b.label}>{`${b.label}: ${fmtV(b.p!.v)}${b.p!.text ? ` (${b.p!.text})` : ''}, ${shortDayLabel(b.p!.s)}`}</Total>
-      ))}
-      <Why>{pick.kind === 'lift' ? 'Each point is a new best. Estimated maxes come from sets of 2–12 reps; real singles (1 rep) are kept separate.' : 'Each point is a new best on that date.'}</Why>
-    </>
   );
 }
 
@@ -819,43 +796,170 @@ function NoData({ two, what = 'days logged' }: { two?: boolean; what?: string })
 }
 
 
+// ---------- Targets (for the info card) ----------
+
+const NO_KCAL = 'No calorie target yet. Add your details in Settings → Your details, or start a cut, bulk or maintenance plan (Progress → Cut, bulk or maintain).';
+
+/** Your calorie, protein, carb and fat targets, as the food graphs use them. */
+function useFoodTargets() {
+  const f = useFood();
+  const { state, today } = useTracker();
+  const cy = activeCycle(state.cycle, today);
+  const carbCap = f.style === 'keto' || f.style === 'lowcarb' ? (f.limits.netCarbsMax ?? null) : null;
+  const t = macroTargets(f.kcal, f.limits.proteinMin ?? null, f.limits.fatPctMax ?? null, carbCap);
+  const plan = cy ? ` (${CYCLE_PRESETS.find((p) => p.id === cy.preset)?.name ?? CYCLE_KIND_LABEL[cy.kind]})` : '';
+  const kcalLine = f.kcal ? `Eat about ${fmtInt(f.kcal)} kcal a day${plan}.` : null;
+  const macroLine = t.protein || t.carbs || t.fat
+    ? [t.protein ? `Protein ${fmtInt(t.protein)} g` : null, t.carbs ? `Carbs ${fmtInt(t.carbs)} g` : null, t.fat ? `Fat ${fmtInt(t.fat)} g` : null].filter(Boolean).join(' · ') + ' a day.'
+    : null;
+  return { ...f, t, kcalLine, macroLine };
+}
+
+const foodInfo = (about: string, pick: (x: ReturnType<typeof useFoodTargets>) => string | null) =>
+  function useInfo(): GraphInfo {
+    const x = useFoodTargets();
+    return { target: pick(x), about };
+  };
+
+/** This week's plan for the sport the cardio graphs show. */
+function useCardioTarget(what: 'count' | 'miles' | 'both'): string {
+  const { state, today } = useTracker();
+  const sport = useContext(SportCtx);
+  const w = SPORT_WORD[sport];
+  const monday = mondayOf(today);
+  const planned = Array.from({ length: 7 }, (_, i) => plannedOn(state.cardio.plan, addDays(monday, i))).flat().filter((p) => p.sport === sport);
+  if (!planned.length) return `No ${w.one} plan this week. Pick a plan on the Cardio tab to get weekly targets.`;
+  const miles = planned.reduce((t, p) => t + p.miles, 0);
+  const dist = sport === 'swim' ? `${fmtInt(Math.round(miles * METERS_PER_MILE))} m` : `${fmt(Math.round(miles * 10) / 10)} mi`;
+  const n = `${planned.length} ${planned.length === 1 ? w.one : w.many}`;
+  return `Your plan this week: ${what === 'count' ? n : what === 'miles' ? dist : `${n}, ${dist} in all`}.`;
+}
+
+const cardioInfo = (about: (sport: SportGroup) => string, what: 'count' | 'miles' | 'both' | null) =>
+  function useInfo(): GraphInfo {
+    const sport = useContext(SportCtx);
+    // Always called, so the hooks run in the same order.
+    const plan = useCardioTarget(what ?? 'both');
+    return { target: what ? plan : null, about: about(sport) };
+  };
+
+function useLiftSchedule(): string {
+  const { state } = useTracker();
+  const n = state.lifting.schedule.filter(Boolean).length;
+  return n ? `Your schedule: ${n} ${n === 1 ? 'workout' : 'workouts'} a week.` : 'No weekly schedule yet. Pick a plan or set routines on days on the Lifting tab.';
+}
+
 // ---------- Decks ----------
 
 const FOOD_GRAPHS: Graph[] = [
-  { id: 'kcal', title: 'Calories eaten', Chart: CaloriesGraph },
-  { id: 'macros', title: 'Macros', Chart: MacroGramsGraph },
-  { id: 'macrogoal', title: 'Macro targets', Chart: MacroGoalGraph },
-  { id: 'protein', title: 'Protein', Chart: ProteinGraph },
-  { id: 'sources', title: 'Calorie sources', Chart: SourcesGraph },
-  { id: 'fiber', title: 'Fiber', Chart: FiberGraph },
-  { id: 'sugar', title: 'Sugar', Chart: SugarGraph },
-  { id: 'sodium', title: 'Sodium', Chart: SodiumGraph },
-  { id: 'meals', title: 'Meals', Chart: MealGraph },
-  { id: 'micros', title: 'Vitamins and minerals', Chart: MicroGraph },
-  { id: 'deficit', title: 'Calorie deficit', Chart: DeficitGraph },
-  { id: 'total', title: 'Total deficit', Chart: TotalDeficitGraph },
-  { id: 'weight', title: 'Weight', Chart: WeightGraph },
+  {
+    id: 'kcal', title: 'Calories eaten', Chart: CaloriesGraph,
+    useInfo: foodInfo('Calories you ate, from your food log: each bar is a day, or the average day in a week or month. Only days with food logged count, so a day you forgot to log doesn’t pull the average down. The dashed line is your target.', (x) => x.kcalLine ?? NO_KCAL),
+  },
+  {
+    id: 'macros', title: 'Macros', Chart: MacroGramsGraph,
+    useInfo: foodInfo('Grams of protein, carbs and fat you ate, stacked, on days you logged food.', (x) => x.macroLine),
+  },
+  {
+    id: 'macrogoal', title: 'Macro targets', Chart: MacroGoalGraph,
+    useInfo: foodInfo('How close you got to each macro target, as a percent, so protein, carbs and fat compare fairly. 100% is right on target. Carbs and fat come from your calorie target (fat 30% of calories, carbs the rest) unless your diet sets them.', (x) => x.macroLine ?? NO_KCAL),
+  },
+  {
+    id: 'protein', title: 'Protein', Chart: ProteinGraph,
+    useInfo: foodInfo('Grams of protein a day, against your target. Eating enough protein, steadily, matters most for building and keeping muscle, especially while cutting.', (x) => (x.limits.proteinMin ? `At least ${fmtInt(x.limits.proteinMin)} g of protein a day.` : 'No protein target yet. Add your weight in Settings → Your details.')),
+  },
+  {
+    id: 'sources', title: 'Calorie sources', Chart: SourcesGraph,
+    useInfo: foodInfo('The share of your calories from protein, carbs and fat. Protein and carbs have 4 kcal a gram and fat 9, so it may not match logged calories exactly (fiber, alcohol and label rounding).', (x) => {
+      const { protein: p, carbs: cb, fat: f } = x.t;
+      if (!x.kcal || !p || !cb || !f) return null;
+      const pc = (g: number, k: number) => `${Math.round(((g * k) / x.kcal!) * 100)}%`;
+      return `About ${pc(p, 4)} protein, ${pc(cb, 4)} carbs and ${pc(f, 9)} fat.`;
+    }),
+  },
+  {
+    id: 'fiber', title: 'Fiber', Chart: FiberGraph,
+    useInfo: foodInfo('Grams of fiber a day. Fiber helps you feel full and is a good sign of overall diet quality. The target is about 14 g per 1,000 kcal.', (x) => `At least ${fiberTarget(x.sex, x.kcal)} g of fiber a day.`),
+  },
+  {
+    id: 'sugar', title: 'Sugar', Chart: SugarGraph,
+    useInfo: foodInfo('Total sugar includes the natural sugar in fruit and milk. Added sugar is what’s put in during cooking or processing; keep it under 10% of calories. Only packaged foods that list added sugar count toward it.', (x) => `Under ${microTarget('addedSugar', null, null, x.kcal)} g of added sugar a day.`),
+  },
+  {
+    id: 'sodium', title: 'Sodium', Chart: SodiumGraph,
+    useInfo: foodInfo('Milligrams of sodium a day. Most of it comes from packaged and restaurant food rather than the salt shaker.', () => 'Under 2,300 mg of sodium a day.'),
+  },
+  {
+    id: 'meals', title: 'Meals', Chart: MealGraph,
+    useInfo: foodInfo('Average calories at breakfast, lunch, dinner and snacks on days you logged food. There’s no best split: use it to see where your calories go.', (x) => (x.kcalLine ? `${x.kcalLine} Split it across meals however suits you.` : null)),
+  },
+  {
+    id: 'micros', title: 'Vitamins and minerals', Chart: MicroGraph,
+    useInfo: foodInfo('Pick a nutrient from the list. Targets are daily reference amounts for adults (US Dietary Reference Intakes) for your sex and age. Only foods that list the nutrient count, so the real amount is often higher.', (x) =>
+      MICRO_CHOICES.map((m) => `${m.label}: ${amt(microTarget(m.key, x.sex, x.age, x.kcal))} ${m.unit}`).join('\n'),
+    ),
+  },
+  {
+    id: 'deficit', title: 'Calorie deficit', Chart: DeficitGraph,
+    useInfo: function useInfo() {
+      const { state, today } = useTracker();
+      const t = calTarget(state, today);
+      return {
+        target: t != null ? `${targetText(t)}.` : NO_KCAL,
+        about: 'Calories burned minus calories eaten each day. Green bars are a deficit (you ate less than you burned), red bars a surplus. The dashed line is your target.',
+      };
+    },
+  },
+  {
+    id: 'total', title: 'Total deficit', Chart: TotalDeficitGraph,
+    useInfo: function useInfo() {
+      const { state, today } = useTracker();
+      const cy = activeCycle(state.cycle, today);
+      const t = calTarget(state, today);
+      return {
+        target: cy ? `${cycleLine(cy)}, until ${shortDayLabel(cycleEnd(cy))}.` : t != null ? `${targetText(t)}.` : null,
+        about: 'Each day’s deficit or surplus added up over the range. About 3,500 kcal is roughly a pound of body weight, so it estimates what you’ve lost or gained.',
+      };
+    },
+  },
+  {
+    id: 'weight', title: 'Weight', Chart: WeightGraph,
+    useInfo: function useInfo() {
+      const { state, today } = useTracker();
+      const cy = activeCycle(state.cycle, today);
+      const trend = weightTrend(weightSeries(state.days, today, 60));
+      const now = trend[trend.length - 1]?.v ?? null;
+      const s = cy ? cycleStatus(cy, today, now) : null;
+      return {
+        target: cy && s ? `Expected about ${fmt(s.expectedLb)} lb by now on your ${CYCLE_KIND_LABEL[cy.kind].toLowerCase()}${s.verdict ? ` (${s.verdict.toLowerCase()})` : ''}.` : null,
+        about: 'Dots are your weigh-ins; the line is a smoothed trend, so day-to-day water and food swings don’t hide the real direction. Weigh in at the same time of day for the clearest trend.',
+      };
+    },
+  },
 ];
 
 const CARDIO_GRAPHS: Graph[] = [
-  { id: 'distance', title: 'Distance', Chart: DistanceGraph },
-  { id: 'pace', title: 'Average pace', Chart: PaceGraph },
-  { id: 'freq', title: 'How often', Chart: FrequencyGraph },
-  { id: 'avgdist', title: 'Average distance', Chart: AvgDistanceGraph },
-  { id: 'hr', title: 'Heart rate', Chart: HeartRateGraph },
-  { id: 'time', title: 'Time', Chart: TimeGraph },
+  { id: 'distance', title: 'Distance', Chart: DistanceGraph, useInfo: cardioInfo(() => 'Total distance for each day, week or month: whether your training volume is building or slipping.', 'miles') },
+  {
+    id: 'pace', title: 'Average pace', Chart: PaceGraph,
+    useInfo: cardioInfo((sport) => `Total time divided by total distance (moving time when recorded), so longer ${SPORT_WORD[sport].many} count more. ${sport === 'bike' ? 'Shown as speed: higher is faster.' : 'Lower is faster.'}`, null),
+  },
+  { id: 'freq', title: 'How often', Chart: FrequencyGraph, useInfo: cardioInfo((sport) => `How many ${SPORT_WORD[sport].many} you did. Showing up consistently usually comes before getting faster.`, 'count') },
+  { id: 'avgdist', title: 'Average distance', Chart: AvgDistanceGraph, useInfo: cardioInfo((sport) => `The distance of a typical ${SPORT_WORD[sport].one}: whether they’re getting longer, apart from how often you go.`, null) },
+  { id: 'hr', title: 'Heart rate', Chart: HeartRateGraph, useInfo: cardioInfo(() => 'Average heart rate, weighted by how long each session lasted. A lower heart rate at the same pace usually means better aerobic fitness. Add heart rate when you log, or import it from a watch.', null) },
+  { id: 'time', title: 'Time', Chart: TimeGraph, useInfo: cardioInfo(() => 'Total time moving. Time counts effort that distance misses, like hills, wind and easy days.', null) },
 ];
 
 const LIFT_GRAPHS: Graph[] = [
-  { id: 'workouts', title: 'Workouts', Chart: WorkoutsGraph },
-  { id: 'e1rm', title: 'One-rep max', Chart: OneRepMaxGraph },
-  { id: 'muscles', title: 'Sets per muscle', Chart: MuscleGraph },
-  { id: 'reps', title: 'Reps per set', Chart: RepsGraph },
-  { id: 'duration', title: 'Workout length', Chart: DurationGraph },
+  { id: 'workouts', title: 'Workouts', Chart: WorkoutsGraph, useInfo: function useInfo() { return { target: useLiftSchedule(), about: 'Finished lifting workouts: whether you’re keeping your routine, even when strength numbers bounce around.' }; } },
+  { id: 'e1rm', title: 'One-rep max', Chart: OneRepMaxGraph, useInfo: () => ({ about: 'Your estimated one-rep max for the lift you pick: weight × (1 + reps ÷ 30), from your best set of 12 reps or fewer. Going from 135 × 8 to 155 × 8 shows up here without ever testing a max. Aim for it to rise slowly over weeks.' }) },
+  { id: 'muscles', title: 'Sets per muscle', Chart: MuscleGraph, useInfo: () => ({ target: 'About 10–20 hard sets per muscle group a week builds muscle for most people.', about: 'Finished sets for each muscle group. Each set counts once, toward the exercise’s main muscle (a bench press counts for chest, not triceps too), so nothing is counted twice.' }) },
+  { id: 'reps', title: 'Reps per set', Chart: RepsGraph, useInfo: () => ({ target: '1–5 reps for strength, 6–12 for size, 13 or more for endurance.', about: 'Average reps per finished set, for all exercises or one you pick. Read it with the weight you lifted.' }) },
+  { id: 'duration', title: 'Workout length', Chart: DurationGraph, useInfo: () => ({ about: 'Minutes from start to finish, for workouts recorded with the timer. Longer isn’t always more productive: most good workouts take 45–75 minutes.' }) },
 ];
 
 export function CalorieGraphs() {
-  return <GraphDeck title="Food graphs" graphs={FOOD_GRAPHS} />;
+  return <GraphDeck deck="food" title="Food graphs" graphs={FOOD_GRAPHS} />;
 }
 
 export function CardioGraphs() {
@@ -866,29 +970,31 @@ export function CardioGraphs() {
   return (
     <SportCtx.Provider value={s}>
       <GraphDeck
+        deck="cardio"
         title="Cardio graphs"
         graphs={CARDIO_GRAPHS}
-        header={have.length > 1 ? <Choices options={have.map((g) => ({ id: g.id, label: g.label }))} value={s} onChange={setSport} /> : null}
+        header={have.length > 1 ? <Choices label="Sport" options={have.map((g) => ({ id: g.id, label: g.label }))} value={s} onChange={setSport} /> : null}
       />
     </SportCtx.Provider>
   );
 }
 
 export function LiftingGraphs() {
-  return <GraphDeck title="Lifting graphs" graphs={LIFT_GRAPHS} />;
-}
-
-const RECORD_GRAPHS: Graph[] = [{ id: 'records', title: 'Personal records', Chart: RecordsGraph }];
-
-/** Personal records for lifts and cardio. */
-export function RecordGraphs() {
-  return <GraphDeck title="Personal records" graphs={RECORD_GRAPHS} />;
+  return <GraphDeck deck="lifting" title="Lifting graphs" graphs={LIFT_GRAPHS} />;
 }
 
 const st = StyleSheet.create({
   nav: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
-  gtitle: { flex: 1, textAlign: 'center', fontFamily: fonts.semi, fontSize: 20, lineHeight: 24 },
+  titleWrap: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 },
+  gtitle: { flexShrink: 1, textAlign: 'center', fontFamily: fonts.semi, fontSize: 20, lineHeight: 24 },
+  info: { width: 20, height: 20, borderRadius: 10, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center' },
   arrow: { width: 36, height: 36, borderRadius: 18, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  arrowGap: { width: 36 },
   dots: { flexDirection: 'row', justifyContent: 'center', gap: 6, marginTop: space.sm, marginBottom: space.md },
   dot: { width: 7, height: 7, borderRadius: radius.pill },
+  backdrop: { ...StyleSheet.absoluteFill, backgroundColor: 'rgba(0,0,0,0.45)' },
+  card: { position: 'absolute', left: space.lg, right: space.lg, top: '14%', maxWidth: 440, alignSelf: 'center', borderRadius: radius.lg, padding: space.lg },
+  cardTitle: { fontFamily: fonts.semi, fontSize: 22, lineHeight: 26, marginBottom: space.xs },
+  cardHead: { fontSize: 12, fontWeight: '800', letterSpacing: 0.6, marginTop: space.md, marginBottom: 4 },
+  cardDone: { borderRadius: radius.pill, alignItems: 'center', paddingVertical: space.sm + 2, marginTop: space.lg },
 });

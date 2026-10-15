@@ -152,7 +152,7 @@ export function CardioStatsSheet({ visible, onClose, initial }: { visible: boole
 /** Distance in each day, week or month of the chosen range. */
 function DistanceChart({ g, sessions, today }: { g: G; sessions: CardioSession[]; today: string }) {
   const c = useColors();
-  const [range, setRange] = useState<Range>('month');
+  const [range, setRange] = useState<Range>('week');
   const first = sessions.length ? sessions[sessions.length - 1].date : null;
   const span = rangeSpan(range, today, first);
   const swim = g === 'swim';

@@ -27,6 +27,8 @@ export interface Settings {
   city: string;
   /** Your profile picture's web address (stored with your account), or empty. */
   photo: string;
+  /** Graphs turned off on Progress, as "deck:graph" ("food:micros"). */
+  hiddenGraphs: string[];
 }
 
 /**

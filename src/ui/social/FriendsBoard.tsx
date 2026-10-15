@@ -25,7 +25,8 @@ import { FriendsSheet } from './FriendsSheet';
 import { removeFriend } from './api';
 import { Avatar } from './Avatar';
 import { FriendProfile } from './FriendProfile';
-import { Rank, SportPills } from './PersonalBoard';
+import { Rank } from '../Medal';
+import { SportPills } from './PersonalBoard';
 import { useSocial } from './SocialProvider';
 
 function metricText(sport: BoardSport, m: BoardMetric, v: number): string {

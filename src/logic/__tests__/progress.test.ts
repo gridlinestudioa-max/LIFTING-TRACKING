@@ -118,3 +118,11 @@ describe('food bars', () => {
     expect(foods[0].n.addedSugar).toBeUndefined();
   });
 });
+
+describe('hidden graphs setting', () => {
+  it('keeps valid graph ids only, once each', () => {
+    const s = normalize({ v: 2, settings: { hiddenGraphs: ['food:micros', 'food:micros', 'cardio:hr', 'bad id', 7, 'x'.repeat(40) + ':y'] } });
+    expect(s.settings.hiddenGraphs).toEqual(['food:micros', 'cardio:hr']);
+    expect(normalize({}).settings.hiddenGraphs).toEqual([]);
+  });
+});

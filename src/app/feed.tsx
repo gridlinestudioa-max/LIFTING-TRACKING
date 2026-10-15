@@ -7,6 +7,7 @@ import { feedDay, feedItems, fmt, mondayOf, shortDayLabel, type CardioSession, t
 import { LogSheet } from '@/ui/cardio/LogSheet';
 import { RouteMap } from '@/ui/cardio/RouteMap';
 import { Header, Mute, Section } from '@/ui/components';
+import { MedalBadge, MedalList } from '@/ui/Medal';
 import { ActivityDetail } from '@/ui/feed/ActivityDetail';
 import { Button } from '@/ui/food/kit';
 import { WorkoutSheet } from '@/ui/lifting/WorkoutSheet';
@@ -33,7 +34,7 @@ export default function FeedScreen() {
   const week = useMemo(() => {
     const all = feedItems(state, today).filter((i) => i.date >= mondayOf(today));
     const miles = all.reduce((t, i) => t + (i.kind === 'cardio' && i.session.type !== 'swim' ? (i.session.miles ?? 0) : 0), 0);
-    return { cardio: all.filter((i) => i.kind === 'cardio').length, lifts: all.filter((i) => i.kind === 'lift').length, miles, prs: all.reduce((t, i) => t + i.prs.length, 0) };
+    return { cardio: all.filter((i) => i.kind === 'cardio').length, lifts: all.filter((i) => i.kind === 'lift').length, miles, prs: all.reduce((t, i) => t + i.medals.filter((m) => m.rank === 1).length, 0) };
   }, [state, today]);
 
   return (
@@ -105,7 +106,10 @@ function Post({ it, name, photo, city, today, onPress }: { it: FeedItem; name: s
           <Text style={{ color: c.mute, fontSize: 13 }}>{[feedDay(it.date, today, shortDayLabel), kind, city || null].filter(Boolean).join(' · ')}</Text>
         </View>
       </View>
-      <Text style={[st.title, { color: c.ink }]}>{it.title}</Text>
+      <View style={st.titleRow}>
+        <Text style={[st.title, { color: c.ink, flexShrink: 1 }]}>{it.title}</Text>
+        <MedalBadge medals={it.medals} />
+      </View>
       {it.note ? <Text style={{ color: c.ink, fontSize: 15, lineHeight: 21, marginTop: 2 }}>{it.note}</Text> : null}
       <View style={st.stats}>
         {it.stats.map((s) => (
@@ -116,14 +120,7 @@ function Post({ it, name, photo, city, today, onPress }: { it: FeedItem; name: s
         ))}
       </View>
       {it.kind === 'cardio' && it.session.route ? <RouteMap route={it.session.route} height={170} style={{ marginTop: space.md }} /> : null}
-      {it.prs.length ? (
-        <View style={[st.pr, { backgroundColor: c.soft }]}>
-          <Text style={{ color: '#b8860b', fontSize: 13.5, fontWeight: '800' }}>{it.prs.length === 1 ? 'Personal record' : `${it.prs.length} personal records`}</Text>
-          <Text style={{ color: c.ink, fontSize: 13.5, flex: 1 }} numberOfLines={2}>
-            {it.prs.join(', ')}
-          </Text>
-        </View>
-      ) : null}
+      <MedalList medals={it.medals} max={4} />
     </Pressable>
   );
 }
@@ -147,5 +144,5 @@ const st = StyleSheet.create({
   title: { fontFamily: fonts.semi, fontSize: 24, lineHeight: 28 },
   stats: { flexDirection: 'row', flexWrap: 'wrap', columnGap: space.xl, rowGap: space.sm, marginTop: space.md },
   stat: { fontFamily: fonts.display, fontSize: 22, lineHeight: 26, ...tabular },
-  pr: { flexDirection: 'row', alignItems: 'center', gap: space.sm, borderRadius: radius.md, paddingHorizontal: space.md, paddingVertical: space.sm, marginTop: space.md },
+  titleRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
 });
