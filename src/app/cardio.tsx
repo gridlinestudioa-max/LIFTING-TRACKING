@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
@@ -21,13 +21,15 @@ import {
   planWeeks,
   plannedOn,
   raceDay,
-  recordsSetBy,
+  cardioMedals,
+  ORDINAL,
   sessionsToward,
   shortDayLabel,
   skipKey,
   weeklyTotals,
   workoutStatus,
   type CardioSession,
+  type Medal,
   type PlannedWorkout,
   type RunStatus,
 } from '@/logic';
@@ -39,6 +41,7 @@ import { useRecorder } from '@/ui/cardio/RecordingProvider';
 import { RouteMap } from '@/ui/cardio/RouteMap';
 import { Card, Header, Mute, Section, WeekBar } from '@/ui/components';
 import { Button, LinkButton } from '@/ui/food/kit';
+import { MedalBadge } from '@/ui/Medal';
 import { StatusMark } from '@/ui/marks';
 import { useTracker } from '@/ui/store';
 import { fonts, radius, space, tabular, useColors, type Palette } from '@/ui/theme';
@@ -47,6 +50,7 @@ export default function CardioScreen() {
   const c = useColors();
   const { state, today, update } = useTracker();
   const cardio = state.cardio;
+  const medals = useMemo(() => cardioMedals(cardio, today), [cardio, today]);
   const [selected, setSelected] = useState(today);
   const [sheet, setSheet] = useState<{ n: number; open: boolean; editing: CardioSession | null }>({ n: 0, open: false, editing: null });
   const recorder = useRecorder();
@@ -108,7 +112,7 @@ export default function CardioScreen() {
             {sessions.length ? (
               <View style={{ marginTop: space.md }}>
                 {sessions.map((x, i) => (
-                  <SessionRow key={x.id} x={x} prs={recordsSetBy(cardio, x, today)} first={i === 0} onPress={() => open(x)} c={c} />
+                  <SessionRow key={x.id} x={x} medals={medals.get(x.id) ?? []} first={i === 0} onPress={() => open(x)} c={c} />
                 ))}
               </View>
             ) : !planned.length ? (
@@ -177,7 +181,7 @@ export default function CardioScreen() {
         <Section title="History">
           {history.length ? null : <Mute>No activities yet.</Mute>}
           {history.slice(0, shown).map((x, i) => (
-            <SessionRow key={x.id} x={x} prs={recordsSetBy(cardio, x, today)} first={i === 0} date onPress={() => open(x)} c={c} />
+            <SessionRow key={x.id} x={x} medals={medals.get(x.id) ?? []} first={i === 0} date onPress={() => open(x)} c={c} />
           ))}
           {history.length > shown ? (
             <View style={{ flexDirection: 'row', marginTop: space.sm }}>
@@ -216,7 +220,7 @@ function PlannedBlock({ wk, status, movedTo, onSkip, c }: { wk: PlannedWorkout; 
   );
 }
 
-function SessionRow({ x, prs, first, date, onPress, c }: { x: CardioSession; prs: string[]; first: boolean; date?: boolean; onPress: () => void; c: Palette }) {
+function SessionRow({ x, medals, first, date, onPress, c }: { x: CardioSession; medals: Medal[]; first: boolean; date?: boolean; onPress: () => void; c: Palette }) {
   const pace = x.type === 'run' || x.type === 'walk' || x.type === 'hike' ? paceText(x.miles, x.secs) : '';
   const bits = [x.miles ? distText(x.type, x.miles) : null, x.secs ? fmtTime(x.secs) : null, pace || null].filter(Boolean).join(' · ');
   return (
@@ -226,10 +230,13 @@ function SessionRow({ x, prs, first, date, onPress, c }: { x: CardioSession; prs
       accessibilityLabel={`${CARDIO_LABEL[x.type]}, ${bits}. Edit`}
       style={({ pressed }) => [st.session, !first && { borderTopWidth: 1, borderTopColor: c.line }, { opacity: pressed ? 0.6 : 1 }]}>
       <View style={{ flex: 1 }}>
-        <Text style={{ color: c.ink, fontSize: 16, fontWeight: '700' }}>{CARDIO_LABEL[x.type]}</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.sm }}>
+          <Text style={{ color: c.ink, fontSize: 16, fontWeight: '700' }}>{CARDIO_LABEL[x.type]}</Text>
+          <MedalBadge medals={medals} />
+        </View>
         <Text style={{ color: c.mute, fontSize: 14, ...tabular }}>{date ? `${shortDayLabel(x.date)} · ${bits}` : bits}</Text>
         {x.planDay && x.planDay !== x.date ? <Text style={{ color: c.mute, fontSize: 13 }}>Counts toward {shortDayLabel(x.planDay)}’s plan</Text> : null}
-        {prs.length ? <Text style={{ color: '#b8860b', fontSize: 13, fontWeight: '700', marginTop: 2 }}>{`Personal record: ${prs.join(', ')}`}</Text> : null}
+        {medals.length ? <Text style={{ color: c.mute, fontSize: 13, fontWeight: '600', marginTop: 2 }}>{medals.map((m) => `${ORDINAL[m.rank - 1]} ${m.label}`).join(' · ')}</Text> : null}
         {x.note ? <Text style={{ color: c.ink, fontSize: 14, marginTop: 2 }}>{x.note}</Text> : null}
         {x.route && !date ? <RouteMap route={x.route} height={150} style={{ marginTop: space.sm }} /> : null}
       </View>

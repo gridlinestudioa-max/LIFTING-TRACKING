@@ -103,6 +103,11 @@ function ListDialog<T>({
   );
 }
 
+/** A list of checkboxes in a dialog, with no field: for a button that opens it ("Choose"). */
+export function ChecklistDialog<T>(props: { visible: boolean; title: string; options: Option<T>[]; isSelected: (v: T) => boolean; onPick: (v: T) => void; onClose: () => void }) {
+  return <ListDialog {...props} multi />;
+}
+
 /** Pick one from a list. */
 export function Select<T extends string | number>({
   label,

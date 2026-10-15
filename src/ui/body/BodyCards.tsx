@@ -60,7 +60,7 @@ export function WeightCard() {
   const trend = useMemo(() => weightTrend(series), [series]);
   const change = weightChange(series, 28);
   const latest = series[series.length - 1];
-  const [range, setRange] = useState<Range>('month');
+  const [range, setRange] = useState<Range>('week');
   // The chart can go back as far as weights were logged.
   const allSeries = useMemo(() => weightSeries(state.days, today, 100000), [state.days, today]);
   const allTrend = useMemo(() => weightTrend(allSeries), [allSeries]);

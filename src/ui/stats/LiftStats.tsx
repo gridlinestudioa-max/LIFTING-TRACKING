@@ -3,7 +3,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { bestSets, fmt, fmtInt, liftRecords, liftSummary, rangeSpan, recentPRs, shortDayLabel, sumByBucket, type LiftRecord, type LiftingData, type Range } from '@/logic';
 
-import { BarChart, ChartCaption, LineChart, RangeTabs, Sparkline } from '../charts';
+import { BarChart, ChartCaption, LineChart, RangeTabs } from '../charts';
 import { Card, Mute, Section, StatGrid, StatTile } from '../components';
 import { Sheet } from '../food/kit';
 import { useTracker } from '../store';
@@ -52,15 +52,10 @@ export function LiftStatsSheet({ visible, onClose }: { visible: boolean; onClose
       <Section title="Your lifts">
         {records.length ? (
           <>
-            <View style={[st.row, { paddingTop: 0 }]}>
-              <Text style={[st.colHead, { color: c.mute, flex: 1 }]}>Exercise</Text>
-              <Text style={[st.colHead, { color: c.mute, width: 86, textAlign: 'right' }]}>Best set</Text>
-              <Text style={[st.colHead, { color: c.mute, width: 92, textAlign: 'right' }]}>Est. max</Text>
-            </View>
+            <Mute style={{ fontSize: 13, marginBottom: space.xs }}>Your strongest estimated one-rep max for each lift, and how far it’s come. Tap a lift for its chart.</Mute>
             {records.map((r) => (
               <LiftRow key={r.exId} r={r} L={L} today={today} />
             ))}
-            <Mute style={{ fontSize: 12.5, marginTop: space.sm }}>Est. max: the most you could lift once, worked out from your best set. Tap a lift for its chart.</Mute>
           </>
         ) : (
           <Mute>Finish a workout with weights to see your lifts here.</Mute>
@@ -73,7 +68,7 @@ export function LiftStatsSheet({ visible, onClose }: { visible: boolean; onClose
 /** Workouts in each day, week or month of the chosen range. */
 function WorkoutsChart({ L, today }: { L: LiftingData; today: string }) {
   const c = useColors();
-  const [range, setRange] = useState<Range>('month');
+  const [range, setRange] = useState<Range>('week');
   const done = L.workouts.filter((w) => w.done && w.date <= today);
   const first = done.map((w) => w.date).sort()[0];
   const span = rangeSpan(range, today, first);
@@ -88,10 +83,11 @@ function WorkoutsChart({ L, today }: { L: LiftingData; today: string }) {
   );
 }
 
+/** One lift: its best estimated max, your last time, and how much it has grown. Tap for its chart. */
 function LiftRow({ r, L, today }: { r: LiftRecord; L: LiftingData; today: string }) {
   const c = useColors();
   const u = r.unit === 'plates' ? 'pl' : 'lb';
-  const ch = Math.round(r.change);
+  const gain = Math.round(r.best.e1rm - (r.trend[0] ?? r.best.e1rm));
   const [open, setOpen] = useState(false);
   const [range, setRange] = useState<Range>('all');
   const hist = open ? bestSets(L, r.exId) : [];
@@ -103,28 +99,33 @@ function LiftRow({ r, L, today }: { r: LiftRecord; L: LiftingData; today: string
         onPress={() => setOpen(!open)}
         accessibilityRole="button"
         accessibilityState={{ expanded: open }}
-        accessibilityLabel={`${r.name}. ${open ? 'Hide' : 'Show'} chart`}
-        style={st.row}>
+        accessibilityLabel={`${r.name}. Best estimated max ${fmtInt(r.best.e1rm)} ${u}. ${open ? 'Hide' : 'Show'} chart`}
+        style={({ pressed }) => [st.row, { opacity: pressed ? 0.6 : 1 }]}>
         <View style={{ flex: 1, gap: 2 }}>
-          <Text style={{ color: c.ink, fontSize: 15, fontWeight: '600' }}>{r.name}</Text>
-          {r.trend.length >= 2 ? (
-            <View style={{ width: 80 }}>
-              <Sparkline pts={r.trend} />
-            </View>
+          <Text style={{ color: c.ink, fontSize: 16, fontWeight: '700' }} numberOfLines={1}>
+            {r.name}
+          </Text>
+          <Text style={{ color: c.mute, fontSize: 13, ...tabular }}>{`Last: ${fmt(r.last.w)} × ${r.last.reps} · ${shortDayLabel(r.last.date)}`}</Text>
+          {r.sessions >= 2 ? (
+            <Text style={{ color: gain > 0 ? c.ok : c.mute, fontSize: 13, fontWeight: '600', ...tabular }}>
+              {gain > 0 ? `▲ ${gain} ${u} over ${r.sessions} workouts` : `Same as your first of ${r.sessions} workouts`}
+            </Text>
           ) : (
-            <Mute style={{ fontSize: 12.5 }}>1 workout</Mute>
+            <Text style={{ color: c.mute, fontSize: 13 }}>1 workout so far</Text>
           )}
         </View>
-        <Text style={{ width: 86, textAlign: 'right', color: c.ink, fontSize: 15, ...tabular }}>{`${fmt(r.best.w)} × ${r.best.reps}`}</Text>
-        <View style={{ width: 92, alignItems: 'flex-end' }}>
-          <Text style={[st.max, { color: c.ink }]}>{`${fmtInt(r.last.e1rm)} ${u}`}</Text>
-          {r.sessions >= 2 ? (
-            <Text style={{ color: ch > 0 ? c.ok : ch < 0 ? c.bad : c.mute, fontSize: 12.5, ...tabular }}>{ch === 0 ? 'no change' : `${ch > 0 ? '+' : '−'}${Math.abs(ch)} ${u}`}</Text>
-          ) : null}
+        <View style={{ alignItems: 'flex-end' }}>
+          <Text style={[st.max, { color: c.ink }]}>
+            {fmtInt(r.best.e1rm)}
+            <Text style={{ fontFamily: fonts.semi, fontSize: 14, color: c.mute }}>{` ${u}`}</Text>
+          </Text>
+          <Text style={{ color: c.mute, fontSize: 12 }}>best est. max</Text>
         </View>
+        <Text style={{ color: c.mute, fontSize: 18, width: 14, textAlign: 'right' }}>{open ? '−' : '+'}</Text>
       </Pressable>
       {open ? (
         <View style={{ paddingBottom: space.md }}>
+          <Text style={{ color: c.ink, fontSize: 14, marginBottom: space.sm, ...tabular }}>{`Best set: ${fmt(r.best.w)} × ${r.best.reps} on ${shortDayLabel(r.best.date)}`}</Text>
           <RangeTabs value={range} onChange={setRange} />
           <ChartCaption>{`${span.caption} · estimated max, ${u}`}</ChartCaption>
           {pts.length >= 2 ? (
@@ -140,6 +141,5 @@ function LiftRow({ r, L, today }: { r: LiftRecord; L: LiftingData; today: string
 
 const st = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingVertical: space.sm + 2 },
-  colHead: { fontSize: 12.5, fontWeight: '600' },
-  max: { fontFamily: fonts.semi, fontSize: 18, lineHeight: 22, ...tabular },
+  max: { fontFamily: fonts.display, fontSize: 26, lineHeight: 30, ...tabular },
 });

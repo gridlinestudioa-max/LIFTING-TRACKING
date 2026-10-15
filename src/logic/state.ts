@@ -18,7 +18,7 @@ export function defaultState(): TrackerState {
   return {
     v: 2,
     updatedAt: 0,
-    settings: { name: '', sections: { ...ALL_SECTIONS }, onboarded: false, home: [...DEFAULT_HOME], share: { ...DEFAULT_SHARING }, city: '', photo: '' },
+    settings: { name: '', sections: { ...ALL_SECTIONS }, onboarded: false, home: [...DEFAULT_HOME], share: { ...DEFAULT_SHARING }, city: '', photo: '', hiddenGraphs: [] },
     goal: null,
     cycle: null,
     days: {},
@@ -54,6 +54,10 @@ export function normalize(s: unknown): TrackerState {
   if (typeof st.city === 'string') d.settings.city = st.city.trim().slice(0, 60);
   // Only a web address the app made (https), never anything else.
   if (typeof st.photo === 'string' && /^https:\/\/[^\s]{1,300}$/.test(st.photo)) d.settings.photo = st.photo;
+
+  if (Array.isArray(st.hiddenGraphs)) {
+    d.settings.hiddenGraphs = [...new Set<string>((st.hiddenGraphs as unknown[]).filter((g: unknown): g is string => typeof g === 'string' && /^[a-z0-9]{1,20}:[a-z0-9]{1,20}$/.test(g)))].slice(0, 100);
+  }
 
   if (typeof src.goal === 'number' && src.goal > 0) d.goal = src.goal;
   d.cycle = normalizeCycle(src.cycle);

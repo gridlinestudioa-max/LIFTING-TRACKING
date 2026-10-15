@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -7,6 +7,8 @@ import {
   activeWorkout,
   firstWorkout,
   liftDay,
+  liftMedals,
+  ORDINAL,
   applyTemplate,
   defaultIncrement,
   fmtW,
@@ -28,6 +30,7 @@ import { LiftWeekStrip } from '@/ui/lifting/LiftWeekStrip';
 import { useLibrary } from '@/ui/lifting/library';
 import { RoutineSheet } from '@/ui/lifting/RoutineSheet';
 import { WorkoutSheet } from '@/ui/lifting/WorkoutSheet';
+import { MedalBadge } from '@/ui/Medal';
 import { StatusMark } from '@/ui/marks';
 import { useTracker } from '@/ui/store';
 import { fonts, radius, space, tabular, useColors } from '@/ui/theme';
@@ -50,6 +53,7 @@ export default function LiftingScreen() {
   const active = activeWorkout(L);
   const todays = scheduledRoutine(L, today);
   const doneToday = L.workouts.find((w) => w.done && w.date === today);
+  const medals = useMemo(() => liftMedals(L, today), [L, today]);
   const history = L.workouts.filter((w) => w.done).sort((a, b) => b.date.localeCompare(a.date));
   const [shown, setShown] = useState(15);
 
@@ -98,7 +102,10 @@ export default function LiftingScreen() {
               accessibilityRole="button"
               style={({ pressed }) => [st.row, i > 0 && { borderTopWidth: 1, borderTopColor: c.line }, { opacity: pressed ? 0.6 : 1 }]}>
               <View style={{ flex: 1 }}>
-                <Text style={[st.big, { color: c.ink }]}>{w.done ? `${w.name} ✓` : `${w.name} (in progress)`}</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.sm }}>
+                  <Text style={[st.big, { color: c.ink, flexShrink: 1 }]}>{w.done ? `${w.name} ✓` : `${w.name} (in progress)`}</Text>
+                  <MedalBadge medals={medals.get(w.id) ?? []} />
+                </View>
                 <Mute style={{ fontSize: 13 }}>
                   {w.done
                     ? workoutLine(w)
@@ -201,8 +208,12 @@ export default function LiftingScreen() {
               accessibilityRole="button"
               style={({ pressed }) => [st.row, i > 0 && { borderTopWidth: 1, borderTopColor: c.line }, { opacity: pressed ? 0.6 : 1 }]}>
               <View style={{ flex: 1 }}>
-                <Text style={{ color: c.ink, fontSize: 16, fontWeight: '700' }}>{w.name}</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.sm }}>
+                  <Text style={{ color: c.ink, fontSize: 16, fontWeight: '700', flexShrink: 1 }}>{w.name}</Text>
+                  <MedalBadge medals={medals.get(w.id) ?? []} />
+                </View>
                 <Mute style={{ fontSize: 13 }}>{`${shortDayLabel(w.date)} · ${workoutLine(w)}`}</Mute>
+                {medals.get(w.id)?.length ? <Mute style={{ fontSize: 13, fontWeight: '600' }}>{medals.get(w.id)!.map((m) => `${ORDINAL[m.rank - 1]} ${m.label}`).join(' · ')}</Mute> : null}
               </View>
               <Text style={{ color: c.mute, fontSize: 22 }}>›</Text>
             </Pressable>

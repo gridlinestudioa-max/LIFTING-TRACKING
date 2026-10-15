@@ -101,7 +101,7 @@ export default function YouScreen() {
         </View>
 
         <FriendsArea />
-        {on.cardio ? <PersonalBoard /> : null}
+        {on.cardio || on.lifting ? <PersonalBoard /> : null}
 
         {mode !== 'account' ? <Mute style={{ textAlign: 'center', marginTop: space.sm }}>Settings, your data and sign-in are behind the gear.</Mute> : null}
       </ScrollView>

@@ -23,9 +23,10 @@ import {
 import { RouteMap } from '../cardio/RouteMap';
 import { Card, Mute } from '../components';
 import { LinkButton, Sheet } from '../food/kit';
+import { MedalBadge, MedalList } from '../Medal';
 import { Avatar } from '../social/Avatar';
 import { useTracker } from '../store';
-import { fonts, radius, space, tabular, useColors } from '../theme';
+import { fonts, space, tabular, useColors } from '../theme';
 
 /** Everything about one activity from the feed, read-only. Edit opens the usual edit screen. */
 export function ActivityDetail({ item, onClose, onEdit }: { item: FeedItem; onClose: () => void; onEdit: () => void }) {
@@ -43,19 +44,13 @@ export function ActivityDetail({ item, onClose, onEdit }: { item: FeedItem; onCl
         </View>
         <LinkButton label="Edit" onPress={onEdit} />
       </View>
-      <Text style={[st.title, { color: c.ink }]}>{item.title}</Text>
+      <View style={st.titleRow}>
+        <Text style={[st.title, { color: c.ink, flexShrink: 1 }]}>{item.title}</Text>
+        <MedalBadge medals={item.medals} />
+      </View>
       {item.note ? <Text style={{ color: c.ink, fontSize: 16, lineHeight: 22, marginTop: space.xs }}>{item.note}</Text> : null}
 
-      {item.prs.length ? (
-        <View style={[st.pr, { backgroundColor: c.soft }]}>
-          <Text style={{ color: '#b8860b', fontSize: 14, fontWeight: '800' }}>{item.prs.length === 1 ? 'Personal record' : `${item.prs.length} personal records`}</Text>
-          {item.prs.map((p) => (
-            <Text key={p} style={{ color: c.ink, fontSize: 14.5 }}>
-              {p}
-            </Text>
-          ))}
-        </View>
-      ) : null}
+      <MedalList medals={item.medals} max={20} />
 
       {item.kind === 'cardio' ? <CardioDetail x={item.session} /> : <LiftDetail w={item.workout} />}
     </Sheet>
@@ -173,7 +168,7 @@ function LiftDetail({ w }: { w: Workout }) {
 const st = StyleSheet.create({
   who: { flexDirection: 'row', alignItems: 'center', gap: space.md, marginBottom: space.md },
   title: { fontFamily: fonts.display, fontSize: 32, lineHeight: 36 },
-  pr: { borderRadius: radius.md, padding: space.md, marginTop: space.md, gap: 2 },
+  titleRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   grid: { flexDirection: 'row', flexWrap: 'wrap', rowGap: space.md },
   cell: { width: '50%', paddingRight: space.sm },
   val: { fontFamily: fonts.display, fontSize: 24, lineHeight: 28, ...tabular },
