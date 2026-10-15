@@ -1,7 +1,8 @@
-import { Pressable, Platform, Text, View } from 'react-native';
+import { useState } from 'react';
+import { Pressable, Platform, StyleSheet, Text, View } from 'react-native';
 import Svg, { Circle, Line, Polyline, Rect, Text as SvgText } from 'react-native-svg';
 
-import { MONTHS, RANGES, dayDiff, fmt, niceTicks, toD, type Range, type WeekBar as BarRow } from '@/logic';
+import { MONTHS, RANGES, bucketTitle, dayDiff, fmt, niceTicks, toD, type Range, type WeekBar as BarRow } from '@/logic';
 
 import { radius, space, useColors } from './theme';
 
@@ -10,17 +11,77 @@ const SANS = Platform.select({ web: 'system-ui, -apple-system, "Segoe UI", Robot
 
 /**
  * SVG scaled to the container width, keeping the viewBox aspect ratio. The viewBox widths below are
- * close to a phone's content width, so text sizes in the SVG are close to real pixel sizes.
+ * close to a phone's content width, so text sizes in the SVG are close to real pixel sizes. With `onTap`,
+ * a tap anywhere on the chart reports where, in viewBox units across.
  */
-function Chart({ w, h, children, label }: { w: number; h: number; children: React.ReactNode; label: string }) {
+function Chart({ w, h, children, label, onTap }: { w: number; h: number; children: React.ReactNode; label: string; onTap?: (x: number) => void }) {
+  const [width, setWidth] = useState(0);
   return (
-    <View style={{ width: '100%', aspectRatio: w / h }} accessible accessibilityLabel={label}>
+    <View style={{ width: '100%', aspectRatio: w / h }} accessible={!onTap} accessibilityLabel={label} onLayout={(e) => setWidth(e.nativeEvent.layout.width)}>
       <Svg width="100%" height="100%" viewBox={`0 0 ${w} ${h}`}>
         {children}
       </Svg>
+      {onTap ? (
+        <Pressable
+          style={StyleSheet.absoluteFill}
+          accessibilityRole="button"
+          accessibilityLabel={`${label}. Tap a bar or point to read it`}
+          onPress={(e) => {
+            // Native gives locationX; on the web a press is a click, which has offsetX instead.
+            const ne = e.nativeEvent as { locationX?: number; offsetX?: number };
+            const px = ne.locationX ?? ne.offsetX;
+            if (width && px != null && Number.isFinite(px)) onTap((px / width) * w);
+          }}
+        />
+      ) : null}
     </View>
   );
 }
+
+export interface ReadoutItem {
+  label: string;
+  value: string;
+  color?: string;
+}
+
+/** The text a chart shows above itself: a summary, or what a tapped bar or point shows. */
+export interface Readout {
+  title: string;
+  items?: ReadoutItem[];
+}
+
+function ReadoutView({ r }: { r: Readout | null }) {
+  const c = useColors();
+  if (!r) return <View style={{ height: space.sm }} />;
+  return (
+    <View style={{ marginTop: space.sm, marginBottom: space.xs, minHeight: 22 }} accessibilityLiveRegion="polite">
+      <Text style={{ color: c.ink, fontSize: 15, fontWeight: '700', fontVariant: ['tabular-nums'] }}>
+        {r.title}
+      </Text>
+      {r.items?.length ? (
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', columnGap: space.md, rowGap: 2, marginTop: 2 }}>
+          {r.items.map((it) => (
+            <View key={it.label} style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+              {it.color ? <View style={{ width: 9, height: 9, borderRadius: 2, backgroundColor: it.color }} /> : null}
+              <Text style={{ color: c.mute, fontSize: 13, fontVariant: ['tabular-nums'] }}>
+                {it.label ? `${it.label} ` : ''}
+                <Text style={{ color: c.ink, fontWeight: '700' }}>{it.value}</Text>
+              </Text>
+            </View>
+          ))}
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+/** Which bar (or date) is picked, kept only while the chart shows the same data. */
+function usePick<T>(sig: string): [T | null, (v: T | null) => void] {
+  const [p, setP] = useState<{ v: T; sig: string } | null>(null);
+  return [p && p.sig === sig ? p.v : null, (v) => setP(v == null ? null : { v, sig })];
+}
+
+const defaultFmt = (unit?: string) => (v: number) => `${fmt(Math.round(v * 10) / 10)}${unit ? ` ${unit}` : ''}`;
 
 type KeyKind = 'planned' | 'logged' | 'deficit' | 'surplus' | 'goal' | 'weight' | 'trend' | 'fitness' | 'fatigue' | 'eaten' | 'burned';
 
@@ -155,6 +216,9 @@ export function BarChart({
   label,
   signed = false,
   goal,
+  titles,
+  summary,
+  format,
 }: {
   values: (number | null)[];
   labels: string[];
@@ -162,8 +226,14 @@ export function BarChart({
   label: string;
   signed?: boolean;
   goal?: number | null;
+  /** Each bar's full name for the readout ("Tue, Oct 13"); the axis label otherwise. */
+  titles?: string[];
+  /** What the readout shows before a bar is tapped. */
+  summary?: Readout;
+  format?: (v: number) => string;
 }) {
   const c = useColors();
+  const [sel, setSel] = usePick<number>(`${labels.join('|')}#${values.join('|')}`);
   const H = 184, padT = 22, padB = 22;
   const nums = values.filter((v): v is number => v != null);
   // A target line: a deficit above zero, a surplus below. Eating what you burn is the zero line already.
@@ -174,15 +244,28 @@ export function BarChart({
   const n = values.length;
   const bw = (W - GUTTER) / Math.max(n, 1);
   const gap = Math.min(4, bw * 0.25);
+  const f = format ?? defaultFmt(unit);
+  const tap = (x: number) => {
+    const i = Math.floor((x - GUTTER) / bw);
+    if (i < 0 || i >= n) return;
+    setSel(sel === i ? null : i);
+  };
+  const read: Readout | null =
+    sel != null
+      ? { title: `${titles?.[sel] ?? labels[sel]}: ${values[sel] == null ? 'nothing logged' : f(values[sel] as number)}`, items: g != null ? [{ label: 'Target', value: f(g) }] : undefined }
+      : (summary ?? null);
   return (
-    <Chart w={W} h={H} label={label}>
+    <>
+    <ReadoutView r={read} />
+    <Chart w={W} h={H} label={label} onTap={tap}>
       <YAxis ticks={ticks} y={y} unit={unit} />
       {values.map((v, i) => {
         if (v == null || v === 0) return null;
         const x = GUTTER + i * bw + gap / 2;
         const y0 = y(0), y1 = y(v);
         const fill = signed ? (v >= 0 ? c.ok : c.bad) : c.ink;
-        return <Rect key={`b${i}`} x={x} y={Math.min(y0, y1)} width={Math.max(bw - gap, 1)} height={Math.max(Math.abs(y1 - y0), 1)} rx={Math.min(3, bw / 4)} fill={fill} opacity={signed || i === n - 1 ? 1 : 0.6} />;
+        const op = sel != null ? (sel === i ? 1 : 0.25) : signed || i === n - 1 ? 1 : 0.6;
+        return <Rect key={`b${i}`} x={x} y={Math.min(y0, y1)} width={Math.max(bw - gap, 1)} height={Math.max(Math.abs(y1 - y0), 1)} rx={Math.min(3, bw / 4)} fill={fill} opacity={op} />;
       })}
       {g != null ? <Line x1={GUTTER} x2={W} y1={y(g)} y2={y(g)} stroke={c.ink} strokeDasharray="5 3" strokeWidth={1.75} /> : null}
       {labels.map((l, i) =>
@@ -193,6 +276,7 @@ export function BarChart({
         ) : null,
       )}
     </Chart>
+    </>
   );
 }
 
@@ -228,6 +312,8 @@ export interface LineSeries {
   style: 'line' | 'dashed' | 'dots';
   /** Its own color, for charts with several lines. */
   color?: string;
+  /** Names it in the readout when a point is tapped. Series without a name aren't read out. */
+  name?: string;
 }
 
 const dateLabel = (s: string, years: boolean) => {
@@ -249,6 +335,9 @@ export function LineChart({
   to,
   tick,
   refs = [],
+  summary,
+  format,
+  titleFor,
 }: {
   series: LineSeries[];
   zero?: boolean;
@@ -260,14 +349,20 @@ export function LineChart({
   tick?: (v: number) => string;
   /** Dashed reference lines, such as a target or 100%. */
   refs?: { v: number; color?: string }[];
+  summary?: Readout;
+  /** How values read in the readout (default: the axis unit). */
+  format?: (v: number) => string;
+  /** The readout title for a point's date, such as the week it stands for. */
+  titleFor?: (s: string) => string;
 }) {
   const c = useColors();
   const all = series.flatMap((s) => s.pts);
+  const [sel, setSel] = usePick<string>(series.map((x) => x.pts.map((p) => `${p.s}:${p.v}`).join(',')).join('|'));
   if (all.length < 1 || (all.length < 2 && series.every((x) => x.style !== 'dots'))) return null;
   const H = 184, padT = 22, padB = 22, padR = 8;
-  const dates = all.map((p) => p.s).sort();
-  const first = from ?? dates[0];
-  const last = to ?? dates[dates.length - 1];
+  const sorted = all.map((p) => p.s).sort();
+  const first = from ?? sorted[0];
+  const last = to ?? sorted[sorted.length - 1];
   const span = Math.max(dayDiff(last, first), 1);
   const hi = Math.max(...all.map((p) => p.v), ...refs.map((r) => r.v));
   const lo = Math.min(...all.map((p) => p.v), ...refs.map((r) => r.v));
@@ -293,9 +388,31 @@ export function LineChart({
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   })();
   const inside = (p: { s: string }) => p.s >= first && p.s <= last;
+  const f = format ?? (tick ? (v: number) => `${tick(v)}${unit ? ` ${unit.trim()}` : ''}` : defaultFmt(unit.trim()));
+  const dates = [...new Set(all.filter(inside).map((p) => p.s))].sort();
+  const tap = (px: number) => {
+    let best: string | null = null;
+    for (const d of dates) if (best == null || Math.abs(x(d) - px) < Math.abs(x(best) - px)) best = d;
+    if (best == null) return;
+    setSel(sel === best ? null : best);
+  };
+  const named = series.filter((x) => x.name);
+  const readers = named.length ? named : series.slice(0, 1);
+  const read: Readout | null =
+    sel != null
+      ? (() => {
+          const vals = readers.map((x) => ({ x, p: x.pts.find((p) => p.s === sel) })).filter((r) => r.p);
+          const t = titleFor ? titleFor(sel) : bucketTitle({ start: sel, end: sel });
+          if (vals.length === 1 && !named.length) return { title: `${t}: ${f(vals[0].p!.v)}` };
+          return { title: t, items: vals.map((r) => ({ label: r.x.name ?? '', value: f(r.p!.v), color: r.x.color })) };
+        })()
+      : (summary ?? null);
   return (
-    <Chart w={W} h={H} label={label}>
+    <>
+    <ReadoutView r={read} />
+    <Chart w={W} h={H} label={label} onTap={tap}>
       <YAxis ticks={ticks} y={y} unit={unit.trim()} tick={tick} />
+      {sel != null ? <Line x1={x(sel)} x2={x(sel)} y1={padT - 6} y2={H - padB} stroke={c.mute} strokeWidth={1.25} strokeDasharray="3 3" /> : null}
       {refs.map((r, i) => (
         <Line key={`r${i}`} x1={GUTTER} x2={W} y1={y(r.v)} y2={y(r.v)} stroke={r.color ?? c.ink} strokeDasharray="5 3" strokeWidth={1.5} />
       ))}
@@ -329,6 +446,7 @@ export function LineChart({
         {dateLabel(last, years)}
       </SvgText>
     </Chart>
+    </>
   );
 }
 
@@ -349,6 +467,9 @@ export function StackedBarChart({
   label,
   percent = false,
   goal,
+  titles,
+  summary,
+  format,
 }: {
   series: StackSeries[];
   labels: string[];
@@ -356,8 +477,12 @@ export function StackedBarChart({
   label: string;
   percent?: boolean;
   goal?: number | null;
+  titles?: string[];
+  summary?: Readout;
+  format?: (v: number) => string;
 }) {
   const c = useColors();
+  const [sel, setSel] = usePick<number>(`${labels.join('|')}#${series.map((x) => x.values.join(',')).join('|')}`);
   const H = 184, padT = 22, padB = 22;
   const n = labels.length;
   const totals = labels.map((_, i) => series.reduce((t, sr) => t + (sr.values[i] ?? 0), 0));
@@ -367,8 +492,27 @@ export function StackedBarChart({
   const y = (v: number) => padT + ((hi - v) / (hi || 1)) * (H - padT - padB);
   const bw = (W - GUTTER) / Math.max(n, 1);
   const gap = Math.min(4, bw * 0.25);
+  const f = format ?? defaultFmt(unit);
+  const tap = (x: number) => {
+    const i = Math.floor((x - GUTTER) / bw);
+    if (i < 0 || i >= n) return;
+    setSel(sel === i ? null : i);
+  };
+  const read: Readout | null =
+    sel != null
+      ? {
+          title: `${titles?.[sel] ?? labels[sel]}${totals[sel] ? (percent ? '' : `: ${f(totals[sel])}`) : ': nothing logged'}`,
+          items: totals[sel]
+            ? series
+                .filter((sr) => (sr.values[sel] ?? 0) > 0)
+                .map((sr) => ({ label: sr.label, value: percent ? `${Math.round(((sr.values[sel] ?? 0) / totals[sel]) * 100)}%` : f(sr.values[sel] ?? 0), color: sr.color }))
+            : undefined,
+        }
+      : (summary ?? null);
   return (
-    <Chart w={W} h={H} label={label}>
+    <>
+    <ReadoutView r={read} />
+    <Chart w={W} h={H} label={label} onTap={tap}>
       <YAxis ticks={ticks} y={y} unit={percent ? '%' : unit} />
       {labels.map((_, i) => {
         const total = totals[i];
@@ -381,7 +525,7 @@ export function StackedBarChart({
           const y1 = y(base + v);
           const y0 = y(base);
           base += v;
-          return <Rect key={`b${i}-${k}`} x={GUTTER + i * bw + gap / 2} y={y1} width={Math.max(bw - gap, 1)} height={Math.max(y0 - y1, 0.5)} fill={sr.color} />;
+          return <Rect key={`b${i}-${k}`} x={GUTTER + i * bw + gap / 2} y={y1} width={Math.max(bw - gap, 1)} height={Math.max(y0 - y1, 0.5)} fill={sr.color} opacity={sel != null && sel !== i ? 0.25 : 1} />;
         });
       })}
       {goal != null && goal > 0 && !percent ? <Line x1={GUTTER} x2={W} y1={y(goal)} y2={y(goal)} stroke={c.ink} strokeDasharray="5 3" strokeWidth={1.75} /> : null}
@@ -393,6 +537,7 @@ export function StackedBarChart({
         ) : null,
       )}
     </Chart>
+    </>
   );
 }
 

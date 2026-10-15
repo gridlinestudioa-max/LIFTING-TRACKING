@@ -43,6 +43,15 @@ function addMonths(s: string, n: number): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`;
 }
 
+/** A bucket written out in full: "Tue, Oct 13", "Oct 5 – 11", "Oct 26 – Nov 1", "October 2026". */
+export function bucketTitle(b: Pick<Bucket, 'start' | 'end'>): string {
+  const a = toD(b.start);
+  const z = toD(b.end);
+  if (b.start === b.end) return `${DAY_NAMES[(a.getDay() + 6) % 7]}, ${mon(b.start)} ${a.getDate()}`;
+  if (a.getDate() === 1 && b.end.slice(0, 7) === b.start.slice(0, 7) && addDays(b.end, 1).slice(8) === '01') return `${MONTHS[a.getMonth()]} ${a.getFullYear()}`;
+  return b.start.slice(0, 7) === b.end.slice(0, 7) ? `${mon(b.start)} ${a.getDate()} – ${z.getDate()}` : `${mon(b.start)} ${a.getDate()} – ${mon(b.end)} ${z.getDate()}`;
+}
+
 function dayBuckets(from: string, to: string, label: (s: string) => string): Bucket[] {
   const out: Bucket[] = [];
   for (let s = from; s <= to; s = addDays(s, 1)) out.push({ start: s, end: s, label: label(s) });

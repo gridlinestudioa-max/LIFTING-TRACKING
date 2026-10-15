@@ -1,4 +1,4 @@
-import { memo, useMemo, useState } from 'react';
+import { memo, useCallback, useMemo, useState } from 'react';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import {
@@ -9,6 +9,7 @@ import {
   SPORT_LABEL,
   dayDiff,
   calTarget,
+  kDays,
   dayLog,
   dayProgress,
   weekdayIndex,
@@ -63,6 +64,9 @@ export function HomeCalendar() {
   const [open, setOpen] = useState<string | null>(today);
   const [keyOpen, setKeyOpen] = useState(false);
   const since = useMemo(() => firstWorkout(state), [state]);
+  // The first day with calories logged: food counts toward a day's result from then on.
+  const foodSince = useMemo(() => (state.settings.sections.food ? (kDays(state)[0]?.s ?? null) : null), [state]);
+  const food = useCallback((s: string) => (state.settings.sections.food ? { target: calTarget(state, s), since: foodSince } : null), [state, foodSince]);
 
   const cells = useMemo(() => {
     const out: ({ d: DayLog; p: DayProgress } | null)[] = [];
@@ -70,17 +74,17 @@ export function HomeCalendar() {
     for (let n = 1; n <= daysInMonth(view.y, view.m); n++) {
       const s = `${view.y}-${pad(view.m + 1)}-${pad(n)}`;
       const d = dayLog(state, s, today, since);
-      out.push({ d, p: dayProgress(d, today, calTarget(state, s)) });
+      out.push({ d, p: dayProgress(d, today, food(s)) });
     }
     while (out.length % 7) out.push(null);
     return out;
-  }, [state, view, today, since]);
+  }, [state, view, today, since, food]);
   const rows: ({ d: DayLog; p: DayProgress } | null)[][] = [];
   for (let i = 0; i < cells.length; i += 7) rows.push(cells.slice(i, i + 7));
   const todayCell = useMemo(() => {
     const d = dayLog(state, today, today, since);
-    return dayProgress(d, today, calTarget(state, today));
-  }, [state, today, since]);
+    return dayProgress(d, today, food(today));
+  }, [state, today, since, food]);
 
   const shift = (n: number) =>
     setView(({ y, m }) => {
@@ -146,7 +150,7 @@ export function HomeCalendar() {
         <Pressable style={st.backdrop} onPress={() => setKeyOpen(false)} accessibilityLabel="Close the key" />
         <View style={[st.keyCard, { backgroundColor: c.card }]} accessibilityViewIsModal>
           <Text style={[st.keyTitle, { color: c.ink }]}>What the calendar shows</Text>
-          <KeyRow icon={<KeyDisc r="all" />} title="All done" text="Every workout planned that day was done, and you hit your calorie target." />
+          <KeyRow icon={<KeyDisc r="all" />} title="All done" text="Every workout planned was done, and your calories were logged and on target." />
           <KeyRow icon={<KeyDisc r="some" />} title="Some done" text="Part of the day’s plan was done." />
           <KeyRow icon={<KeyDisc r="missed" />} title="Missed" text="Something was planned and none of it was done." />
           <KeyRow icon={<KeyDisc r="planned" />} title="To do" text="Planned for today or a day ahead." />
