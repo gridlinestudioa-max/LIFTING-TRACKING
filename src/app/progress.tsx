@@ -9,7 +9,7 @@ import { ReportSheet } from '@/ui/report/ReportSheet';
 import { Header, Mute, Section, StatGrid, StatTile } from '@/ui/components';
 import { CardioStatsSheet, paceFor } from '@/ui/stats/CardioStats';
 import { LiftStatsSheet } from '@/ui/stats/LiftStats';
-import { CalorieGraphs, CardioGraphs, LiftingGraphs } from '@/ui/stats/graphs';
+import { CalorieGraphs, CardioGraphs, LiftingGraphs, RecordGraphs } from '@/ui/stats/graphs';
 import { useTracker } from '@/ui/store';
 import { fonts, space, tabular, useColors } from '@/ui/theme';
 
@@ -44,6 +44,7 @@ export default function ProgressScreen() {
         {on.food ? <CalorieGraphs /> : null}
         {on.cardio ? <CardioGraphs /> : null}
         {on.lifting ? <LiftingGraphs /> : null}
+        {on.lifting || on.cardio ? <RecordGraphs /> : null}
 
         <Section title="Download a report">
           <Mute>A PDF of your calories, cardio, lifting and body log, with charts and everything you did. Pick the period, then choose which one.</Mute>

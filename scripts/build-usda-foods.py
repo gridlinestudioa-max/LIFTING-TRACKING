@@ -12,12 +12,14 @@ Usage:
   python3 scripts/build-usda-foods.py <surveyDownload.json> <sr_legacy.json> [out.json]
 
 Output: {"v": <version>, "foods": [record, ...]} where each record is a compact array:
-  [id, name, src, kcal, protein, carbs, fat, fiber, sugar, tags, portions]
+  [id, name, src, kcal, protein, carbs, fat, fiber, sugar, tags, portions, micros]
     id       "u<fdcId>"
     src      0 = FNDDS, 1 = SR Legacy
     nutrients per 100 g
     tags     bitmask, same order as FOOD_TAGS in src/logic/nutrition.ts
     portions [[label, grams], ...]; the first is the default serving
+    micros   [sodium mg, added sugar g, potassium mg, calcium mg, iron mg, magnesium mg, vitamin C mg,
+              vitamin D µg, vitamin B12 µg] per 100 g, null where USDA doesn't list it
 Food-group tags (meat, dairy, ...) are inferred from USDA categories, ingredient lists and names,
 so diets like vegan or paleo can check foods. They're a best guess, not a guarantee.
 """
@@ -29,6 +31,10 @@ TAGS = ['meat', 'fish', 'dairy', 'egg', 'grain', 'legume', 'sugar', 'alcohol']
 BIT = {t: 1 << i for i, t in enumerate(TAGS)}
 
 NUT = {1008: 'kcal', 1003: 'protein', 1005: 'carbs', 1004: 'fat', 1079: 'fiber', 2000: 'sugar'}
+# Vitamins, minerals and added sugar, in the order of the record's last field. Same keys and units as
+# MICROS in src/logic/micros.ts. Missing values are null (not every food lists every nutrient).
+MICRO = [(1093, 'sodium'), (1235, 'addedSugar'), (1092, 'potassium'), (1087, 'calcium'), (1089, 'iron'),
+         (1090, 'magnesium'), (1162, 'vitC'), (1114, 'vitD'), (1178, 'b12')]
 
 SR_CATEGORY_TAGS = {
     'Beef Products': {'meat'},
@@ -158,6 +164,15 @@ def nutrients(food):
     return v
 
 
+def micros(food):
+    got = {}
+    for n in food['foodNutrients']:
+        nid = n.get('nutrient', {}).get('id')
+        if n.get('amount') is not None:
+            got[nid] = float(n['amount'])
+    return [num(got[i], 2) if i in got else None for i, _ in MICRO]
+
+
 def num(x, d=1):
     r = round(x, d)
     return int(r) if r == int(r) else r
@@ -268,7 +283,7 @@ def main(survey_path, sr_path, out_path):
             continue
         portions = dedupe(fndds_portions(f))
         records.append(['u%d' % f['fdcId'], f['description'], 0, num(n['kcal'], 0), num(n['protein']), num(n['carbs']),
-                        num(n['fat']), num(n['fiber']), num(n['sugar']), mask(fndds_tags(f)), portions])
+                        num(n['fat']), num(n['fiber']), num(n['sugar']), mask(fndds_tags(f)), portions, micros(f)])
     for f in sr:
         if f['foodCategory']['description'] in SR_SKIP_CATEGORIES:
             continue
@@ -277,12 +292,13 @@ def main(survey_path, sr_path, out_path):
             continue
         portions = dedupe(sr_portions(f))
         records.append(['u%d' % f['fdcId'], f['description'], 1, num(n['kcal'], 0), num(n['protein']), num(n['carbs']),
-                        num(n['fat']), num(n['fiber']), num(n['sugar']), mask(sr_tag_cache[f['ndbNumber']]), portions])
+                        num(n['fat']), num(n['fiber']), num(n['sugar']), mask(sr_tag_cache[f['ndbNumber']]), portions, micros(f)])
 
     out = {
-        'v': 1,
+        'v': 2,
         'source': 'USDA FoodData Central: FNDDS 2021-2023 (published 2024-10-31) and SR Legacy (2018-04). Public domain.',
-        'fields': ['id', 'name', 'src', 'kcal', 'protein', 'carbs', 'fat', 'fiber', 'sugar', 'tags', 'portions'],
+        'fields': ['id', 'name', 'src', 'kcal', 'protein', 'carbs', 'fat', 'fiber', 'sugar', 'tags', 'portions', 'micros'],
+        'micros': [k for _, k in MICRO],
         'tags': TAGS,
         'foods': records,
     }

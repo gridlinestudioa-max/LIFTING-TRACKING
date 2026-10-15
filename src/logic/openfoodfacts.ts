@@ -2,6 +2,7 @@
 // Data is © Open Food Facts contributors, under the Open Database License (ODbL); the app shows that credit.
 // The search API allows about 10 searches a minute per user, so the app only searches when asked.
 
+import { MICROS } from './micros';
 import { foodWithPortions, type Food, type FoodTag, type Nutrients, type Portion } from './nutrition';
 
 const BASE = 'https://world.openfoodfacts.org';
@@ -101,6 +102,12 @@ export function foodFromOff(p: OffProduct): Food | null {
     fiber,
     sugar: Math.min(g('sugars'), carbs),
   };
+  // Sodium, vitamins and minerals, when the label lists them.
+  for (const m of MICROS) {
+    if (!m.off) continue;
+    const raw = numOf(nm[`${m.off[0]}_100g`]);
+    if (raw != null && raw >= 0) per100[m.key] = Math.round(raw * m.off[1] * 1000) / 1000;
+  }
 
   const portions: Portion[] = [];
   const sq = numOf(p.serving_quantity);

@@ -32,3 +32,5 @@ export * from './sync';
 export * from './report';
 export * from './feed';
 export * from './cycle';
+export * from './micros';
+export * from './progress';

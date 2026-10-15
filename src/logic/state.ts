@@ -1,6 +1,7 @@
 import { cleanSleep, cleanSteps, cleanWater, cleanWeight } from './body';
 import { EMPTY_CARDIO, normalizeCardio } from './cardio';
 import { normalizeCycle } from './cycle';
+import { MICRO_KEYS } from './micros';
 import { DEFAULT_DIET, normalizeDiet } from './diet';
 import { DEFAULT_HOME, normalizeHome } from './home';
 import { DEFAULT_SHARING, normalizeSharing } from './social';
@@ -147,6 +148,7 @@ function nutrients(n: any): Nutrients | null {
   const out: Nutrients = { kcal, protein: v(n.protein) ?? 0, carbs: v(n.carbs) ?? 0, fat: v(n.fat) ?? 0 };
   if (v(n.fiber) != null) out.fiber = v(n.fiber)!;
   if (v(n.sugar) != null) out.sugar = v(n.sugar)!;
+  for (const k of MICRO_KEYS) if (v(n[k]) != null) out[k] = v(n[k])!;
   return out;
 }
 

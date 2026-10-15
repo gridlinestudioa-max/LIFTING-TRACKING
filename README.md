@@ -8,7 +8,7 @@ A phone app (and website) for tracking **food**, **cardio** and **lifting**. Peo
 - **Cut, bulk or maintain:** plans that set daily calories and protein from what you burn (gentle, standard and mini cuts; maintain and diet break; lean bulk and bulk), with safety limits and a check on whether your weight trend is on track.
 - **Body log:** weight (with a smoothed weekly trend), water, sleep and steps, entered by hand. All of them are optional cards on the Home tab.
 - **Your data:** download everything as JSON, or activities, food and the body log as CSV; see in plain words where data lives; delete the account and everything stored with it. See [`docs/FEATURE-PARITY.md`](docs/FEATURE-PARITY.md) for how this compares with Fitbit and Strava and what's still missing.
-- **Progress:** calories, cardio and lifting at a glance, then swipe-through graphs for each (deficit, eaten vs burned, protein, weight; distance, time, run pace; workouts, volume, sets and your top lifts), each by week, month, year or all time.
+- **Progress:** calories, cardio and lifting at a glance, then graph decks you arrow through, each by week, month, year or all time with bar sizes that fit the range. Cardio (per sport): distance, average pace, how often, average distance, heart rate, time. Lifting: workouts, estimated one-rep max, sets per muscle group, reps per set, workout length. Food: calories eaten, macros, macro targets, protein, calorie sources, fiber, sugar, sodium, meals, vitamins and minerals, deficit and weight. Personal records for lifts and cardio. Methods are in `src/logic/progress.ts`.
 - **Feed:** every finished run, ride, swim and lifting workout, newest first, with stats, the route map and any personal records. Tap one for everything about it: all stats, splits, every set. It's the center tab; Food, Cardio and Lifting share one **Track** tab that opens a menu to pick one.
 - **Profile and friends:** a profile picture, the city you represent, and a username friends can search for. Friends can also be found by connecting contacts (people who added their phone number) or by number. Friends see what you choose to share (cardio, lifting, food) and a leaderboard.
 - **Reports:** download a PDF report of any day, week, month or year from the Progress tab.
@@ -33,7 +33,7 @@ Data saved by the first version of the app (key `mm_tracker_v1`) is brought forw
 | `src/logic/plans.ts`, `cardio.ts` | The cardio plans (weekly layouts and distances), and sessions, planned workouts, statuses and stats. |
 | `src/logic/lifting.ts`, `exercises.ts`, `templates.ts` | Routines, schedule, workouts, double progression; the exercise library; lifting plans (splits × days a week). |
 | `src/logic/nutrition.ts`, `diet.ts`, `profile.ts`, `calories.ts` | Food log and totals, diets and on-track checks, body stats and suggested targets, calories in/out. |
-| `src/logic/usda.ts`, `openfoodfacts.ts` | The built-in USDA food list, and online search on Open Food Facts. |
+| `src/logic/usda.ts`, `openfoodfacts.ts`, `micros.ts` | The built-in USDA food list (with sodium, minerals and vitamins), online search on Open Food Facts, and daily reference amounts. |
 | `src/logic/body.ts`, `cycle.ts`, `portability.ts` | The body log (weight trend, water, sleep, steps); cut, bulk and maintenance plans; export files and GPX/TCX import. |
 | `src/logic/sync.ts` | Which copy wins when the device and the account are compared. |
 | `src/logic/data/` | Generated data files: `usda-foods.json`, `exercises.json` (loaded only when needed). |

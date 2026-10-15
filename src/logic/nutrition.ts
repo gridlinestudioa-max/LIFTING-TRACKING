@@ -1,6 +1,7 @@
 // Foods, the food log, and nutrition totals. Pure logic, no React.
 
 import { addDays } from './dates';
+import { scaleMicros, type MicroKey } from './micros';
 
 /** Food groups a diet can rule out. Kept on each food so diets like vegan or paleo can read them. */
 export type FoodTag = 'meat' | 'fish' | 'dairy' | 'egg' | 'grain' | 'legume' | 'sugar' | 'alcohol';
@@ -22,7 +23,7 @@ export const TAG_LABEL: Record<FoodTag, string> = Object.fromEntries(FOOD_TAGS.m
 >;
 
 /** Nutrition for one serving. Grams except kcal. */
-export interface Nutrients {
+export interface Nutrients extends Partial<Record<MicroKey, number>> {
   kcal: number;
   protein: number;
   carbs: number;
@@ -305,6 +306,7 @@ export function scaleNutrients(n: Nutrients, f: number): Nutrients {
   const out: Nutrients = { kcal: r(n.kcal), protein: r(n.protein), carbs: r(n.carbs), fat: r(n.fat) };
   if (n.fiber != null) out.fiber = r(n.fiber);
   if (n.sugar != null) out.sugar = r(n.sugar);
+  scaleMicros(n, f, out);
   return out;
 }
 
