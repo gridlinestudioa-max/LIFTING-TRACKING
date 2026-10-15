@@ -29,3 +29,5 @@ export * from './exercises';
 export * from './migrate';
 export * from './templates';
 export * from './sync';
+export * from './report';
+export * from './feed';

@@ -1,13 +1,13 @@
-// Saving a text file for the person to keep, and reading one they pick. Web version; the phone version is files.ts.
+// Saving a file (text, or bytes such as a PDF) for the person to keep, and reading one they pick. Web version; the phone version is files.ts.
 
 import { MAX_PICK_BYTES, type PickResult } from './files.types';
 
 export type { PickResult, PickedText } from './files.types';
 
 /** Downloads a file in the browser. Returns a message if it didn't work, else null. */
-export async function saveText(name: string, text: string, mime: string): Promise<string | null> {
+export async function saveText(name: string, text: string | Uint8Array, mime: string): Promise<string | null> {
   try {
-    const url = URL.createObjectURL(new Blob([text], { type: `${mime};charset=utf-8` }));
+    const url = URL.createObjectURL(new Blob([text as BlobPart], { type: typeof text === 'string' ? `${mime};charset=utf-8` : mime }));
     const a = document.createElement('a');
     a.href = url;
     a.download = name;

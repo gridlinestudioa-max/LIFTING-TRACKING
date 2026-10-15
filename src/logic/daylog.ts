@@ -70,7 +70,8 @@ function cardioDay(state: TrackerState, s: string, today: string): DayCardio {
   return { planned, sessions, mark, label };
 }
 
-function liftDay(state: TrackerState, s: string, today: string, since: string | null): DayLift {
+/** Lifting on one day: the routine scheduled, the workout logged, and whether it was done. */
+export function liftDay(state: TrackerState, s: string, today: string, since: string | null): DayLift {
   const l = state.lifting;
   const routine = scheduledRoutine(l, s);
   const workout = l.workouts.find((w) => w.date === s && w.done) ?? l.workouts.find((w) => w.date === s) ?? null;

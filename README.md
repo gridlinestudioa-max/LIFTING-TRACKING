@@ -7,7 +7,12 @@ A phone app (and website) for tracking **food**, **cardio** and **lifting**. Peo
 - **Cardio extras:** effort scores and a fitness and fatigue trend (our own free estimate, in the spirit of Strava's paid fitness graph), importing GPX and TCX files from a watch or another app, and exporting any recorded route as GPX.
 - **Body log:** weight (with a smoothed weekly trend), water, sleep and steps, entered by hand. All of them are optional cards on the Home tab.
 - **Your data:** download everything as JSON, or activities, food and the body log as CSV; see in plain words where data lives; delete the account and everything stored with it. See [`docs/FEATURE-PARITY.md`](docs/FEATURE-PARITY.md) for how this compares with Fitbit and Strava and what's still missing.
+- **Progress:** calories, cardio and lifting at a glance, then swipe-through graphs for each (deficit, eaten vs burned, protein, weight; distance, time, run pace, effort, fitness and fatigue; workouts, volume, sets and your top lifts), each by week, month, year or all time.
+- **Feed:** every finished run, ride, swim and lifting workout, newest first, with stats, the route map and any personal records. It's the center tab; Food, Cardio and Lifting share one **Track** tab that opens a menu to pick one.
+- **Reports:** download a PDF report of any day, week, month or year from the Progress tab.
 - **Lifting:** plans for 3 to 7 days a week (push/pull/legs, upper/lower, full body, body part split, or custom), built from a library of 700+ exercises, or an unplanned workout any day. Each exercise has sets × a rep range; the app raises the weight when you hit the top of the range on every set (double progression).
+
+Ideas for later are in [`docs/FUTURE-FEATURES.md`](docs/FUTURE-FEATURES.md).
 
 Built with Expo (React Native) + TypeScript. The original 12-week prototype is in [`docs/`](docs/).
 
