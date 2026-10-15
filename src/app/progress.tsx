@@ -2,11 +2,12 @@ import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { MONTHS, avgByBucket, byWeek, calorieSummary, cardioReport, fmt, fmtInt, kDays, liftSummary, rangeSpan, sgn, toD, type Range } from '@/logic';
-import { BarChart, ChartCaption, ChartKey, LineChart, RangeTabs } from '@/ui/charts';
+import { MONTHS, byWeek, calorieSummary, cardioReport, fmt, fmtInt, liftSummary, sgn, toD } from '@/logic';
+import { ReportSheet } from '@/ui/report/ReportSheet';
 import { Header, Mute, Section, StatGrid, StatTile } from '@/ui/components';
 import { CardioStatsSheet, paceFor } from '@/ui/stats/CardioStats';
 import { LiftStatsSheet } from '@/ui/stats/LiftStats';
+import { CalorieGraphs, CardioGraphs, LiftingGraphs } from '@/ui/stats/graphs';
 import { useTracker } from '@/ui/store';
 import { fonts, space, tabular, useColors } from '@/ui/theme';
 
@@ -19,15 +20,31 @@ export default function ProgressScreen() {
   const c = useColors();
   const { state } = useTracker();
   const on = state.settings.sections;
+  const [exporting, setExporting] = useState(false);
 
   return (
     <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: c.bg }}>
       <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 48 }}>
-        <Header title="Progress" />
-        {on.lifting ? <LiftingSection /> : null}
-        {on.cardio ? <CardioSection /> : null}
+        <Header
+          title="Progress"
+          right={
+            <Pressable onPress={() => setExporting(true)} accessibilityRole="button" accessibilityLabel="Export a PDF summary" hitSlop={8} style={({ pressed }) => [st.export, { borderColor: c.line, backgroundColor: pressed ? c.soft : c.card }]}>
+              <Text style={{ color: c.ink, fontSize: 14, fontWeight: '700' }}>Export</Text>
+            </Pressable>
+          }
+        />
         {on.food ? <CaloriesSection /> : null}
+        {on.cardio ? <CardioSection /> : null}
+        {on.lifting ? <LiftingSection /> : null}
+
+        {on.food || on.cardio || on.lifting ? <Text style={[st.h2, { color: c.ink }]}>Graphs</Text> : null}
+        {on.food ? <CalorieGraphs /> : null}
+        {on.cardio ? <CardioGraphs /> : null}
+        {on.lifting ? <LiftingGraphs /> : null}
+
+        {on.food ? <WeekTable /> : null}
       </ScrollView>
+      {exporting ? <ReportSheet visible onClose={() => setExporting(false)} /> : null}
     </SafeAreaView>
   );
 }
@@ -101,93 +118,51 @@ function CaloriesSection() {
   const sum = calorieSummary(state);
   const n = sum.days;
   const col = (v: number) => (v >= 0 ? c.ok : c.bad);
-  const weeks = byWeek(state);
-
   return (
-    <>
-      <Section title="Calories" action={goal ? <Text style={{ color: c.mute, fontSize: 13 }}>{`Goal ${fmtInt(goal)}/day`}</Text> : undefined}>
-        <StatGrid>
-          <StatTile value={n ? sgn(sum.avg) : '–'} color={n ? col(sum.avg) : undefined} label="Avg daily deficit" />
-          <StatTile value={n ? sgn(sum.total) : '–'} color={n ? col(sum.total) : undefined} label="Total deficit" />
-          <StatTile value={String(n)} label="Days logged" />
-          <StatTile value={String(sum.hit)} sub={`/${n}`} label={goal ? 'Days at goal' : 'Days in a deficit'} />
-        </StatGrid>
-        {!n ? <Mute>Add calories in and burned on the Food tab.</Mute> : null}
-      </Section>
-
-      {n ? <DeficitCharts /> : null}
-
-      {weeks.length ? (
-        <Section title="By week">
-          <View style={[st.krow, { borderBottomColor: c.line }]}>
-            {['Week of', 'Days', 'Avg in', 'Avg out', 'Deficit'].map((h, i) => (
-              <Text key={h} style={[st.kcell, i === 0 && st.kfirst, { color: c.mute, fontSize: 12.5, fontWeight: '600' }]}>
-                {h}
-              </Text>
-            ))}
-          </View>
-          {weeks.map((w, i) => (
-            <View key={w.start} style={[st.krow, { borderBottomColor: c.line }, i === weeks.length - 1 && { borderBottomWidth: 0 }]}>
-              <Text style={[st.kcell, st.kfirst, { color: c.ink, fontWeight: '700' }]}>{weekLabel(w.start)}</Text>
-              <Text style={[st.kcell, { color: c.ink }]}>{w.days}/7</Text>
-              <Text style={[st.kcell, { color: c.ink }]}>{fmtInt(w.avgIn)}</Text>
-              <Text style={[st.kcell, { color: c.ink }]}>{fmtInt(w.avgOut)}</Text>
-              <Text style={[st.kcell, { color: col(w.avgNet), fontWeight: '700' }]}>{sgn(w.avgNet)}</Text>
-            </View>
-          ))}
-        </Section>
-      ) : null}
-    </>
+    <Section title="Calories" action={goal ? <Text style={{ color: c.mute, fontSize: 13 }}>{`Goal ${fmtInt(goal)}/day`}</Text> : undefined}>
+      <StatGrid>
+        <StatTile value={n ? sgn(sum.avg) : '–'} color={n ? col(sum.avg) : undefined} label="Avg daily deficit" />
+        <StatTile value={n ? sgn(sum.total) : '–'} color={n ? col(sum.total) : undefined} label="Total deficit" />
+        <StatTile value={String(n)} label="Days logged" />
+        <StatTile value={String(sum.hit)} sub={`/${n}`} label={goal ? 'Days at goal' : 'Days in a deficit'} />
+      </StatGrid>
+      {!n ? <Mute>Add calories in and burned on the Food tab.</Mute> : null}
+    </Section>
   );
 }
 
-/** Deficit by day (or averaged by week or month) and the running total, for the chosen range. */
-function DeficitCharts() {
-  const { state, today } = useTracker();
-  const [range, setRange] = useState<Range>('month');
-  const [range2, setRange2] = useState<Range>('month');
-  const ds = kDays(state);
-  const first = ds[0]?.s;
-  const span = rangeSpan(range, today, first);
-  const vals = span.grain === 'day'
-    ? span.buckets.map((b) => ds.find((d) => d.s === b.start)?.net ?? null)
-    : avgByBucket(ds, (d) => d.s, (d) => d.net, span.buckets);
-  const span2 = rangeSpan(range2, today, first);
-  const cum = ds
-    .filter((d) => d.s >= span2.from && d.s <= today)
-    .reduce<{ s: string; v: number }[]>((acc, d) => [...acc, { s: d.s, v: (acc[acc.length - 1]?.v ?? 0) + d.net }], []);
+/** Calories averaged by week, newest first. */
+function WeekTable() {
+  const c = useColors();
+  const { state } = useTracker();
+  const weeks = byWeek(state);
+  const col = (v: number) => (v >= 0 ? c.ok : c.bad);
+  if (!weeks.length) return null;
   return (
-    <>
-      <Section title="Calorie deficit">
-        <RangeTabs value={range} onChange={setRange} />
-        <ChartCaption>
-          {span.grain === 'day' ? `${span.caption} · kcal per day` : `${span.caption} · average kcal per day, by ${span.grain}`}
-        </ChartCaption>
-        <BarChart
-          values={vals.map((v) => (v == null ? null : Math.round(v)))}
-          labels={span.buckets.map((b) => b.label)}
-          unit="kcal"
-          signed
-          goal={state.goal}
-          label={`Calorie deficit, ${span.caption.toLowerCase()}`}
-        />
-        <ChartKey items={state.goal ? ['deficit', 'surplus', 'goal'] : ['deficit', 'surplus']} />
-      </Section>
-      <Section title="Total deficit">
-        <RangeTabs value={range2} onChange={setRange2} />
-        <ChartCaption>{`${span2.caption} · running total, kcal`}</ChartCaption>
-        {cum.length >= 2 ? (
-          <LineChart label={`Total deficit, ${span2.caption.toLowerCase()}`} zero unit="kcal" from={span2.from} to={span2.to} series={[{ pts: cum, style: 'line' }]} />
-        ) : (
-          <Mute>Log at least two days in this range to see the total.</Mute>
-        )}
-      </Section>
-    </>
+    <Section title="Calories by week">
+      <View style={[st.krow, { borderBottomColor: c.line }]}>
+        {['Week of', 'Days', 'Avg in', 'Avg out', 'Deficit'].map((h, i) => (
+          <Text key={h} style={[st.kcell, i === 0 && st.kfirst, { color: c.mute, fontSize: 12.5, fontWeight: '600' }]}>
+            {h}
+          </Text>
+        ))}
+      </View>
+      {weeks.map((w, i) => (
+        <View key={w.start} style={[st.krow, { borderBottomColor: c.line }, i === weeks.length - 1 && { borderBottomWidth: 0 }]}>
+          <Text style={[st.kcell, st.kfirst, { color: c.ink, fontWeight: '700' }]}>{weekLabel(w.start)}</Text>
+          <Text style={[st.kcell, { color: c.ink }]}>{w.days}/7</Text>
+          <Text style={[st.kcell, { color: c.ink }]}>{fmtInt(w.avgIn)}</Text>
+          <Text style={[st.kcell, { color: c.ink }]}>{fmtInt(w.avgOut)}</Text>
+          <Text style={[st.kcell, { color: col(w.avgNet), fontWeight: '700' }]}>{sgn(w.avgNet)}</Text>
+        </View>
+      ))}
+    </Section>
   );
 }
 
 const st = StyleSheet.create({
-  srow: { flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingVertical: space.md - 2 },
+  export: { borderWidth: 1, borderRadius: 18, paddingHorizontal: space.md, paddingVertical: 7 },
+  h2: { fontFamily: fonts.display, fontSize: 26, lineHeight: 30, marginTop: space.md, marginBottom: space.md },
   krow: { flexDirection: 'row', borderBottomWidth: 1, paddingVertical: space.sm + 1 },
   kcell: { flex: 1, textAlign: 'right', fontSize: 15, paddingHorizontal: 2, ...tabular },
   kfirst: { textAlign: 'left', flex: 1.1 },

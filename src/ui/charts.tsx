@@ -22,7 +22,7 @@ function Chart({ w, h, children, label }: { w: number; h: number; children: Reac
   );
 }
 
-type KeyKind = 'planned' | 'logged' | 'deficit' | 'surplus' | 'goal' | 'weight' | 'trend' | 'fitness' | 'fatigue';
+type KeyKind = 'planned' | 'logged' | 'deficit' | 'surplus' | 'goal' | 'weight' | 'trend' | 'fitness' | 'fatigue' | 'eaten' | 'burned';
 
 function Swatch({ kind }: { kind: KeyKind }) {
   const c = useColors();
@@ -30,9 +30,9 @@ function Swatch({ kind }: { kind: KeyKind }) {
     <Svg width={20} height={12} viewBox="0 0 20 12">
       {kind === 'planned' ? (
         <Rect x={1} y={1} width={18} height={10} rx={2} fill="none" stroke={c.mute} strokeWidth={1.25} strokeDasharray="3 2" />
-      ) : kind === 'goal' || kind === 'fatigue' ? (
+      ) : kind === 'goal' || kind === 'fatigue' || kind === 'burned' ? (
         <Line x1={0} x2={20} y1={6} y2={6} stroke={kind === 'goal' ? c.ink : c.mute} strokeWidth={1.75} strokeDasharray="4 3" />
-      ) : kind === 'trend' || kind === 'fitness' ? (
+      ) : kind === 'trend' || kind === 'fitness' || kind === 'eaten' ? (
         <Line x1={0} x2={20} y1={6} y2={6} stroke={c.ink} strokeWidth={2.5} strokeLinecap="round" />
       ) : kind === 'weight' ? (
         <>
@@ -56,6 +56,8 @@ const KEY_LABELS: Record<KeyKind, string> = {
   trend: 'Weekly trend',
   fitness: 'Fitness',
   fatigue: 'Fatigue',
+  eaten: 'Eaten',
+  burned: 'Burned',
 };
 
 /** What the marks in a chart mean, drawn the way they appear in the chart. */
@@ -114,7 +116,7 @@ function axisNum(v: number): string {
 }
 
 /** Horizontal grid lines with their values, and the unit above the axis. */
-function YAxis({ ticks, y, unit }: { ticks: number[]; y: (v: number) => number; unit?: string }) {
+function YAxis({ ticks, y, unit, tick = axisNum }: { ticks: number[]; y: (v: number) => number; unit?: string; tick?: (v: number) => string }) {
   const c = useColors();
   return (
     <>
@@ -123,7 +125,7 @@ function YAxis({ ticks, y, unit }: { ticks: number[]; y: (v: number) => number; 
       ))}
       {ticks.map((t) => (
         <SvgText key={`t${t}`} fontFamily={SANS} x={GUTTER - 6} y={y(t) + 4} textAnchor="end" fontSize={10.5} fill={c.mute}>
-          {axisNum(t)}
+          {tick(t)}
         </SvgText>
       ))}
       {unit ? (
@@ -242,6 +244,7 @@ export function LineChart({
   label,
   from,
   to,
+  tick,
 }: {
   series: LineSeries[];
   zero?: boolean;
@@ -249,6 +252,8 @@ export function LineChart({
   label: string;
   from?: string;
   to?: string;
+  /** How to write the axis numbers (default: 1.2k style). */
+  tick?: (v: number) => string;
 }) {
   const c = useColors();
   const all = series.flatMap((s) => s.pts);
@@ -284,7 +289,7 @@ export function LineChart({
   const inside = (p: { s: string }) => p.s >= first && p.s <= last;
   return (
     <Chart w={W} h={H} label={label}>
-      <YAxis ticks={ticks} y={y} unit={unit.trim()} />
+      <YAxis ticks={ticks} y={y} unit={unit.trim()} tick={tick} />
       {series.map((s, i) => {
         const pts = s.pts.filter(inside);
         // Dots only help when they can be told apart.

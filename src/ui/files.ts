@@ -1,4 +1,4 @@
-// Saving a text file for the person to keep, and reading one they pick. Phone version; the web version is files.web.ts.
+// Saving a file (text, or bytes such as a PDF) for the person to keep, and reading one they pick. Phone version; the web version is files.web.ts.
 
 import * as DocumentPicker from 'expo-document-picker';
 import { File, Paths } from 'expo-file-system';
@@ -9,7 +9,7 @@ import { MAX_PICK_BYTES, type PickResult } from './files.types';
 export type { PickResult, PickedText } from './files.types';
 
 /** Hands a file to the phone's share sheet (Save to Files, Drive, email, …). Returns a message if it didn't work, else null. */
-export async function saveText(name: string, text: string, mime: string): Promise<string | null> {
+export async function saveText(name: string, text: string | Uint8Array, mime: string): Promise<string | null> {
   try {
     if (!(await Sharing.isAvailableAsync())) return 'Sharing isn’t available on this device.';
     const file = new File(Paths.cache, name);

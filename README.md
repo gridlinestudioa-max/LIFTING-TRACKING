@@ -7,6 +7,8 @@ A phone app (and website) for tracking **food**, **cardio** and **lifting**. Peo
 - **Cardio extras:** effort scores and a fitness and fatigue trend (our own free estimate, in the spirit of Strava's paid fitness graph), importing GPX and TCX files from a watch or another app, and exporting any recorded route as GPX.
 - **Body log:** weight (with a smoothed weekly trend), water, sleep and steps, entered by hand. All of them are optional cards on the Home tab.
 - **Your data:** download everything as JSON, or activities, food and the body log as CSV; see in plain words where data lives; delete the account and everything stored with it. See [`docs/FEATURE-PARITY.md`](docs/FEATURE-PARITY.md) for how this compares with Fitbit and Strava and what's still missing.
+- **Progress:** calories, cardio and lifting at a glance, then swipe-through graphs for each (deficit, eaten vs burned, protein, weight; distance, time, run pace, effort, fitness and fatigue; workouts, volume, sets and your top lifts), each by week, month, year or all time.
+- **Summaries:** export a PDF of any day, week, month or year (Progress → Export), or get one by email every day, week, month or year. Email needs the setup in [`supabase/functions/send-reports/`](supabase/functions/send-reports/README.md).
 - **Lifting:** plans for 3 to 7 days a week (push/pull/legs, upper/lower, full body, body part split, or custom), built from a library of 700+ exercises, or an unplanned workout any day. Each exercise has sets × a rep range; the app raises the weight when you hit the top of the range on every set (double progression).
 
 Built with Expo (React Native) + TypeScript. The original 12-week prototype is in [`docs/`](docs/).
@@ -117,7 +119,8 @@ Accounts use [Supabase](https://supabase.com) (free tier is enough). Until this 
    - **Locally / EAS builds:** copy `.env.example` to `.env` and fill in the two values.
 5. **Authentication → URL Configuration**: set **Site URL** to the website's address, and add it with `/**` under **Redirect URLs** (plus `https://*-gridlinestudioa-max.vercel.app/**` for preview builds). Confirmation and password-reset links then open the website already signed in: a confirmation link shows "You're signed in", a reset link asks for a new password.
 6. **Emails:** paste the branded templates from [`supabase/email-templates/`](supabase/email-templates/) (steps in its README). For real users, also set up your own email sender (SMTP) there.
-7. Optional: **Authentication → Sign In / Providers → Email**. "Confirm email" is on by default (people click a link before their first sign-in); turn it off for instant sign-up.
+7. Optional, for emailed summaries: run [`supabase/reports.sql`](supabase/reports.sql), then follow [`supabase/functions/send-reports/README.md`](supabase/functions/send-reports/README.md) to deploy the email function and schedule it.
+8. Optional: **Authentication → Sign In / Providers → Email**. "Confirm email" is on by default (people click a link before their first sign-in); turn it off for instant sign-up.
 
 The publishable (anon) key is safe to ship in the app; the access rules in `schema.sql` are what protect each person's data. They are access rules, not end-to-end encryption: whoever runs the Supabase project can technically read the stored data. The app says so on the You tab.
 
@@ -126,7 +129,7 @@ The publishable (anon) key is safe to ship in the app; the access rules in `sche
 - **Export** (You tab → Your data): `training-tracker-DATE.json` (everything), and CSVs for activities, food and the body log. CSV cells that start with `=`, `+`, `-` or `@` are prefixed so a spreadsheet won't run them as formulas. Distances are in miles and durations in seconds.
 - **Import:** GPX and TCX activity files (Garmin, Strava, most watches). Files over about 20 MB are refused, duplicates of activities already logged are skipped, and FIT files aren't supported yet. The files are read by a small built-in scanner, not an XML library.
 - **Delete:** deleting an account runs `delete_my_account()` (`supabase/privacy.sql`), which removes the sign-in and, through the database's cascade rules, the stored data, friends profile and shared leaderboard stats. Without an account, "Erase everything on this device" resets the app.
-- **What leaves the device:** the account copy (if signed in), the summaries you choose to share with friends (cardio, lifting, food; if on), map tiles from OpenStreetMap, Open Food Facts searches, and exercise pictures from GitHub. There's no ads or analytics code. Keep the "Where your data lives" text in `src/ui/data/DataSection.tsx` in step with this list when any of it changes.
+- **What leaves the device:** the account copy (if signed in), the summaries you choose to share with friends (cardio, lifting, food; if on), emailed summaries (if signed up; made on the server from the account copy and sent through Resend), map tiles from OpenStreetMap, Open Food Facts searches, and exercise pictures from GitHub. There's no ads or analytics code. Keep the "Where your data lives" text in `src/ui/data/DataSection.tsx` in step with this list when any of it changes.
 
 ## Name and logo
 
