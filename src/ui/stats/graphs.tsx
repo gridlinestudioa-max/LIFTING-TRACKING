@@ -18,9 +18,7 @@ import {
   maxHeartRate,
   trainingDayEating,
   zoneBars,
-  type DayTypeAverages,
   bucketTitle,
-  dayDiff,
   calTarget,
   cycleEnd,
   cycleLine,
@@ -229,12 +227,6 @@ const bucketPts = (buckets: Bucket[], vals: (number | null)[]) =>
 const points = (buckets: Bucket[], vals: (number | null)[]) => bucketPts(buckets, vals);
 const r1 = (v: number | null) => (v == null ? null : Math.round(v * 10) / 10);
 /** How many weeks a range covers (at least one). */
-const weeksIn = (span: RangeSpan) => Math.max(1, (dayDiff(span.to, span.from) + 1) / 7);
-const sumOf = (vals: (number | null)[]) => vals.reduce<number>((t, v) => t + (v ?? 0), 0);
-const avgOf = (vals: (number | null)[]) => {
-  const xs = vals.filter((v): v is number => v != null);
-  return xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null;
-};
 /** "Last 30 days · miles per day". */
 const cap = (span: RangeSpan, what: string) => `${span.caption} · ${what}`;
 const byWhat = (span: RangeSpan, avg = false) => (avg ? `average per day, by ${span.grain}` : `per ${span.grain}`);
@@ -270,14 +262,14 @@ const distUnit = (swim: boolean) => (swim ? 'm' : 'mi');
 const distVal = (swim: boolean, mi: number | null) => (mi == null ? null : swim ? Math.round(mi * METERS_PER_MILE) : Math.round(mi * 10) / 10);
 
 function DistanceGraph({ range }: { range: Range }) {
-  const { sessions, today, swim, w } = useSport();
+  const { sessions, today, swim } = useSport();
   const span = spanAt(range, today, sessions[0]?.date, DAYS_WEEKS);
   const b = cardioBars(sessions, span.buckets);
   const vals = b.miles.map((v) => distVal(swim, v));
   return (
     <>
       <ChartCaption>{cap(span, `${swim ? 'meters' : 'miles'} ${byWhat(span)}`)}</ChartCaption>
-      <BarChart values={vals} labels={labels(span)} titles={titles(span)} unit={distUnit(swim)} label={`Distance, ${span.caption.toLowerCase()}`} summary={{ title: `${swim ? fmtInt(sumOf(vals)) : fmt(Math.round(sumOf(vals) * 10) / 10)} ${distUnit(swim)} in ${fmtInt(sumOf(b.count))} ${w.many}` }} />
+      <BarChart values={vals} labels={labels(span)} titles={titles(span)} unit={distUnit(swim)} label={`Distance, ${span.caption.toLowerCase()}`} />
     </>
   );
 }
@@ -291,16 +283,13 @@ function PaceGraph({ range }: { range: Range }) {
   const conv = (secPerMi: number | null) => (secPerMi == null ? null : bike ? Math.round((3600 / secPerMi) * 10) / 10 : swim ? Math.round(secPerMi / (METERS_PER_MILE / 100)) : Math.round(secPerMi));
   const vals = b.pace.map(conv);
   const pts = points(span.buckets, vals);
-  const totMi = sessions.filter((x) => x.date >= span.from && x.miles && x.secs).reduce((t, x) => t + (x.miles ?? 0), 0);
-  const totS = sessions.filter((x) => x.date >= span.from && x.miles && x.secs).reduce((t, x) => t + (x.secs ?? 0), 0);
-  const overall = totMi ? conv(totS / totMi) : null;
   const unit = bike ? 'mph' : swim ? '/100m' : '/mi';
   const show = (v: number) => (bike ? `${fmt(v)} mph` : `${fmtTime(v)} ${unit}`);
   return (
     <>
       <ChartCaption>{cap(span, `${bike ? 'average speed' : 'average pace'}${span.grain === 'day' ? ' by day' : ` by ${span.grain}`}${bike ? '' : ' (lower is faster)'}`)}</ChartCaption>
       {pts.length ? (
-        <LineChart label={`Pace, ${span.caption.toLowerCase()}`} unit={unit} from={span.from} to={span.to} tick={bike ? undefined : (v) => fmtTime(Math.round(v))} format={show} titleFor={titleOf(span)} summary={overall != null ? { title: `Average ${bike ? 'speed' : 'pace'}: ${show(overall)}` } : undefined} series={[{ pts, style: 'line' }, { pts, style: 'dots' }]} />
+        <LineChart label={`Pace, ${span.caption.toLowerCase()}`} unit={unit} from={span.from} to={span.to} tick={bike ? undefined : (v) => fmtTime(Math.round(v))} format={show} titleFor={titleOf(span)} series={[{ pts, style: 'line' }, { pts, style: 'dots' }]} />
       ) : (
         <NoData what={`timed ${w.many}`} />
       )}
@@ -312,11 +301,10 @@ function FrequencyGraph({ range }: { range: Range }) {
   const { sessions, today, w } = useSport();
   const span = spanAt(range, today, sessions[0]?.date, DAY_WEEK_MONTH);
   const b = cardioBars(sessions, span.buckets);
-  const weeks = weeksIn(span);
   return (
     <>
       <ChartCaption>{cap(span, `${w.many} ${byWhat(span)}`)}</ChartCaption>
-      <BarChart values={b.count} labels={labels(span)} titles={titles(span)} unit={w.many} format={(v) => `${fmtInt(v)} ${v === 1 ? w.one : w.many}`} label={`Number of ${w.many}, ${span.caption.toLowerCase()}`} summary={{ title: `${fmtInt(sumOf(b.count))} ${w.many} · ${fmt(Math.round((sumOf(b.count) / weeks) * 10) / 10)} a week` }} />
+      <BarChart values={b.count} labels={labels(span)} titles={titles(span)} unit={w.many} format={(v) => `${fmtInt(v)} ${v === 1 ? w.one : w.many}`} label={`Number of ${w.many}, ${span.caption.toLowerCase()}`} />
     </>
   );
 }
@@ -327,12 +315,10 @@ function AvgDistanceGraph({ range }: { range: Range }) {
   const b = cardioBars(sessions, span.buckets);
   const vals = b.avgMiles.map((v) => distVal(swim, v));
   const pts = points(span.buckets, vals);
-  const n = sumOf(b.count);
-  const total = sumOf(b.miles);
   return (
     <>
       <ChartCaption>{cap(span, `average ${distUnit(swim) === 'm' ? 'meters' : 'miles'} per ${w.one}, by ${span.grain}`)}</ChartCaption>
-      {pts.length ? <LineChart label={`Average distance per ${w.one}`} zero unit={distUnit(swim)} from={span.from} to={span.to} titleFor={titleOf(span)} summary={n ? { title: swim ? `${fmtInt(Math.round((total * METERS_PER_MILE) / n))} m per ${w.one} on average` : `${fmt(Math.round((total / n) * 10) / 10)} mi per ${w.one} on average` } : undefined} series={[{ pts, style: 'line' }, { pts, style: 'dots' }]} /> : <NoData />}
+      {pts.length ? <LineChart label={`Average distance per ${w.one}`} zero unit={distUnit(swim)} from={span.from} to={span.to} titleFor={titleOf(span)} series={[{ pts, style: 'line' }, { pts, style: 'dots' }]} /> : <NoData />}
     </>
   );
 }
@@ -343,28 +329,24 @@ function HeartRateGraph({ range }: { range: Range }) {
   const span = spanAt(range, today, withHr[0]?.date, DAY_WEEK_MONTH);
   const b = cardioBars(withHr, span.buckets);
   const pts = points(span.buckets, b.hr);
-  const inRange = withHr.filter((x) => x.date >= span.from && x.secs);
-  const secs = inRange.reduce((t, x) => t + (x.secs ?? 0), 0);
-  const avg = secs ? Math.round(inRange.reduce((t, x) => t + (x.hr ?? 0) * (x.secs ?? 0), 0) / secs) : null;
   return (
     <>
       <ChartCaption>{cap(span, `average heart rate (bpm), by ${span.grain}`)}</ChartCaption>
-      {pts.length ? <LineChart label={`Average heart rate, ${span.caption.toLowerCase()}`} unit="bpm" from={span.from} to={span.to} titleFor={titleOf(span)} summary={avg != null ? { title: `Average ${avg} bpm over ${inRange.length} ${inRange.length === 1 ? w.one : w.many}` } : undefined} series={[{ pts, style: 'line' }, { pts, style: 'dots' }]} /> : <NoData what={`${w.many} with heart rate`} />}
+      {pts.length ? <LineChart label={`Average heart rate, ${span.caption.toLowerCase()}`} unit="bpm" from={span.from} to={span.to} titleFor={titleOf(span)} series={[{ pts, style: 'line' }, { pts, style: 'dots' }]} /> : <NoData what={`${w.many} with heart rate`} />}
     </>
   );
 }
 
 function TimeGraph({ range }: { range: Range }) {
-  const { sessions, today, w } = useSport();
+  const { sessions, today } = useSport();
   const span = spanAt(range, today, sessions[0]?.date, DAY_WEEK_MONTH);
   const b = cardioBars(sessions, span.buckets);
   const hours = span.grain !== 'day';
   const vals = b.minutes.map((m) => (m == null ? null : hours ? Math.round((m / 60) * 10) / 10 : m));
-  const mins = sumOf(b.minutes);
   return (
     <>
       <ChartCaption>{cap(span, `${hours ? 'hours' : 'minutes'} ${byWhat(span)}`)}</ChartCaption>
-      <BarChart values={vals} labels={labels(span)} titles={titles(span)} unit={hours ? 'h' : 'min'} label={`Time, ${span.caption.toLowerCase()}`} summary={{ title: `${Math.floor(mins / 60)} h ${mins % 60} min of ${w.many}` }} />
+      <BarChart values={vals} labels={labels(span)} titles={titles(span)} unit={hours ? 'h' : 'min'} label={`Time, ${span.caption.toLowerCase()}`} />
     </>
   );
 }
@@ -381,8 +363,6 @@ function ZonesGraph({ range }: { range: Range }) {
   if (!max) return <Mute style={{ marginVertical: space.lg }}>Add your birthday (Settings → Your details) or a max heart rate to a workout to see heart-rate zones.</Mute>;
   const z = zoneBars(withHr, span.buckets, max);
   const series = HR_ZONES.map((x, i) => ({ label: `${x.label} ${x.name.toLowerCase()}`, color: ZONE_COLORS[i], values: z[i] }));
-  const tot = z.map((v) => sumOf(v));
-  const all = sumOf(tot);
   return (
     <>
       <ChartCaption>{cap(span, `minutes in each zone, ${byWhat(span)}`)}</ChartCaption>
@@ -394,7 +374,6 @@ function ZonesGraph({ range }: { range: Range }) {
           unit="min"
           format={(v) => `${fmtInt(v)} min`}
           label={`Heart-rate zones, ${span.caption.toLowerCase()}`}
-          summary={all ? { title: `${fmtInt(all)} min with heart rate · max ${max} bpm`, items: series.map((x, i) => ({ label: HR_ZONES[i].label, value: `${Math.round((tot[i] / all) * 100)}%`, color: x.color })).filter((_, i) => tot[i] > 0) } : { title: 'Nothing logged in this range' }}
         />
       ) : (
         <NoData what={`${w.many} with heart rate`} />
@@ -404,14 +383,13 @@ function ZonesGraph({ range }: { range: Range }) {
 }
 
 function ClimbGraph({ range }: { range: Range }) {
-  const { sessions, today, w } = useSport();
+  const { sessions, today } = useSport();
   const span = spanAt(range, today, sessions[0]?.date, DAYS_WEEKS);
   const vals = climbBars(sessions, span.buckets);
-  const total = sumOf(vals);
   return (
     <>
       <ChartCaption>{cap(span, `feet climbed ${byWhat(span)}`)}</ChartCaption>
-      <BarChart values={vals} labels={labels(span)} titles={titles(span)} unit="ft" format={(v) => `${fmtInt(v)} ft`} label={`Climbing, ${span.caption.toLowerCase()}`} summary={total ? { title: `${fmtInt(total)} ft climbed in ${fmtInt(sessions.filter((x) => x.date >= span.from && x.elevFt).length)} ${w.many}` } : { title: 'No climbing logged in this range' }} />
+      <BarChart values={vals} labels={labels(span)} titles={titles(span)} unit="ft" format={(v) => `${fmtInt(v)} ft`} label={`Climbing, ${span.caption.toLowerCase()}`} />
     </>
   );
 }
@@ -436,11 +414,10 @@ function WorkoutsGraph({ range }: { range: Range }) {
   const done = useDone();
   const span = spanAt(range, today, done[0]?.date, DAY_WEEK_MONTH);
   const b = liftBars(done, span.buckets);
-  const weeks = weeksIn(span);
   return (
     <>
       <ChartCaption>{cap(span, `workouts ${byWhat(span)}`)}</ChartCaption>
-      <BarChart values={b.workouts} labels={labels(span)} titles={titles(span)} unit="workouts" format={(v) => `${fmtInt(v)} ${v === 1 ? 'workout' : 'workouts'}`} label={`Workouts, ${span.caption.toLowerCase()}`} summary={{ title: `${sumOf(b.workouts)} workouts · ${fmt(Math.round((sumOf(b.workouts) / weeks) * 10) / 10)} a week` }} />
+      <BarChart values={b.workouts} labels={labels(span)} titles={titles(span)} unit="workouts" format={(v) => `${fmtInt(v)} ${v === 1 ? 'workout' : 'workouts'}`} label={`Workouts, ${span.caption.toLowerCase()}`} />
     </>
   );
 }
@@ -456,13 +433,11 @@ function OneRepMaxGraph({ range }: { range: Range }) {
   const span = spanAt(range, today, first, DAY_WEEK_MONTH);
   const vals = e1rmBars(done, span.buckets, id);
   const pts = points(span.buckets, vals);
-  const known = pts.map((p) => p.v);
-  const ch = known.length >= 2 ? known[known.length - 1] - known[0] : null;
   return (
     <>
       <Choices label="Exercise" options={opts} value={id} onChange={setEx} />
       <ChartCaption>{cap(span, `best estimated one-rep max (lb), by ${span.grain === 'day' ? 'workout' : span.grain}`)}</ChartCaption>
-      {pts.length ? <LineChart label="Estimated one-rep max" unit="lb" from={span.from} to={span.to} titleFor={titleOf(span)} format={(v) => `${fmtInt(v)} lb`} summary={{ title: `Best ${fmtInt(Math.max(...known))} lb${ch != null ? ` · ${ch >= 0 ? '+' : '−'}${fmtInt(Math.abs(ch))} lb in this range` : ''}` }} series={[{ pts, style: 'line' }, { pts, style: 'dots' }]} /> : <NoData what="sets of 12 reps or fewer" />}
+      {pts.length ? <LineChart label="Estimated one-rep max" unit="lb" from={span.from} to={span.to} titleFor={titleOf(span)} format={(v) => `${fmtInt(v)} lb`} series={[{ pts, style: 'line' }, { pts, style: 'dots' }]} /> : <NoData what="sets of 12 reps or fewer" />}
     </>
   );
 }
@@ -474,7 +449,6 @@ function MuscleGraph({ range }: { range: Range }) {
   const span = spanAt(range, today, done[0]?.date, DAY_WEEK_MONTH);
   const sets = muscleBars(done, span.buckets, (exId) => muscleGroupOf(byId(exId)));
   const series = MUSCLE_GROUPS.map((g, i) => ({ label: g.label, color: SERIES.palette[i % SERIES.palette.length], values: sets[g.id] }));
-  const totals = MUSCLE_GROUPS.map((g) => ({ label: g.label, n: sets[g.id].reduce((a, b) => a + b, 0) })).filter((x) => x.n > 0).sort((a, b) => b.n - a.n);
   return (
     <>
       <ChartCaption>{cap(span, `sets per muscle group, ${byWhat(span)}`)}</ChartCaption>
@@ -485,7 +459,6 @@ function MuscleGraph({ range }: { range: Range }) {
         unit="sets"
         format={(v) => `${fmtInt(v)}`}
         label={`Sets per muscle group, ${span.caption.toLowerCase()}`}
-        summary={totals.length ? { title: `${fmtInt(totals.reduce((t, x) => t + x.n, 0))} sets in this range`, items: totals.map((t) => ({ label: t.label, value: fmtInt(t.n), color: series.find((x) => x.label === t.label)!.color })) } : { title: 'Nothing logged in this range' }}
       />
     </>
   );
@@ -499,12 +472,11 @@ function RepsGraph({ range }: { range: Range }) {
   const span = spanAt(range, today, done[0]?.date, DAY_WEEK_MONTH);
   const b = liftBars(done, span.buckets, ex === '*' ? null : ex);
   const pts = points(span.buckets, b.reps);
-  const avg = avgOf(b.reps);
   return (
     <>
       <Choices label="Exercise" options={opts} value={ex} onChange={setEx} />
       <ChartCaption>{cap(span, `average reps per set, by ${span.grain === 'day' ? 'workout' : span.grain}`)}</ChartCaption>
-      {pts.length ? <LineChart label="Average reps per set" zero unit="reps" from={span.from} to={span.to} titleFor={titleOf(span)} summary={avg != null ? { title: `About ${fmt(Math.round(avg * 10) / 10)} reps a set` } : undefined} series={[{ pts, style: 'line' }, { pts, style: 'dots' }]} /> : <NoData />}
+      {pts.length ? <LineChart label="Average reps per set" zero unit="reps" from={span.from} to={span.to} titleFor={titleOf(span)} series={[{ pts, style: 'line' }, { pts, style: 'dots' }]} /> : <NoData />}
     </>
   );
 }
@@ -514,11 +486,10 @@ function DurationGraph({ range }: { range: Range }) {
   const done = useDone();
   const span = spanAt(range, today, done[0]?.date, DAY_WEEK_MONTH);
   const b = liftBars(done, span.buckets);
-  const avg = avgOf(b.minutes);
   return (
     <>
       <ChartCaption>{cap(span, `average minutes per workout, ${byWhat(span)}`)}</ChartCaption>
-      <BarChart values={b.minutes} labels={labels(span)} titles={titles(span)} unit="min" label={`Workout length, ${span.caption.toLowerCase()}`} summary={avg != null ? { title: `About ${fmtInt(Math.round(avg))} min a workout` } : { title: 'No timed workouts in this range' }} />
+      <BarChart values={b.minutes} labels={labels(span)} titles={titles(span)} unit="min" label={`Workout length, ${span.caption.toLowerCase()}`} />
     </>
   );
 }
@@ -539,12 +510,10 @@ function CaloriesGraph({ range }: { range: Range }) {
   const { days, today, kcal } = useFood();
   const span = spanAt(range, today, days[0]?.s, DAYS_WEEKS);
   const vals = avgBars(days, span.buckets, (d) => d.t.kcal).map((v) => (v == null ? null : Math.round(v)));
-  const avg = avgOf(avgBars(days, rangeSpan(range, today, days[0]?.s).buckets, (d) => d.t.kcal));
-  const n = days.filter((d) => d.s >= span.from).length;
   return (
     <>
       <ChartCaption>{cap(span, `kcal eaten ${byWhat(span, span.grain !== 'day')}`)}</ChartCaption>
-      <BarChart values={vals} labels={labels(span)} titles={titles(span)} unit="kcal" format={(v) => `${fmtInt(v)} kcal`} goal={kcal} label={`Calories eaten, ${span.caption.toLowerCase()}`} summary={avg != null ? { title: `Average ${fmtInt(Math.round(avg))} kcal a day${kcal ? ` · target ${fmtInt(kcal)}` : ''} (${n} days logged)` } : { title: 'Nothing logged in this range' }} />
+      <BarChart values={vals} labels={labels(span)} titles={titles(span)} unit="kcal" format={(v) => `${fmtInt(v)} kcal`} goal={kcal} label={`Calories eaten, ${span.caption.toLowerCase()}`} />
     </>
   );
 }
@@ -560,7 +529,6 @@ function MacroGramsGraph({ range }: { range: Range }) {
     { label: 'Carbs', color: SERIES.carbs, values: cb.map(r1) },
     { label: 'Fat', color: SERIES.fat, values: f.map(r1) },
   ];
-  const a = (v: (number | null)[]) => fmtInt(Math.round(avgOf(v) ?? 0));
   return (
     <>
       <ChartCaption>{cap(span, `grams ${byWhat(span, span.grain !== 'day')}`)}</ChartCaption>
@@ -571,7 +539,6 @@ function MacroGramsGraph({ range }: { range: Range }) {
         unit="g"
         format={(v) => `${fmtInt(Math.round(v))} g`}
         label={`Macros in grams, ${span.caption.toLowerCase()}`}
-        summary={avgOf(p) != null ? { title: 'Average a day', items: [{ label: 'Protein', value: `${a(p)} g`, color: SERIES.protein }, { label: 'Carbs', value: `${a(cb)} g`, color: SERIES.carbs }, { label: 'Fat', value: `${a(f)} g`, color: SERIES.fat }] } : { title: 'Nothing logged in this range' }}
       />
     </>
   );
@@ -610,7 +577,6 @@ function MacroGoalGraph({ range }: { range: Range }) {
           titleFor={titleOf(span)}
           refs={[{ v: 100 }]}
           series={series}
-          summary={{ title: 'Average of target (dashed line = 100%)', items: lines.map((x) => ({ label: x.label, value: `${fmtInt(Math.round(avgOf(x.v!) ?? 0))}%`, color: x.color })) }}
         />
       ) : (
         <NoData />
@@ -624,12 +590,10 @@ function ProteinGraph({ range }: { range: Range }) {
   const target = limits.proteinMin ?? null;
   const span = spanAt(range, today, days[0]?.s, DAYS_WEEKS);
   const vals = avgBars(days, span.buckets, (d) => d.t.protein).map((v) => (v == null ? null : Math.round(v)));
-  const inRange = days.filter((d) => d.s >= span.from);
-  const hit = target ? inRange.filter((d) => d.t.protein >= target).length : null;
   return (
     <>
       <ChartCaption>{cap(span, `grams of protein ${byWhat(span, span.grain !== 'day')}`)}</ChartCaption>
-      <BarChart values={vals} labels={labels(span)} titles={titles(span)} unit="g" goal={target} label={`Protein, ${span.caption.toLowerCase()}`} summary={inRange.length ? { title: `Average ${fmtInt(Math.round(avgOf(vals) ?? 0))} g a day${hit != null ? ` · target met ${hit} of ${inRange.length} days` : ''}` } : { title: 'Nothing logged in this range' }} />
+      <BarChart values={vals} labels={labels(span)} titles={titles(span)} unit="g" goal={target} label={`Protein, ${span.caption.toLowerCase()}`} />
     </>
   );
 }
@@ -643,13 +607,6 @@ function SourcesGraph({ range }: { range: Range }) {
     { label: 'Carbs', color: SERIES.carbs, values: k('carbs') },
     { label: 'Fat', color: SERIES.fat, values: k('fat') },
   ];
-  const inRange = days.filter((d) => d.s >= span.from);
-  const tot = inRange.reduce((t, d) => {
-    const m = macroCalories(d.t);
-    return { p: t.p + m.protein, c: t.c + m.carbs, f: t.f + m.fat };
-  }, { p: 0, c: 0, f: 0 });
-  const all = tot.p + tot.c + tot.f;
-  const pc = (v: number) => `${Math.round((v / all) * 100)}%`;
   return (
     <>
       <ChartCaption>{cap(span, `share of calories from each macro, ${byWhat(span)}`)}</ChartCaption>
@@ -659,7 +616,6 @@ function SourcesGraph({ range }: { range: Range }) {
         titles={titles(span)}
         percent
         label={`Calorie sources, ${span.caption.toLowerCase()}`}
-        summary={all ? { title: 'Share of calories in this range', items: [{ label: 'Protein', value: pc(tot.p), color: SERIES.protein }, { label: 'Carbs', value: pc(tot.c), color: SERIES.carbs }, { label: 'Fat', value: pc(tot.f), color: SERIES.fat }] } : { title: 'Nothing logged in this range' }}
       />
     </>
   );
@@ -670,11 +626,10 @@ function FiberGraph({ range }: { range: Range }) {
   const target = fiberTarget(sex, kcal);
   const span = spanAt(range, today, days[0]?.s, DAY_DAY_MONTH);
   const vals = avgBars(days, span.buckets, (d) => d.t.fiber).map((v) => (v == null ? null : Math.round(v)));
-  const avg = avgOf(vals);
   return (
     <>
       <ChartCaption>{cap(span, `grams of fiber ${byWhat(span, span.grain !== 'day')}`)}</ChartCaption>
-      <BarChart values={vals} labels={labels(span)} titles={titles(span)} unit="g" goal={target} label={`Fiber, ${span.caption.toLowerCase()}`} summary={avg != null ? { title: `Average ${fmtInt(Math.round(avg))} g a day · aim for ${target} g` } : { title: 'Nothing logged in this range' }} />
+      <BarChart values={vals} labels={labels(span)} titles={titles(span)} unit="g" goal={target} label={`Fiber, ${span.caption.toLowerCase()}`} />
     </>
   );
 }
@@ -699,13 +654,6 @@ function SugarGraph({ range }: { range: Range }) {
           to={span.to}
           refs={[{ v: limit, color: SERIES.fat }]}
           titleFor={titleOf(span)}
-          summary={{
-            title: `Average a day · added sugar limit ${limit} g (dashed)`,
-            items: [
-              { label: 'Total sugar', value: `${fmt(Math.round(avgOf(total) ?? 0))} g`, color: SERIES.carbs },
-              { label: 'Added sugar', value: avgOf(added) != null ? `${fmt(Math.round(avgOf(added)!))} g` : '–', color: SERIES.fat },
-            ],
-          }}
           series={[
             { pts: tp, style: 'line', color: SERIES.carbs, name: 'Total sugar' },
             { pts: tp, style: 'dots', color: SERIES.carbs },
@@ -724,11 +672,10 @@ function SodiumGraph({ range }: { range: Range }) {
   const { days, today } = useFood();
   const span = spanAt(range, today, days[0]?.s, DAY_WEEK_MONTH);
   const vals = avgBars(days, span.buckets, (d) => microOf(d, 'sodium')).map((v) => (v == null ? null : Math.round(v)));
-  const cover = coverage(days.filter((d) => d.s >= span.from), 'sodium');
   return (
     <>
       <ChartCaption>{cap(span, `mg of sodium ${byWhat(span, span.grain !== 'day')}`)}</ChartCaption>
-      <BarChart values={vals} labels={labels(span)} titles={titles(span)} unit="mg" format={(v) => `${fmtInt(v)} mg`} goal={2300} label={`Sodium, ${span.caption.toLowerCase()}`} summary={avgOf(vals) != null ? { title: `Average ${fmtInt(Math.round(avgOf(vals)!))} mg a day · limit 2,300 mg${coverNote(cover)}` } : { title: 'Nothing logged in this range' }} />
+      <BarChart values={vals} labels={labels(span)} titles={titles(span)} unit="mg" format={(v) => `${fmtInt(v)} mg`} goal={2300} label={`Sodium, ${span.caption.toLowerCase()}`} />
     </>
   );
 }
@@ -737,8 +684,6 @@ function MealGraph({ range }: { range: Range }) {
   const { days, today } = useFood();
   const span = spanAt(range, today, days[0]?.s, DAY_WEEK_MONTH);
   const series = MEALS.map((m, i) => ({ label: m.label, color: SERIES.palette[[1, 0, 2, 3][i]], values: avgBars(days, span.buckets, (d) => mealKcal(d)[m.id]).map((v) => (v == null ? null : Math.round(v))) }));
-  const inRange = days.filter((d) => d.s >= span.from);
-  const avgMeal = MEALS.map((m) => ({ label: m.label, v: inRange.length ? inRange.reduce((t, d) => t + mealKcal(d)[m.id], 0) / inRange.length : 0 }));
   return (
     <>
       <ChartCaption>{cap(span, `kcal by meal ${byWhat(span, span.grain !== 'day')}`)}</ChartCaption>
@@ -749,7 +694,6 @@ function MealGraph({ range }: { range: Range }) {
         unit="kcal"
         format={(v) => `${fmtInt(Math.round(v))} kcal`}
         label={`Calories by meal, ${span.caption.toLowerCase()}`}
-        summary={inRange.length ? { title: 'Average a day, kcal', items: avgMeal.map((m, i) => ({ label: m.label, value: fmtInt(Math.round(m.v)), color: series[i].color })) } : { title: 'Nothing logged in this range' }}
       />
     </>
   );
@@ -766,7 +710,6 @@ function TrainingDaysGraph({ range }: { range: Range }) {
     return set;
   }, [state.cardio.sessions, state.lifting.workouts]);
   const r = trainingDayEating(days.filter((d) => d.s >= span.from && d.s <= span.to), (s) => trainedOn.has(s));
-  const line = (x: DayTypeAverages) => `${fmtInt(Math.round(x.kcal))} kcal · ${fmtInt(Math.round(x.protein))} g protein · ${fmtInt(Math.round(x.carbs))} g carbs`;
   return (
     <>
       <ChartCaption>{`${span.caption} · average kcal eaten a day`}</ChartCaption>
@@ -778,10 +721,6 @@ function TrainingDaysGraph({ range }: { range: Range }) {
           unit="kcal"
           format={(v) => `${fmtInt(v)} kcal`}
           label="Eating on training days and rest days"
-          summary={{
-            title: r.training && r.rest ? `${fmtInt(Math.abs(Math.round(r.training.kcal - r.rest.kcal)))} kcal ${r.training.kcal >= r.rest.kcal ? 'more' : 'less'} on training days` : 'Average a day',
-            items: [r.training ? { label: 'Training', value: line(r.training) } : null, r.rest ? { label: 'Rest', value: line(r.rest) } : null].filter((x): x is { label: string; value: string } => !!x),
-          }}
         />
       ) : (
         <NoData />
@@ -802,7 +741,6 @@ function MicroGraph({ range }: { range: Range }) {
   const target = microTarget(key, sex, age, kcal);
   const span = spanAt(range, today, days[0]?.s, DAY_WEEK_MONTH);
   const vals = avgBars(days, span.buckets, (d) => microOf(d, key)).map((v) => (v == null ? null : def.unit === 'µg' ? Math.round(v * 10) / 10 : Math.round(v)));
-  const avg = avgOf(vals);
   return (
     <>
       <Choices label="Nutrient" options={MICRO_CHOICES.map((m) => ({ id: m.key, label: m.label }))} value={key} onChange={setKey} />
@@ -815,26 +753,14 @@ function MicroGraph({ range }: { range: Range }) {
         format={(v) => `${amt(v)} ${def.unit}`}
         goal={target}
         label={`${def.label}, ${span.caption.toLowerCase()}`}
-        summary={avg != null ? { title: `Average ${amt(avg)} ${def.unit} a day · aim for ${amt(target)} ${def.unit}${coverNote(coverage(days.filter((d) => d.s >= span.from), key))}` } : { title: 'Nothing logged in this range' }}
       />
     </>
   );
 }
 
 /** Share of logged calories (in range) from foods that list a nutrient. */
-function coverage(days: FoodDay[], key: MicroKey): number | null {
-  let known = 0;
-  let total = 0;
-  for (const d of days) {
-    const m = microDay(d.entries, key);
-    total += d.t.kcal;
-    if (m) known += m.covered * d.t.kcal;
-  }
-  return total ? known / total : null;
-}
 
 /** A short note when some logged food doesn't list a nutrient, so the real amount is likely higher. */
-const coverNote = (pct: number | null) => (pct != null && pct < 0.95 ? ` (listed for ${Math.round(pct * 100)}% of logged calories)` : '');
 
 // ---------- Calories ----------
 
@@ -849,8 +775,6 @@ function DeficitGraph({ range }: { range: Range }) {
   const target = calTarget(state, today);
   const span = spanAt(range, today, ds[0]?.s, DAYS_WEEKS);
   const vals = avgByBucket(ds, (d) => d.s, (d) => d.net, span.buckets).map((v) => (v == null ? null : Math.round(v)));
-  const inRange = ds.filter((d) => d.s >= span.from);
-  const avg = inRange.length ? Math.round(inRange.reduce((t, d) => t + d.net, 0) / inRange.length) : null;
   return (
     <>
       <ChartCaption>{`${span.caption} · kcal ${avgPer(span)}`}</ChartCaption>
@@ -863,7 +787,6 @@ function DeficitGraph({ range }: { range: Range }) {
         signed
         goal={target}
         label={`Calorie deficit, ${span.caption.toLowerCase()}`}
-        summary={avg != null ? { title: `Average ${avg >= 0 ? 'deficit' : 'surplus'}: ${fmtInt(Math.abs(avg))} kcal a day (${inRange.length} days logged)` } : { title: 'Nothing logged in this range' }}
       />
     </>
   );
@@ -874,7 +797,6 @@ function TotalDeficitGraph({ range }: { range: Range }) {
   const ds = useKDays();
   const span = rangeSpan(range, today, ds[0]?.s);
   const cum = ds.filter((d) => d.s >= span.from).reduce<{ s: string; v: number }[]>((acc, d) => [...acc, { s: d.s, v: (acc[acc.length - 1]?.v ?? 0) + d.net }], []);
-  const total = cum[cum.length - 1]?.v ?? 0;
   return (
     <>
       <ChartCaption>{`${span.caption} · running total, kcal`}</ChartCaption>
@@ -887,7 +809,6 @@ function TotalDeficitGraph({ range }: { range: Range }) {
           from={span.from}
           to={span.to}
           series={[{ pts: cum, style: 'line' }]}
-          summary={{ title: `${fmtInt(Math.abs(Math.round(total)))} kcal ${total >= 0 ? 'deficit' : 'surplus'} · about ${fmt(Math.round((Math.abs(total) / 3500) * 10) / 10)} lb ${total >= 0 ? 'lost' : 'gained'}` }}
         />
       ) : (
         <NoData two />
@@ -902,7 +823,6 @@ function WeightGraph({ range }: { range: Range }) {
   const trend = useMemo(() => weightTrend(all), [all]);
   const span = rangeSpan(range, today, all[0]?.s);
   const shown = all.filter((p) => p.s >= span.from);
-  const ch = shown.length >= 2 ? Math.round((shown[shown.length - 1].v - shown[0].v) * 10) / 10 : null;
   return (
     <>
       <ChartCaption>{`${span.caption} · pounds`}</ChartCaption>
@@ -915,7 +835,6 @@ function WeightGraph({ range }: { range: Range }) {
             from={span.from}
             to={span.to}
             series={[{ pts: shown, style: 'dots', name: 'Weighed' }, { pts: trend.filter((p) => p.s >= span.from), style: 'line', name: 'Trend' }]}
-            summary={ch != null ? { title: `${ch > 0 ? '+' : ch < 0 ? '−' : ''}${fmt(Math.abs(ch))} lb in this range` } : undefined}
           />
         </>
       ) : (

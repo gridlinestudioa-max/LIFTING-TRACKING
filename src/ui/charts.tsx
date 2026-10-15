@@ -12,12 +12,15 @@ const SANS = Platform.select({ web: 'system-ui, -apple-system, "Segoe UI", Robot
 /**
  * SVG scaled to the container width, keeping the viewBox aspect ratio. The viewBox widths below are
  * close to a phone's content width, so text sizes in the SVG are close to real pixel sizes. With `onTap`,
- * a tap anywhere on the chart reports where, in viewBox units across.
+ * a tap anywhere on the chart reports where, in viewBox units across, and `tip` pops up over the chart
+ * at that spot until it's tapped away.
  */
-function Chart({ w, h, children, label, onTap }: { w: number; h: number; children: React.ReactNode; label: string; onTap?: (x: number) => void }) {
+function Chart({ w, h, children, label, onTap, tip, onClose }: { w: number; h: number; children: React.ReactNode; label: string; onTap?: (x: number) => void; tip?: { x: number; r: Readout } | null; onClose?: () => void }) {
   const [width, setWidth] = useState(0);
+  const tipW = Math.min(230, width);
+  const left = tip && width ? Math.max(0, Math.min(width - tipW, (tip.x / w) * width - tipW / 2)) : 0;
   return (
-    <View style={{ width: '100%', aspectRatio: w / h }} accessible={!onTap} accessibilityLabel={label} onLayout={(e) => setWidth(e.nativeEvent.layout.width)}>
+    <View style={{ width: '100%', aspectRatio: w / h, marginTop: space.sm }} accessible={!onTap} accessibilityLabel={label} onLayout={(e) => setWidth(e.nativeEvent.layout.width)}>
       <Svg width="100%" height="100%" viewBox={`0 0 ${w} ${h}`}>
         {children}
       </Svg>
@@ -34,6 +37,11 @@ function Chart({ w, h, children, label, onTap }: { w: number; h: number; childre
           }}
         />
       ) : null}
+      {tip && width ? (
+        <Pressable onPress={onClose} accessibilityRole="button" accessibilityLabel={`${tip.r.title}. Close`} style={{ position: 'absolute', top: 0, left, width: tipW }}>
+          <TipCard r={tip.r} />
+        </Pressable>
+      ) : null}
     </View>
   );
 }
@@ -44,33 +52,38 @@ export interface ReadoutItem {
   color?: string;
 }
 
-/** The text a chart shows above itself: a summary, or what a tapped bar or point shows. */
+/** What a tapped bar or point shows, in a popup over the chart. */
 export interface Readout {
   title: string;
   items?: ReadoutItem[];
 }
 
-function ReadoutView({ r }: { r: Readout | null }) {
+function TipCard({ r }: { r: Readout }) {
   const c = useColors();
-  if (!r) return <View style={{ height: space.sm }} />;
   return (
-    <View style={{ marginTop: space.sm, marginBottom: space.xs, minHeight: 22 }} accessibilityLiveRegion="polite">
-      <Text style={{ color: c.ink, fontSize: 15, fontWeight: '700', fontVariant: ['tabular-nums'] }}>
-        {r.title}
-      </Text>
-      {r.items?.length ? (
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', columnGap: space.md, rowGap: 2, marginTop: 2 }}>
-          {r.items.map((it) => (
-            <View key={it.label} style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
-              {it.color ? <View style={{ width: 9, height: 9, borderRadius: 2, backgroundColor: it.color }} /> : null}
-              <Text style={{ color: c.mute, fontSize: 13, fontVariant: ['tabular-nums'] }}>
-                {it.label ? `${it.label} ` : ''}
-                <Text style={{ color: c.ink, fontWeight: '700' }}>{it.value}</Text>
-              </Text>
-            </View>
-          ))}
+    <View
+      accessibilityLiveRegion="polite"
+      style={{
+        backgroundColor: c.card,
+        borderColor: c.line,
+        borderWidth: 1,
+        borderRadius: radius.md,
+        paddingHorizontal: space.md,
+        paddingVertical: space.sm,
+        shadowColor: '#000',
+        shadowOpacity: 0.18,
+        shadowRadius: 10,
+        shadowOffset: { width: 0, height: 4 },
+        elevation: 6,
+      }}>
+      <Text style={{ color: c.ink, fontSize: 14, fontWeight: '800', fontVariant: ['tabular-nums'] }}>{r.title}</Text>
+      {r.items?.map((it) => (
+        <View key={it.label} style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 3 }}>
+          {it.color ? <View style={{ width: 9, height: 9, borderRadius: 2, backgroundColor: it.color }} /> : null}
+          <Text style={{ flex: 1, color: c.mute, fontSize: 13 }}>{it.label}</Text>
+          <Text style={{ color: c.ink, fontSize: 13, fontWeight: '700', fontVariant: ['tabular-nums'] }}>{it.value}</Text>
         </View>
-      ) : null}
+      ))}
     </View>
   );
 }
@@ -217,7 +230,6 @@ export function BarChart({
   signed = false,
   goal,
   titles,
-  summary,
   format,
 }: {
   values: (number | null)[];
@@ -228,8 +240,6 @@ export function BarChart({
   goal?: number | null;
   /** Each bar's full name for the readout ("Tue, Oct 13"); the axis label otherwise. */
   titles?: string[];
-  /** What the readout shows before a bar is tapped. */
-  summary?: Readout;
   format?: (v: number) => string;
 }) {
   const c = useColors();
@@ -253,11 +263,9 @@ export function BarChart({
   const read: Readout | null =
     sel != null
       ? { title: `${titles?.[sel] ?? labels[sel]}: ${values[sel] == null ? 'nothing logged' : f(values[sel] as number)}`, items: g != null ? [{ label: 'Target', value: f(g) }] : undefined }
-      : (summary ?? null);
+      : null;
   return (
-    <>
-    <ReadoutView r={read} />
-    <Chart w={W} h={H} label={label} onTap={tap}>
+    <Chart w={W} h={H} label={label} onTap={tap} tip={read && sel != null ? { x: GUTTER + sel * bw + bw / 2, r: read } : null} onClose={() => setSel(null)}>
       <YAxis ticks={ticks} y={y} unit={unit} />
       {values.map((v, i) => {
         if (v == null || v === 0) return null;
@@ -276,7 +284,6 @@ export function BarChart({
         ) : null,
       )}
     </Chart>
-    </>
   );
 }
 
@@ -335,7 +342,6 @@ export function LineChart({
   to,
   tick,
   refs = [],
-  summary,
   format,
   titleFor,
 }: {
@@ -349,7 +355,6 @@ export function LineChart({
   tick?: (v: number) => string;
   /** Dashed reference lines, such as a target or 100%. */
   refs?: { v: number; color?: string }[];
-  summary?: Readout;
   /** How values read in the readout (default: the axis unit). */
   format?: (v: number) => string;
   /** The readout title for a point's date, such as the week it stands for. */
@@ -406,11 +411,9 @@ export function LineChart({
           if (vals.length === 1 && !named.length) return { title: `${t}: ${f(vals[0].p!.v)}` };
           return { title: t, items: vals.map((r) => ({ label: r.x.name ?? '', value: f(r.p!.v), color: r.x.color })) };
         })()
-      : (summary ?? null);
+      : null;
   return (
-    <>
-    <ReadoutView r={read} />
-    <Chart w={W} h={H} label={label} onTap={tap}>
+    <Chart w={W} h={H} label={label} onTap={tap} tip={read && sel != null ? { x: x(sel), r: read } : null} onClose={() => setSel(null)}>
       <YAxis ticks={ticks} y={y} unit={unit.trim()} tick={tick} />
       {sel != null ? <Line x1={x(sel)} x2={x(sel)} y1={padT - 6} y2={H - padB} stroke={c.mute} strokeWidth={1.25} strokeDasharray="3 3" /> : null}
       {refs.map((r, i) => (
@@ -446,7 +449,6 @@ export function LineChart({
         {dateLabel(last, years)}
       </SvgText>
     </Chart>
-    </>
   );
 }
 
@@ -468,7 +470,6 @@ export function StackedBarChart({
   percent = false,
   goal,
   titles,
-  summary,
   format,
 }: {
   series: StackSeries[];
@@ -478,7 +479,6 @@ export function StackedBarChart({
   percent?: boolean;
   goal?: number | null;
   titles?: string[];
-  summary?: Readout;
   format?: (v: number) => string;
 }) {
   const c = useColors();
@@ -508,11 +508,9 @@ export function StackedBarChart({
                 .map((sr) => ({ label: sr.label, value: percent ? `${Math.round(((sr.values[sel] ?? 0) / totals[sel]) * 100)}%` : f(sr.values[sel] ?? 0), color: sr.color }))
             : undefined,
         }
-      : (summary ?? null);
+      : null;
   return (
-    <>
-    <ReadoutView r={read} />
-    <Chart w={W} h={H} label={label} onTap={tap}>
+    <Chart w={W} h={H} label={label} onTap={tap} tip={read && sel != null ? { x: GUTTER + sel * bw + bw / 2, r: read } : null} onClose={() => setSel(null)}>
       <YAxis ticks={ticks} y={y} unit={percent ? '%' : unit} />
       {labels.map((_, i) => {
         const total = totals[i];
@@ -537,7 +535,6 @@ export function StackedBarChart({
         ) : null,
       )}
     </Chart>
-    </>
   );
 }
 
