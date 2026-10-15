@@ -8,7 +8,7 @@ Competitor details come from the public sources listed at the end and were check
 
 | Area | Strava / Fitbit | This app | Status |
 |---|---|---|---|
-| Record a run, ride or walk with GPS | Strava: yes, with maps and splits | Recorder with route map, live distance, mile splits | Done |
+| Record a run, ride or walk with GPS | Strava: yes, with maps and splits | Recorder with route map, live distance, mile splits; keeps recording with the screen locked in the installed app | Done (website: only while the page is open) |
 | Log an activity by hand | Both | Distance, time, pace, elevation, heart rate, calories, notes, how hard it felt | Done |
 | Activity stats: totals by week, month, year, all time; averages; records; best efforts | Strava: free for the basics | Same, per sport, in the Progress tab | Done |
 | Training plans | Paid tiers on both | Running, biking, swimming and triathlon plans, free | Done |

@@ -5,20 +5,23 @@ import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 
 import {
   CARDIO_LABEL,
-  EMPTY_TRACK,
   METERS_PER_MILE,
-  addFix,
   compactRoute,
   defaultPlanDay,
+  finishSession,
   fmt,
   fmtTime,
+  movingAt,
   newId,
+  newSession,
   paceText,
+  pauseSession,
+  resumeSession,
   splitsOf,
   type CardioSession,
   type CardioType,
   type LatLng,
-  type Track,
+  type RecSession,
 } from '@/logic';
 
 import { Field } from '../components';
@@ -26,13 +29,13 @@ import { Button, LinkButton } from '../food/kit';
 import { Select } from '../Select';
 import { useTracker } from '../store';
 import { fonts, radius, space, tabular, useColors } from '../theme';
+import { backgroundCapable, startBackground, stopBackground } from './bgLocation';
 import { watchGps, type GpsProblem } from './gpsWatch';
+import { addFixes, getSession, subscribe, updateSession } from './recStore';
 import { RouteMap } from './RouteMap';
 
 /** Sports worth tracking with GPS. */
 const GPS_TYPES: CardioType[] = ['run', 'walk', 'hike', 'bike'];
-
-type Phase = 'ready' | 'recording' | 'paused' | 'review';
 
 const PROBLEM: Record<GpsProblem, string> = {
   denied: 'Location access is off. Turn it on for this app (or this site) in your settings to record a route.',
@@ -45,39 +48,56 @@ const KEEP_AWAKE = 'recording';
 /** Wall clock, for handlers and callbacks (never read while rendering). */
 const clockNow = () => Date.now();
 
-/** Full-screen recorder: follows GPS, shows time, distance and pace live on a map, then saves a session. */
-export function Recorder({ visible, onClose }: { visible: boolean; onClose: () => void }) {
+/** The live recording, kept in step with the saved one. Undefined until it's been read. */
+export function useRecording(): RecSession | null | undefined {
+  const [s, setS] = useState<RecSession | null | undefined>(undefined);
+  useEffect(() => {
+    let live = true;
+    getSession().then((x) => live && setS(x));
+    const off = subscribe((x) => setS(x));
+    return () => {
+      live = false;
+      off();
+    };
+  }, []);
+  return s;
+}
+
+/**
+ * Full-screen recorder: follows GPS, shows time, distance and pace live on a map, then saves a session.
+ * The recording is saved as it goes. In the app it keeps recording with the screen locked or another app
+ * open (a background location task); in a browser it carries on when the page comes back. Closing this
+ * screen while recording just hides it.
+ */
+export function Recorder({ onClose }: { onClose: () => void }) {
   const c = useColors();
   const { state, today, update } = useTracker();
+  const sess = useRecording();
   const [type, setType] = useState<CardioType>('run');
-  const [phase, setPhaseState] = useState<Phase>('ready');
-  const [track, setTrack] = useState<Track>(EMPTY_TRACK);
   const [here, setHere] = useState<{ p: LatLng; acc: number | null } | null>(null);
   const [problem, setProblem] = useState<GpsProblem | null>(null);
   const [note, setNote] = useState('');
   const [confirm, setConfirm] = useState<'discard' | null>(null);
-  const [clock, setClock] = useState({ banked: 0, since: 0 });
-  const [now, setNow] = useState(0);
+  const [now, setNow] = useState(clockNow);
+  const phase = sess ? sess.phase : 'ready';
+  const recording = phase === 'recording';
+  const shownType = sess?.type ?? type;
 
-  // The GPS callback outlives renders, so it reads these.
-  const phaseRef = useRef<Phase>('ready');
-  const trackRef = useRef<Track>(EMPTY_TRACK);
-  const resumeRef = useRef(false);
-  const clockRef = useRef({ banked: 0, since: 0 });
-
-  const setPhase = (p: Phase) => {
-    phaseRef.current = p;
-    setPhaseState(p);
-  };
-  const setTimer = (v: { banked: number; since: number }) => {
-    clockRef.current = v;
-    setClock(v);
-  };
-  /** Seconds recorded at time `t` (pauses left out). For handlers and the GPS callback. */
-  const movingAt = (t: number) => clockRef.current.banked + (phaseRef.current === 'recording' ? (t - clockRef.current.since) / 1000 : 0);
-
+  // The GPS callback outlives renders, so it reads this.
+  const recRef = useRef(false);
   useEffect(() => {
-    if (!visible) return;
+    recRef.current = recording;
+  }, [recording]);
+
+  // In the app, a running recording is fed by the background task; make sure it's on (after a restart too).
+  useEffect(() => {
+    if (backgroundCapable && recording) startBackground();
+  }, [recording]);
+
+  // Follow GPS on screen: for the "you are here" dot, and in a browser for the recording itself.
+  const watchHere = !backgroundCapable || !recording;
+  useEffect(() => {
+    if (!watchHere) return;
     let stop: (() => void) | null = null;
     let live = true;
     watchGps(
@@ -85,75 +105,75 @@ export function Recorder({ visible, onClose }: { visible: boolean; onClose: () =
         if (!live) return;
         setProblem(null);
         setHere({ p: [f.lat, f.lng], acc: f.acc ?? null });
-        if (phaseRef.current !== 'recording') return;
-        const next = addFix(trackRef.current, f, movingAt(clockNow()), resumeRef.current);
-        resumeRef.current = false;
-        if (next !== trackRef.current) {
-          trackRef.current = next;
-          setTrack(next);
-        }
+        if (!backgroundCapable && recRef.current) addFixes([f]);
       },
       (p) => live && setProblem(p),
     ).then((s) => {
       if (live) stop = s;
       else s();
     });
-    const t = setInterval(() => setNow(clockNow()), 1000);
     return () => {
       live = false;
       stop?.();
-      clearInterval(t);
+    };
+  }, [watchHere]);
+
+  useEffect(() => {
+    const t = setInterval(() => setNow(clockNow()), 1000);
+    return () => clearInterval(t);
+  }, []);
+
+  // A browser stops when the screen sleeps: keep it awake while recording there.
+  useEffect(() => {
+    if (Platform.OS !== 'web' || !recording) return;
+    activateKeepAwakeAsync(KEEP_AWAKE).catch(() => {});
+    return () => {
       deactivateKeepAwake(KEEP_AWAKE).catch(() => {});
     };
-  }, [visible]);
+  }, [recording]);
 
-  const start = () => {
+  const start = async () => {
     const t = clockNow();
-    setTimer({ banked: 0, since: t });
     setNow(t);
-    trackRef.current = EMPTY_TRACK;
-    setTrack(EMPTY_TRACK);
-    setPhase('recording');
-    activateKeepAwakeAsync(KEEP_AWAKE).catch(() => {});
+    await updateSession(() => newSession(type, t));
+    if (backgroundCapable && !(await startBackground())) {
+      await updateSession(() => null);
+      setProblem('denied');
+    }
   };
   const pause = () => {
-    setTimer({ banked: movingAt(clockNow()), since: 0 });
-    setPhase('paused');
+    updateSession((s) => (s ? pauseSession(s, clockNow()) : s));
+    stopBackground();
   };
   const resume = () => {
-    const t = clockNow();
-    setTimer({ banked: clockRef.current.banked, since: t });
-    setNow(t);
-    resumeRef.current = true;
-    setPhase('recording');
+    setNow(clockNow());
+    updateSession((s) => (s ? resumeSession(s, clockNow()) : s));
   };
   const finish = () => {
-    if (phaseRef.current === 'recording') pause();
-    setPhase('review');
-    deactivateKeepAwake(KEEP_AWAKE).catch(() => {});
+    updateSession((s) => (s ? finishSession(s, clockNow()) : s));
+    stopBackground();
   };
-  const reset = () => {
-    trackRef.current = EMPTY_TRACK;
-    setTrack(EMPTY_TRACK);
-    setTimer({ banked: 0, since: 0 });
+  const discard = async () => {
+    await stopBackground();
+    await updateSession(() => null);
     setNote('');
     setConfirm(null);
-    setPhase('ready');
-    deactivateKeepAwake(KEEP_AWAKE).catch(() => {});
-  };
-  const close = () => {
-    if (phase === 'recording' || phase === 'paused' || phase === 'review') return setConfirm('discard');
-    reset();
     onClose();
   };
 
-  const secs = Math.round(clock.banked + (phase === 'recording' ? Math.max(0, now - clock.since) / 1000 : 0));
-  const miles = track.meters / METERS_PER_MILE;
-  const speedish = type === 'bike' ? (secs > 0 && miles > 0 ? `${fmt(+(miles / (secs / 3600)).toFixed(1))}` : '–') : paceText(miles, secs).replace(' /mi', '') || '–';
-  const speedUnit = type === 'bike' ? 'mph' : '/mi';
+  if (sess === undefined) return null;
+  const track = sess?.track;
+  const secs = sess ? Math.round(movingAt(sess, now || sess.since || sess.startedAt)) : 0;
+  const miles = (track?.meters ?? 0) / METERS_PER_MILE;
+  const speedish = shownType === 'bike' ? (secs > 0 && miles > 0 ? `${fmt(+(miles / (secs / 3600)).toFixed(1))}` : '–') : paceText(miles, secs).replace(' /mi', '') || '–';
+  const speedUnit = shownType === 'bike' ? 'mph' : '/mi';
+  // In the app the latest recorded point is where you are.
+  const last = track?.last;
+  const dot: LatLng | null = phase === 'review' ? null : backgroundCapable && recording && last ? [last.lat, last.lng] : (here?.p ?? null);
 
-  const save = () => {
-    const x: CardioSession = { id: newId('c'), date: today, type };
+  const save = async () => {
+    if (!sess || !track) return;
+    const x: CardioSession = { id: newId('c'), date: today, type: sess.type };
     if (miles >= 0.01) x.miles = Math.round(miles * 1000) / 1000;
     if (secs > 0) x.secs = secs;
     const ft = Math.round(track.climbM * 3.28084);
@@ -161,10 +181,12 @@ export function Recorder({ visible, onClose }: { visible: boolean; onClose: () =
     if (track.pts.length >= 2) x.route = compactRoute(track.pts);
     if (track.miles.length) x.splits = splitsOf(track.miles);
     if (note.trim()) x.note = note.trim();
-    const pd = defaultPlanDay(state.cardio, today, type);
+    const pd = defaultPlanDay(state.cardio, today, sess.type);
     if (pd) x.planDay = pd;
     update((s) => ({ ...s, cardio: { ...s.cardio, sessions: [...s.cardio.sessions, x].sort((a, b) => a.date.localeCompare(b.date)) } }));
-    reset();
+    await stopBackground();
+    await updateSession(() => null);
+    setNote('');
     onClose();
   };
 
@@ -176,19 +198,25 @@ export function Recorder({ visible, onClose }: { visible: boolean; onClose: () =
         ? `Weak GPS signal (±${Math.round(here.acc)} m). It improves outdoors with a clear view of the sky.`
         : 'GPS ready';
   const gpsOk = !problem && here && (here.acc == null || here.acc <= 40);
+  const gapNote =
+    sess && sess.gaps > 0
+      ? backgroundCapable
+        ? `GPS dropped out ${sess.gaps === 1 ? 'once' : `${sess.gaps} times`} (longest ${Math.round(sess.longestGap / 60)} min). Those stretches are drawn as straight lines.`
+        : `The browser paused GPS while the screen was off or you were in another app (longest ${Math.max(1, Math.round(sess.longestGap / 60))} min). Time kept counting; those stretches are straight lines. The installed app keeps tracking with the screen locked.`
+      : null;
 
   return (
-    <Modal visible={visible} animationType="slide" presentationStyle="fullScreen" onRequestClose={close}>
+    <Modal visible animationType="slide" presentationStyle="fullScreen" onRequestClose={onClose}>
       <SafeAreaProvider>
         <SafeAreaView style={{ flex: 1, backgroundColor: c.bg }}>
           <View style={[st.bar, { borderBottomColor: c.line }]}>
             <Text style={[st.title, { color: c.ink }]}>
-              {phase === 'ready' ? 'Record' : phase === 'review' ? 'Save activity' : phase === 'paused' ? 'Paused' : `Recording ${CARDIO_LABEL[type].toLowerCase()}`}
+              {phase === 'ready' ? 'Record' : phase === 'review' ? 'Save activity' : phase === 'paused' ? 'Paused' : `Recording ${CARDIO_LABEL[shownType].toLowerCase()}`}
             </Text>
-            <LinkButton label={phase === 'ready' ? 'Close' : 'Discard'} onPress={close} />
+            <LinkButton label={phase === 'ready' ? 'Close' : 'Hide'} onPress={onClose} />
           </View>
           <ScrollView contentContainerStyle={{ padding: space.lg, paddingBottom: 48 }} keyboardShouldPersistTaps="handled">
-            <RouteMap route={track.pts} here={phase === 'review' ? null : (here?.p ?? null)} height={phase === 'review' ? 240 : 300} maxZoom={phase === 'review' ? 17 : 16} />
+            <RouteMap route={track?.pts ?? []} here={dot} height={phase === 'review' ? 240 : 300} maxZoom={phase === 'review' ? 17 : 16} />
 
             {phase === 'ready' ? (
               <>
@@ -198,10 +226,12 @@ export function Recorder({ visible, onClose }: { visible: boolean; onClose: () =
                 </View>
                 <Text style={[st.lbl, { color: c.mute, marginTop: space.lg }]}>Activity</Text>
                 <Select label="Activity" value={type} options={GPS_TYPES.map((t) => ({ value: t, label: CARDIO_LABEL[t] }))} onChange={setType} />
-                {Platform.OS === 'web' ? (
-                  <Text style={{ color: c.mute, fontSize: 13, marginTop: space.md }}>Keep this page open while you record. Browsers stop tracking when the screen locks or you switch apps.</Text>
+                {backgroundCapable ? (
+                  <Text style={{ color: c.mute, fontSize: 13, marginTop: space.md }}>Recording keeps going with the screen locked or another app open. A notification shows while it runs.</Text>
                 ) : (
-                  <Text style={{ color: c.mute, fontSize: 13, marginTop: space.md }}>Keep the app open while you record. The screen stays on.</Text>
+                  <Text style={{ color: c.mute, fontSize: 13, marginTop: space.md }}>
+                    In a browser, keep this page open: browsers stop GPS when the screen locks or you switch apps. The recording is saved as you go and picks up when you come back. The installed app records with the screen locked.
+                  </Text>
                 )}
                 <Button label="Start" primary onPress={start} style={{ marginTop: space.xl, opacity: problem ? 0.4 : 1 }} />
               </>
@@ -210,43 +240,41 @@ export function Recorder({ visible, onClose }: { visible: boolean; onClose: () =
                 <View style={[st.big, { borderColor: c.line }]}>
                   <BigStat label="Time" value={fmtTime(secs)} />
                   <BigStat label="Miles" value={fmt(+miles.toFixed(2))} />
-                  <BigStat label={type === 'bike' ? 'Speed' : 'Pace'} value={speedish} unit={speedUnit} />
+                  <BigStat label={shownType === 'bike' ? 'Speed' : 'Pace'} value={speedish} unit={speedUnit} />
                 </View>
-                {track.climbM >= 1 ? (
+                {track && track.climbM >= 1 ? (
                   <Text style={{ color: c.mute, fontSize: 14, marginTop: space.sm, textAlign: 'center', ...tabular }}>{`Climb ${Math.round(track.climbM * 3.28084)} ft`}</Text>
                 ) : null}
                 {problem && phase !== 'review' ? <Text style={{ color: c.bad, marginTop: space.md }}>{PROBLEM[problem]}</Text> : null}
+                {gapNote ? <Text style={{ color: c.mute, fontSize: 13, marginTop: space.md }}>{gapNote}</Text> : null}
 
                 {confirm === 'discard' ? (
                   <View style={{ gap: space.sm, marginTop: space.xl }}>
                     <Text style={{ color: c.ink, fontSize: 15 }}>Discard this activity? It won’t be saved.</Text>
-                    <Button
-                      label="Discard"
-                      danger
-                      onPress={() => {
-                        reset();
-                        onClose();
-                      }}
-                    />
+                    <Button label="Discard" danger onPress={discard} />
                     <Button label="Keep it" onPress={() => setConfirm(null)} />
                   </View>
                 ) : phase === 'review' ? (
                   <>
-                    {track.miles.length ? <Splits marks={track.miles} /> : null}
+                    {track?.miles.length ? <Splits marks={track.miles} /> : null}
                     <Text style={[st.lbl, { color: c.mute, marginTop: space.lg }]}>Notes</Text>
                     <Field value={note} onChangeText={setNote} placeholder="How it felt" multiline style={{ minHeight: 60, textAlignVertical: 'top' }} />
                     <Button label="Save" primary onPress={save} style={{ marginTop: space.xl }} />
                     <Button label="Resume" onPress={resume} style={{ marginTop: space.md }} />
+                    <View style={{ flexDirection: 'row', justifyContent: 'center', marginTop: space.lg }}>
+                      <LinkButton label="Discard activity" color={c.bad} onPress={() => setConfirm('discard')} />
+                    </View>
                   </>
                 ) : (
-                  <View style={[st.controls, { marginTop: space.xl }]}>
-                    {phase === 'recording' ? (
-                      <Button label="Pause" onPress={pause} style={{ flex: 1 }} />
-                    ) : (
-                      <Button label="Resume" primary onPress={resume} style={{ flex: 1 }} />
-                    )}
-                    <Button label="Finish" primary={phase === 'recording'} onPress={finish} style={{ flex: 1 }} />
-                  </View>
+                  <>
+                    <View style={[st.controls, { marginTop: space.xl }]}>
+                      {recording ? <Button label="Pause" onPress={pause} style={{ flex: 1 }} /> : <Button label="Resume" primary onPress={resume} style={{ flex: 1 }} />}
+                      <Button label="Finish" primary={recording} onPress={finish} style={{ flex: 1 }} />
+                    </View>
+                    <View style={{ flexDirection: 'row', justifyContent: 'center', marginTop: space.lg }}>
+                      <LinkButton label="Discard activity" color={c.bad} onPress={() => setConfirm('discard')} />
+                    </View>
+                  </>
                 )}
               </>
             )}
