@@ -1,9 +1,9 @@
-import { Platform, Text, View } from 'react-native';
+import { Pressable, Platform, Text, View } from 'react-native';
 import Svg, { Circle, Line, Polyline, Rect, Text as SvgText } from 'react-native-svg';
 
-import { MONTHS, dayDiff, fmt, sgn, toD, type WeekBar as BarRow } from '@/logic';
+import { MONTHS, RANGES, dayDiff, fmt, niceTicks, toD, type Range, type WeekBar as BarRow } from '@/logic';
 
-import { fonts, space, useColors } from './theme';
+import { radius, space, useColors } from './theme';
 
 /** SVG text falls back to a serif face on the web unless told otherwise. Native already uses the system font. */
 const SANS = Platform.select({ web: 'system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif', default: undefined });
@@ -73,122 +73,148 @@ export function ChartKey({ items }: { items: KeyKind[] }) {
   );
 }
 
-/** Dashed outline = planned, solid = logged. */
-export function PlanBars({ rows, label }: { rows: BarRow[]; label: string }) {
+/** Week / Month / Year / All switch for a chart. */
+export function RangeTabs({ value, onChange, options = RANGES.map((r) => r.id) }: { value: Range; onChange: (r: Range) => void; options?: Range[] }) {
   const c = useColors();
-  const W = 360, H = 156, padB = 22, padT = 16, n = rows.length, bw = W / n, ph = H - padB - padT;
-  const mx = Math.max(1, ...rows.map((r) => Math.max(r.planned, r.actual)));
-  const base = H - padB;
+  return (
+    <View style={{ flexDirection: 'row', backgroundColor: c.soft, borderRadius: radius.sm, padding: 3, gap: 2 }} accessibilityRole="tablist">
+      {RANGES.filter((r) => options.includes(r.id)).map((r) => {
+        const on = r.id === value;
+        return (
+          <Pressable
+            key={r.id}
+            onPress={() => onChange(r.id)}
+            accessibilityRole="tab"
+            accessibilityState={{ selected: on }}
+            style={{ flex: 1, alignItems: 'center', paddingVertical: 6, borderRadius: radius.sm - 2, backgroundColor: on ? c.card : 'transparent' }}>
+            <Text style={{ color: on ? c.ink : c.mute, fontSize: 13, fontWeight: on ? '800' : '600' }}>{r.label}</Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
+/** The line under a chart's range tabs: what time span and what unit, e.g. "Last 30 days · miles per day". */
+export function ChartCaption({ children }: { children: string }) {
+  const c = useColors();
+  return <Text style={{ color: c.mute, fontSize: 12.5, marginTop: space.sm, marginBottom: 2 }}>{children}</Text>;
+}
+
+const W = 360;
+/** Room on the left for the value axis. */
+const GUTTER = 40;
+
+/** Short axis number: 1200 → "1.2k". */
+function axisNum(v: number): string {
+  const a = Math.abs(v);
+  if (a >= 10000) return `${fmt(Math.round(v / 1000))}k`;
+  if (a >= 1000) return `${fmt(Math.round(v / 100) / 10)}k`;
+  return fmt(Math.round(v * 10) / 10);
+}
+
+/** Horizontal grid lines with their values, and the unit above the axis. */
+function YAxis({ ticks, y, unit }: { ticks: number[]; y: (v: number) => number; unit?: string }) {
+  const c = useColors();
+  return (
+    <>
+      {ticks.map((t) => (
+        <Line key={`g${t}`} x1={GUTTER} x2={W} y1={y(t)} y2={y(t)} stroke={t === 0 ? c.mute : c.line} strokeWidth={t === 0 ? 1.25 : 1} />
+      ))}
+      {ticks.map((t) => (
+        <SvgText key={`t${t}`} fontFamily={SANS} x={GUTTER - 6} y={y(t) + 4} textAnchor="end" fontSize={10.5} fill={c.mute}>
+          {axisNum(t)}
+        </SvgText>
+      ))}
+      {unit ? (
+        <SvgText fontFamily={SANS} x={0} y={9} fontSize={10.5} fontWeight="600" fill={c.mute}>
+          {unit}
+        </SvgText>
+      ) : null}
+    </>
+  );
+}
+
+/** Which x labels to draw so they don't crowd: about 7, always the first and last. */
+function showLabel(i: number, n: number): boolean {
+  if (n <= 8) return true;
+  const k = Math.ceil(n / 7);
+  return i === n - 1 || (i % k === 0 && n - 1 - i >= k);
+}
+
+/**
+ * Bars over time with a value axis. `signed` colors bars above zero green and below red (deficit/surplus);
+ * `goal` draws a dashed line. Empty buckets (null) draw nothing. The last bar (now) is darkest.
+ */
+export function BarChart({
+  values,
+  labels,
+  unit,
+  label,
+  signed = false,
+  goal,
+}: {
+  values: (number | null)[];
+  labels: string[];
+  unit?: string;
+  label: string;
+  signed?: boolean;
+  goal?: number | null;
+}) {
+  const c = useColors();
+  const H = 184, padT = 22, padB = 22;
+  const nums = values.filter((v): v is number => v != null);
+  const g = goal != null && goal > 0 ? goal : null;
+  const ticks = niceTicks(Math.min(0, ...nums), Math.max(0, ...nums, g ?? 0));
+  const lo = ticks[0], hi = ticks[ticks.length - 1];
+  const y = (v: number) => padT + ((hi - v) / (hi - lo || 1)) * (H - padT - padB);
+  const n = values.length;
+  const bw = (W - GUTTER) / Math.max(n, 1);
+  const gap = Math.min(4, bw * 0.25);
   return (
     <Chart w={W} h={H} label={label}>
-      <SvgText fontFamily={SANS} x={0} y={10} fontSize={11} fill={c.mute}>
-        {`${fmt(+mx.toFixed(1))} mi`}
-      </SvgText>
-      {rows.map((r, i) => {
-        const x = i * bw + 4, w = bw - 8;
-        const hp = (r.planned / mx) * ph, ha = (r.actual / mx) * ph;
-        return [
-          <Rect key={`p${i}`} x={x} y={base - hp} width={w} height={hp} fill="none" stroke={c.mute} strokeWidth={1.25} strokeDasharray="3 2" rx={3} />,
-          r.actual > 0 ? <Rect key={`a${i}`} x={x} y={base - ha} width={w} height={ha} fill={c.ink} rx={3} /> : null,
-          <SvgText fontFamily={SANS} key={`l${i}`} x={x + w / 2} y={H - 6} textAnchor="middle" fontSize={11} fill={c.mute}>
-            {r.label}
-          </SvgText>,
-        ];
+      <YAxis ticks={ticks} y={y} unit={unit} />
+      {values.map((v, i) => {
+        if (v == null || v === 0) return null;
+        const x = GUTTER + i * bw + gap / 2;
+        const y0 = y(0), y1 = y(v);
+        const fill = signed ? (v >= 0 ? c.ok : c.bad) : c.ink;
+        return <Rect key={`b${i}`} x={x} y={Math.min(y0, y1)} width={Math.max(bw - gap, 1)} height={Math.max(Math.abs(y1 - y0), 1)} rx={Math.min(3, bw / 4)} fill={fill} opacity={signed || i === n - 1 ? 1 : 0.6} />;
       })}
-      <Line x1={0} x2={W} y1={base} y2={base} stroke={c.line} strokeWidth={1.5} />
+      {g != null ? <Line x1={GUTTER} x2={W} y1={y(g)} y2={y(g)} stroke={c.ink} strokeDasharray="5 3" strokeWidth={1.75} /> : null}
+      {labels.map((l, i) =>
+        showLabel(i, n) ? (
+          <SvgText key={`l${i}`} fontFamily={SANS} x={GUTTER + i * bw + bw / 2} y={H - 6} textAnchor="middle" fontSize={10.5} fill={c.mute}>
+            {l}
+          </SvgText>
+        ) : null,
+      )}
     </Chart>
   );
 }
 
-/** Plain bars with a unit, e.g. workouts or miles a week. The latest bar is darkest. */
-export function Bars({ rows, unit, label }: { rows: { label: string; v: number }[]; unit: string; label: string }) {
+/** Dashed outline = planned, solid = logged, by plan week. */
+export function PlanBars({ rows, label, unit = 'mi' }: { rows: BarRow[]; label: string; unit?: string }) {
   const c = useColors();
-  const W = 360, H = 140, padB = 22, padT = 16, n = rows.length, bw = W / n, ph = H - padB - padT;
-  const mx = Math.max(1, ...rows.map((r) => r.v));
-  const base = H - padB;
+  const H = 176, padB = 22, padT = 22, n = rows.length, bw = (W - GUTTER) / n;
+  const ticks = niceTicks(0, Math.max(0, ...rows.map((r) => Math.max(r.planned, r.actual))));
+  const hi = ticks[ticks.length - 1];
+  const y = (v: number) => padT + ((hi - v) / (hi || 1)) * (H - padT - padB);
   return (
     <Chart w={W} h={H} label={label}>
-      <SvgText fontFamily={SANS} x={0} y={10} fontSize={11} fill={c.mute}>
-        {`${fmt(+mx.toFixed(1))} ${unit}`}
-      </SvgText>
+      <YAxis ticks={ticks} y={y} unit={unit} />
       {rows.map((r, i) => {
-        const x = i * bw + 3, w = bw - 6;
-        const hv = (r.v / mx) * ph;
+        const x = GUTTER + i * bw + 3, w = bw - 6;
         return [
-          r.v > 0 ? <Rect key={`a${i}`} x={x} y={base - hv} width={w} height={hv} fill={c.ink} opacity={i === n - 1 ? 1 : 0.55} rx={3} /> : null,
-          (n - 1 - i) % 2 === 0 || n <= 8 ? (
+          <Rect key={`p${i}`} x={x} y={y(r.planned)} width={w} height={y(0) - y(r.planned)} fill="none" stroke={c.mute} strokeWidth={1.25} strokeDasharray="3 2" rx={3} />,
+          r.actual > 0 ? <Rect key={`a${i}`} x={x} y={y(r.actual)} width={w} height={y(0) - y(r.actual)} fill={c.ink} rx={3} /> : null,
+          showLabel(i, n) ? (
             <SvgText fontFamily={SANS} key={`l${i}`} x={x + w / 2} y={H - 6} textAnchor="middle" fontSize={10.5} fill={c.mute}>
               {r.label}
             </SvgText>
           ) : null,
         ];
       })}
-      <Line x1={0} x2={W} y1={base} y2={base} stroke={c.line} strokeWidth={1.5} />
-    </Chart>
-  );
-}
-
-/** Green above zero = deficit, red below = surplus, dashed = goal. */
-export function DeficitBars({ vals, goal }: { vals: { s: string; v: number | null }[]; goal: number | null }) {
-  const c = useColors();
-  const g = goal != null && goal > 0 ? goal : 0;
-  const nums = vals.filter((x) => x.v != null).map((x) => x.v as number);
-  let mx = Math.max(...nums, 0, g);
-  const mn = Math.min(...nums, 0);
-  if (mx === mn) mx = mn + 1;
-  const N = vals.length, W = 360, H = 176, padT = 12, padB = 20, bw = W / N, ph = H - padT - padB;
-  const y = (v: number) => padT + ((mx - v) / (mx - mn)) * ph;
-  return (
-    <Chart w={W} h={H} label="Daily calorie deficit">
-      {vals.map((x, i) => {
-        const out = [];
-        if (x.v != null) {
-          const y0 = y(0), y1 = y(x.v);
-          out.push(
-            <Rect key={`b${i}`} x={i * bw + 2} y={Math.min(y0, y1)} width={bw - 4} height={Math.max(Math.abs(y1 - y0), 1)} rx={3} fill={x.v >= 0 ? c.ok : c.bad} />,
-          );
-        }
-        out.push(
-          <SvgText fontFamily={SANS} key={`t${i}`} x={i * bw + bw / 2} y={H - 5} textAnchor="middle" fontSize={10} fill={c.mute}>
-            {toD(x.s).getDate()}
-          </SvgText>,
-        );
-        return out;
-      })}
-      <Line x1={0} x2={W} y1={y(0)} y2={y(0)} stroke={c.mute} strokeWidth={1.25} />
-      {g > 0 ? <Line x1={0} x2={W} y1={y(g)} y2={y(g)} stroke={c.ink} strokeDasharray="5 3" strokeWidth={1.75} /> : null}
-    </Chart>
-  );
-}
-
-/** Running total of deficit over logged days, latest total labeled. Needs >= 2 points. */
-export function CumulativeLine({ pts }: { pts: { s: string; v: number }[] }) {
-  const c = useColors();
-  const W = 360, CH = 164, cpT = 20, cpB = 22, cph = CH - cpT - cpB;
-  const span = Math.max(dayDiff(pts[pts.length - 1].s, pts[0].s), 1);
-  let cmx = Math.max(...pts.map((p) => p.v), 0);
-  const cmn = Math.min(...pts.map((p) => p.v), 0);
-  if (cmx === cmn) cmx = cmn + 1;
-  const cy = (v: number) => cpT + ((cmx - v) / (cmx - cmn)) * cph;
-  const cx = (s: string) => 10 + (dayDiff(s, pts[0].s) / span) * (W - 20);
-  const last = pts[pts.length - 1];
-  const dl = (s: string) => `${toD(s).getDate()} ${MONTHS[toD(s).getMonth()].slice(0, 3)}`;
-  return (
-    <Chart w={W} h={CH} label="Cumulative calorie deficit">
-      <Line x1={0} x2={W} y1={cy(0)} y2={cy(0)} stroke={c.mute} strokeWidth={1.25} />
-      <Polyline fill="none" stroke={c.ink} strokeWidth={2.5} strokeLinejoin="round" strokeLinecap="round" points={pts.map((p) => `${cx(p.s)},${cy(p.v)}`).join(' ')} />
-      {pts.map((p) => (
-        <Circle key={p.s} cx={cx(p.s)} cy={cy(p.v)} r={3.5} fill={c.ink} />
-      ))}
-      <SvgText x={Math.min(cx(last.s), W - 4)} y={Math.max(cy(last.v) - 8, 13)} textAnchor="end" fontSize={13} fontFamily={fonts.display} fill={last.v >= 0 ? c.ok : c.bad}>
-        {sgn(last.v)}
-      </SvgText>
-      <SvgText fontFamily={SANS} x={10} y={CH - 5} fontSize={10.5} fill={c.mute}>
-        {dl(pts[0].s)}
-      </SvgText>
-      <SvgText fontFamily={SANS} x={W - 10} y={CH - 5} textAnchor="end" fontSize={10.5} fill={c.mute}>
-        {dl(last.s)}
-      </SvgText>
     </Chart>
   );
 }
@@ -199,42 +225,72 @@ export interface LineSeries {
   style: 'line' | 'dashed' | 'dots';
 }
 
+const dateLabel = (s: string, years: boolean) => {
+  const d = toD(s);
+  return years ? `${MONTHS[d.getMonth()].slice(0, 3)} ’${s.slice(2, 4)}` : `${MONTHS[d.getMonth()].slice(0, 3)} ${d.getDate()}`;
+};
+
 /**
- * Dated values on shared axes. `zero` keeps the bottom of the chart at 0 (for loads); without it the chart
- * zooms to the data (for weight). Needs two or more points across the series.
+ * Dated values with a value axis and dates along the bottom. `from`/`to` fix the time span (the chosen
+ * range); otherwise it fits the data. `zero` keeps 0 on the axis (loads, totals); without it the chart
+ * zooms to the data (weight). Needs two or more points.
  */
-export function LineChart({ series, zero = false, unit = '', label }: { series: LineSeries[]; zero?: boolean; unit?: string; label: string }) {
+export function LineChart({
+  series,
+  zero = false,
+  unit = '',
+  label,
+  from,
+  to,
+}: {
+  series: LineSeries[];
+  zero?: boolean;
+  unit?: string;
+  label: string;
+  from?: string;
+  to?: string;
+}) {
   const c = useColors();
   const all = series.flatMap((s) => s.pts);
   if (all.length < 2) return null;
-  const W = 360, H = 164, padT = 18, padB = 22, padX = 10;
+  const H = 184, padT = 22, padB = 22, padR = 8;
   const dates = all.map((p) => p.s).sort();
-  const first = dates[0];
-  const last = dates[dates.length - 1];
+  const first = from ?? dates[0];
+  const last = to ?? dates[dates.length - 1];
   const span = Math.max(dayDiff(last, first), 1);
   const hi = Math.max(...all.map((p) => p.v));
   const lo = Math.min(...all.map((p) => p.v));
-  let top = hi;
-  let bottom = zero ? Math.min(0, lo) : lo;
-  if (!zero) {
-    const pad = (top - bottom) * 0.15 || 1;
-    top += pad;
-    bottom -= pad;
+  let ticks: number[];
+  if (zero) ticks = niceTicks(lo, hi);
+  else {
+    // Zoomed: ticks around the data, not from 0.
+    const padV = (hi - lo) * 0.15 || 1;
+    const base = niceTicks(0, hi + padV - (lo - padV));
+    const step = base[1] - base[0];
+    const start = Math.floor((lo - padV) / step) * step;
+    ticks = [];
+    for (let v = start; v < hi + padV + step; v += step) ticks.push(Math.round(v * 1e6) / 1e6);
+    if (ticks.length > 6) ticks = ticks.filter((_, i) => i % 2 === 0);
   }
-  if (top === bottom) top = bottom + 1;
-  const x = (s: string) => padX + (dayDiff(s, first) / span) * (W - 2 * padX);
-  const y = (v: number) => padT + ((top - v) / (top - bottom)) * (H - padT - padB);
-  const dl = (s: string) => `${toD(s).getDate()} ${MONTHS[toD(s).getMonth()].slice(0, 3)}`;
+  const top = ticks[ticks.length - 1], bottom = ticks[0];
+  const x = (s: string) => GUTTER + 4 + (dayDiff(s, first) / span) * (W - GUTTER - 4 - padR);
+  const y = (v: number) => padT + ((top - v) / (top - bottom || 1)) * (H - padT - padB);
+  const years = first.slice(0, 4) !== last.slice(0, 4) && span > 90;
+  const mid = (() => {
+    const d = toD(first);
+    d.setDate(d.getDate() + Math.round(span / 2));
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  })();
+  const inside = (p: { s: string }) => p.s >= first && p.s <= last;
   return (
     <Chart w={W} h={H} label={label}>
-      <SvgText fontFamily={SANS} x={padX} y={11} fontSize={11} fill={c.mute}>
-        {`${fmt(+hi.toFixed(1))}${unit}`}
-      </SvgText>
-      {zero ? <Line x1={0} x2={W} y1={y(0)} y2={y(0)} stroke={c.line} strokeWidth={1.5} /> : null}
+      <YAxis ticks={ticks} y={y} unit={unit.trim()} />
       {series.map((s, i) => {
-        if (s.style === 'dots') return s.pts.map((p) => <Circle key={`${i}${p.s}`} cx={x(p.s)} cy={y(p.v)} r={2.75} fill={c.mute} />);
-        const pts = s.pts.map((p) => `${x(p.s)},${y(p.v)}`).join(' ');
-        return s.pts.length < 2 ? null : (
+        const pts = s.pts.filter(inside);
+        // Dots only help when they can be told apart.
+        if (s.style === 'dots' && pts.length > 45) return null;
+        if (s.style === 'dots') return pts.map((p) => <Circle key={`${i}${p.s}`} cx={x(p.s)} cy={y(p.v)} r={2.75} fill={c.mute} />);
+        return pts.length < 2 ? null : (
           <Polyline
             key={i}
             fill="none"
@@ -243,15 +299,20 @@ export function LineChart({ series, zero = false, unit = '', label }: { series: 
             strokeDasharray={s.style === 'dashed' ? '5 3' : undefined}
             strokeLinejoin="round"
             strokeLinecap="round"
-            points={pts}
+            points={pts.map((p) => `${x(p.s)},${y(p.v)}`).join(' ')}
           />
         );
       })}
-      <SvgText fontFamily={SANS} x={padX} y={H - 5} fontSize={10.5} fill={c.mute}>
-        {dl(first)}
+      <SvgText fontFamily={SANS} x={GUTTER + 4} y={H - 6} fontSize={10.5} fill={c.mute}>
+        {dateLabel(first, years)}
       </SvgText>
-      <SvgText fontFamily={SANS} x={W - padX} y={H - 5} textAnchor="end" fontSize={10.5} fill={c.mute}>
-        {dl(last)}
+      {span >= 6 ? (
+        <SvgText fontFamily={SANS} x={x(mid)} y={H - 6} textAnchor="middle" fontSize={10.5} fill={c.mute}>
+          {dateLabel(mid, years)}
+        </SvgText>
+      ) : null}
+      <SvgText fontFamily={SANS} x={W - padR} y={H - 6} textAnchor="end" fontSize={10.5} fill={c.mute}>
+        {dateLabel(last, years)}
       </SvgText>
     </Chart>
   );

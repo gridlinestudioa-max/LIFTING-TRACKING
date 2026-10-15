@@ -1,10 +1,10 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
-import { boardSummary } from '@/logic';
+import { shareSummary, type BoardPerson } from '@/logic';
 
 import { useAccount } from '../account';
 import { useTracker } from '../store';
-import { SocialError, getProfile, leave as leaveApi, publishStats, saveProfile, type MyProfile } from './api';
+import { SocialError, friendBoard, getProfile, leave as leaveApi, myFriends, publishStats, saveProfile, type Friend, type MyProfile } from './api';
 
 export type SocialStatus = 'signedOut' | 'loading' | 'off' | 'on' | 'setup' | 'error';
 
@@ -21,6 +21,13 @@ interface Social {
   reload: () => void;
   /** Goes up after your stats are shared, so the leaderboard can refresh. */
   published: number;
+  /** Friends and requests, and you and your friends with what each shares. Null until loaded. */
+  friends: Friend[] | null;
+  board: BoardPerson[] | null;
+  /** A problem loading them. */
+  listError: string | null;
+  /** Load friends and the board again. */
+  refresh: () => void;
 }
 
 const Ctx = createContext<Social | null>(null);
@@ -63,7 +70,8 @@ export function SocialProvider({ children }: { children: ReactNode }) {
   }, [userId, n]);
 
   // Share the latest summary a few seconds after cardio changes (and once on open).
-  const summary = useMemo(() => JSON.stringify(boardSummary(state.cardio, today)), [state.cardio, today]);
+  const share = state.settings.share;
+  const summary = useMemo(() => JSON.stringify(shareSummary(state, today, share)), [state, today, share]);
   const name = state.settings.name.trim();
   useEffect(() => {
     if (status !== 'on' || !userId) return;
@@ -84,6 +92,26 @@ export function SocialProvider({ children }: { children: ReactNode }) {
     }, 2500);
     return () => clearTimeout(t);
   }, [status, userId, summary, name, profile]);
+
+  const [friends, setFriends] = useState<Friend[] | null>(null);
+  const [board, setBoard] = useState<BoardPerson[] | null>(null);
+  const [listError, setListError] = useState<string | null>(null);
+  const [m, setM] = useState(0);
+  useEffect(() => {
+    if (status !== 'on' || !userId) return;
+    let live = true;
+    Promise.all([friendBoard(userId), myFriends()])
+      .then(([b, f]) => {
+        if (!live) return;
+        setBoard(b);
+        setFriends(f);
+        setListError(null);
+      })
+      .catch((e) => live && setListError(message(e)));
+    return () => {
+      live = false;
+    };
+  }, [status, userId, m, published]);
 
   const join = useCallback(
     async (nm: string, phone: string | null) => {
@@ -138,8 +166,12 @@ export function SocialProvider({ children }: { children: ReactNode }) {
       leave,
       reload: () => setN((v) => v + 1),
       published,
+      friends: status === 'on' ? friends : null,
+      board: status === 'on' ? board : null,
+      listError,
+      refresh: () => setM((v) => v + 1),
     }),
-    [userId, status, error, profile, join, setPhone, leave, published],
+    [userId, status, error, profile, join, setPhone, leave, published, friends, board, listError],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

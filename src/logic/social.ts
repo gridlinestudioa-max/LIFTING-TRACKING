@@ -1,11 +1,31 @@
-// Friends and their leaderboard. What each person shares is a small summary of their cardio (totals
-// and bests by sport), never their routes, notes or anything else. Phone numbers are matched by a
-// one-way hash, so the server never stores the number itself. Pure logic, no React.
+// Friends and their leaderboard. What each person shares is a small summary of what they choose:
+// cardio (totals and bests by sport), lifting (workout counts and top lifts) and food (daily averages).
+// Never routes, notes, single meals, weight or anything else. Phone numbers are matched by a one-way
+// hash, so the server never stores the number itself. Pure logic, no React.
 
+import { kDays } from './calories';
 import type { CardioData } from './cardio';
-import { mondayOf } from './dates';
+import { addDays, mondayOf } from './dates';
+import { sumTotals } from './nutrition';
 import { METERS_PER_MILE } from './plans';
 import type { BoardSport } from './records';
+import { liftRecords, liftSummary } from './stats';
+import type { TrackerState } from './types';
+
+/** What a person shares with friends. Cardio is on by default (it feeds the leaderboard). */
+export interface Sharing {
+  cardio: boolean;
+  lifting: boolean;
+  food: boolean;
+}
+
+export const DEFAULT_SHARING: Sharing = { cardio: true, lifting: false, food: false };
+
+export function normalizeSharing(v: unknown): Sharing {
+  const o = (v && typeof v === 'object' ? v : {}) as Record<string, unknown>;
+  const pick = (k: keyof Sharing) => (typeof o[k] === 'boolean' ? (o[k] as boolean) : DEFAULT_SHARING[k]);
+  return { cardio: pick('cardio'), lifting: pick('lifting'), food: pick('food') };
+}
 
 /**
  * A phone number in international form ("+15551234567"), or null. Numbers without a country code are
@@ -44,15 +64,80 @@ export interface BoardSummary {
   week: string;
   month: string;
   year: string;
-  run: SportSummary;
-  bike: SportSummary;
-  swim: SportSummary;
+  /** Cardio by sport, when shared. */
+  run?: SportSummary;
+  bike?: SportSummary;
+  swim?: SportSummary;
+  lifting?: LiftShare;
+  food?: FoodShare;
+}
+
+export interface LiftShare {
+  weekN: number;
+  monthN: number;
+  total: number;
+  /** Weeks in a row with a workout. */
+  streak: number;
+  /** Best estimated one-rep max for up to 5 lifts, heaviest first. */
+  top: { name: string; e1rm: number; unit: 'lb' | 'plates' }[];
+}
+
+export interface FoodShare {
+  /** Of the last 7 days, how many have food logged. */
+  days: number;
+  /** Averages over those days; null without any. */
+  kcal: number | null;
+  protein: number | null;
+  /** Average deficit (positive) or surplus (negative) over the last 7 days with calories in and out. */
+  deficit: number | null;
+}
+
+/** Workout counts and top lifts to share. */
+export function liftShare(state: TrackerState, today: string): LiftShare {
+  const s = liftSummary(state.lifting, today);
+  const top = liftRecords(state.lifting)
+    .map((r) => ({ name: r.name.slice(0, 40), e1rm: Math.round(r.best.e1rm), unit: r.unit }))
+    .sort((a, b) => b.e1rm - a.e1rm)
+    .slice(0, 5);
+  const month = today.slice(0, 7);
+  return {
+    weekN: s.thisWeek,
+    monthN: state.lifting.workouts.filter((w) => w.done && w.date.startsWith(month) && w.date <= today).length,
+    total: s.total,
+    streak: s.streak,
+    top,
+  };
+}
+
+/** Food averages over the last 7 days to share. */
+export function foodShare(state: TrackerState, today: string): FoodShare {
+  const from = addDays(today, -6);
+  const days = Object.entries(state.meals).filter(([d, list]) => d >= from && d <= today && list.length);
+  const tot = days.map(([, list]) => sumTotals(list));
+  const avg = (f: (t: (typeof tot)[number]) => number) => (tot.length ? Math.round(tot.reduce((a, t) => a + f(t), 0) / tot.length) : null);
+  const k = kDays(state).filter((d) => d.s >= from && d.s <= today);
+  return {
+    days: days.length,
+    kcal: avg((t) => t.kcal),
+    protein: avg((t) => t.protein),
+    deficit: k.length ? Math.round(k.reduce((a, d) => a + d.net, 0) / k.length) : null,
+  };
+}
+
+/** Everything this person chose to share, as of today. */
+export function shareSummary(state: TrackerState, today: string, share: Sharing): BoardSummary {
+  const base = boardSummary(state.cardio, today);
+  const out: BoardSummary = { v: 1, week: base.week, month: base.month, year: base.year };
+  if (share.cardio) Object.assign(out, { run: base.run, bike: base.bike, swim: base.swim });
+  if (share.lifting) out.lifting = liftShare(state, today);
+  if (share.food) out.food = foodShare(state, today);
+  return out;
 }
 
 const round = (v: number, d = 2) => Math.round(v * 10 ** d) / 10 ** d;
 
 /** The summary to share with friends. */
-export function boardSummary(c: CardioData, today: string): BoardSummary {
+export function boardSummary(c: CardioData, today: string): Required<Pick<BoardSummary, 'run' | 'bike' | 'swim'>> & BoardSummary {
   const week = mondayOf(today);
   const month = today.slice(0, 7);
   const year = today.slice(0, 4);
@@ -106,7 +191,7 @@ export const bestLowerIsBetter = (s: BoardSport) => s !== 'bike';
 /** Checks a summary from the server. Old or broken ones read as null. */
 export function readSummary(v: unknown): BoardSummary | null {
   const o = v as BoardSummary | null;
-  if (!o || o.v !== 1 || typeof o.week !== 'string' || !o.run || !o.bike || !o.swim) return null;
+  if (!o || o.v !== 1 || typeof o.week !== 'string') return null;
   return o;
 }
 

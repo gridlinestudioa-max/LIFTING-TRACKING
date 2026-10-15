@@ -1,17 +1,13 @@
-import { StyleSheet, Text, View } from 'react-native';
+import { useState } from 'react';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { MONTHS, fmt, fmtInt, liftRecords, liftSummary, recentPRs, shortDayLabel, toD, type LiftRecord } from '@/logic';
+import { bestSets, fmt, fmtInt, liftRecords, liftSummary, rangeSpan, recentPRs, shortDayLabel, sumByBucket, type LiftRecord, type LiftingData, type Range } from '@/logic';
 
-import { Bars, Sparkline } from '../charts';
+import { BarChart, ChartCaption, LineChart, RangeTabs, Sparkline } from '../charts';
 import { Card, Mute, Section, StatGrid, StatTile } from '../components';
 import { Sheet } from '../food/kit';
 import { useTracker } from '../store';
 import { fonts, space, tabular, useColors } from '../theme';
-
-const md = (s: string) => {
-  const d = toD(s);
-  return `${MONTHS[d.getMonth()].slice(0, 3)} ${d.getDate()}`;
-};
 
 /** Lifting in depth: how often, how much, and how each lift is moving. */
 export function LiftStatsSheet({ visible, onClose }: { visible: boolean; onClose: () => void }) {
@@ -37,9 +33,7 @@ export function LiftStatsSheet({ visible, onClose }: { visible: boolean; onClose
         </StatGrid>
       </Card>
 
-      <Section title="Workouts per week">
-        <Bars rows={s.weeks.map((w) => ({ label: md(w.start), v: w.n }))} unit="workouts" label="Workouts per week, last 12 weeks" />
-      </Section>
+      <WorkoutsChart L={L} today={today} />
 
       {prs.length ? (
         <Section title="Recent records">
@@ -64,9 +58,9 @@ export function LiftStatsSheet({ visible, onClose }: { visible: boolean; onClose
               <Text style={[st.colHead, { color: c.mute, width: 92, textAlign: 'right' }]}>Est. max</Text>
             </View>
             {records.map((r) => (
-              <LiftRow key={r.exId} r={r} />
+              <LiftRow key={r.exId} r={r} L={L} today={today} />
             ))}
-            <Mute style={{ fontSize: 12.5, marginTop: space.sm }}>Est. max: the most you could lift once, worked out from your best set.</Mute>
+            <Mute style={{ fontSize: 12.5, marginTop: space.sm }}>Est. max: the most you could lift once, worked out from your best set. Tap a lift for its chart.</Mute>
           </>
         ) : (
           <Mute>Finish a workout with weights to see your lifts here.</Mute>
@@ -76,29 +70,70 @@ export function LiftStatsSheet({ visible, onClose }: { visible: boolean; onClose
   );
 }
 
-function LiftRow({ r }: { r: LiftRecord }) {
+/** Workouts in each day, week or month of the chosen range. */
+function WorkoutsChart({ L, today }: { L: LiftingData; today: string }) {
+  const c = useColors();
+  const [range, setRange] = useState<Range>('month');
+  const done = L.workouts.filter((w) => w.done && w.date <= today);
+  const first = done.map((w) => w.date).sort()[0];
+  const span = rangeSpan(range, today, first);
+  const vals = sumByBucket(done, (w) => w.date, () => 1, span.buckets);
+  const total = vals.reduce((a, b) => a + b, 0);
+  return (
+    <Section title="Workouts" action={<Text style={{ color: c.mute, fontSize: 14, fontWeight: '700' }}>{`${total} in range`}</Text>}>
+      <RangeTabs value={range} onChange={setRange} />
+      <ChartCaption>{`${span.caption} · workouts per ${span.per}`}</ChartCaption>
+      <BarChart values={vals} labels={span.buckets.map((b) => b.label)} label={`Workouts per ${span.per}, ${span.caption.toLowerCase()}`} />
+    </Section>
+  );
+}
+
+function LiftRow({ r, L, today }: { r: LiftRecord; L: LiftingData; today: string }) {
   const c = useColors();
   const u = r.unit === 'plates' ? 'pl' : 'lb';
   const ch = Math.round(r.change);
+  const [open, setOpen] = useState(false);
+  const [range, setRange] = useState<Range>('all');
+  const hist = open ? bestSets(L, r.exId) : [];
+  const span = rangeSpan(range, today, hist[0]?.date);
+  const pts = hist.filter((h) => h.date >= span.from).map((h) => ({ s: h.date, v: Math.round(h.e1rm) }));
   return (
-    <View style={[st.row, { borderTopWidth: 1, borderTopColor: c.line }]}>
-      <View style={{ flex: 1, gap: 2 }}>
-        <Text style={{ color: c.ink, fontSize: 15, fontWeight: '600' }}>{r.name}</Text>
-        {r.trend.length >= 2 ? (
-          <View style={{ width: 80 }}>
-            <Sparkline pts={r.trend} />
-          </View>
-        ) : (
-          <Mute style={{ fontSize: 12.5 }}>1 workout</Mute>
-        )}
-      </View>
-      <Text style={{ width: 86, textAlign: 'right', color: c.ink, fontSize: 15, ...tabular }}>{`${fmt(r.best.w)} × ${r.best.reps}`}</Text>
-      <View style={{ width: 92, alignItems: 'flex-end' }}>
-        <Text style={[st.max, { color: c.ink }]}>{`${fmtInt(r.last.e1rm)} ${u}`}</Text>
-        {r.sessions >= 2 ? (
-          <Text style={{ color: ch > 0 ? c.ok : ch < 0 ? c.bad : c.mute, fontSize: 12.5, ...tabular }}>{ch === 0 ? 'no change' : `${ch > 0 ? '+' : '−'}${Math.abs(ch)} ${u}`}</Text>
-        ) : null}
-      </View>
+    <View style={{ borderTopWidth: 1, borderTopColor: c.line }}>
+      <Pressable
+        onPress={() => setOpen(!open)}
+        accessibilityRole="button"
+        accessibilityState={{ expanded: open }}
+        accessibilityLabel={`${r.name}. ${open ? 'Hide' : 'Show'} chart`}
+        style={st.row}>
+        <View style={{ flex: 1, gap: 2 }}>
+          <Text style={{ color: c.ink, fontSize: 15, fontWeight: '600' }}>{r.name}</Text>
+          {r.trend.length >= 2 ? (
+            <View style={{ width: 80 }}>
+              <Sparkline pts={r.trend} />
+            </View>
+          ) : (
+            <Mute style={{ fontSize: 12.5 }}>1 workout</Mute>
+          )}
+        </View>
+        <Text style={{ width: 86, textAlign: 'right', color: c.ink, fontSize: 15, ...tabular }}>{`${fmt(r.best.w)} × ${r.best.reps}`}</Text>
+        <View style={{ width: 92, alignItems: 'flex-end' }}>
+          <Text style={[st.max, { color: c.ink }]}>{`${fmtInt(r.last.e1rm)} ${u}`}</Text>
+          {r.sessions >= 2 ? (
+            <Text style={{ color: ch > 0 ? c.ok : ch < 0 ? c.bad : c.mute, fontSize: 12.5, ...tabular }}>{ch === 0 ? 'no change' : `${ch > 0 ? '+' : '−'}${Math.abs(ch)} ${u}`}</Text>
+          ) : null}
+        </View>
+      </Pressable>
+      {open ? (
+        <View style={{ paddingBottom: space.md }}>
+          <RangeTabs value={range} onChange={setRange} />
+          <ChartCaption>{`${span.caption} · estimated max, ${u}`}</ChartCaption>
+          {pts.length >= 2 ? (
+            <LineChart label={`${r.name} estimated max, ${span.caption.toLowerCase()}`} unit={u} from={span.from} to={span.to} series={[{ pts, style: 'line' }, { pts, style: 'dots' }]} />
+          ) : (
+            <Mute>{pts.length ? 'Only one workout with this lift in this range.' : 'No workouts with this lift in this range.'}</Mute>
+          )}
+        </View>
+      ) : null}
     </View>
   );
 }

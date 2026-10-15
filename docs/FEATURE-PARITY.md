@@ -19,7 +19,7 @@ Competitor details come from the public sources listed at the end and were check
 | Calories burned | Fitbit: from its own devices | Estimate from profile and workouts, or typed in from a watch | Done (no device sync) |
 | Weight, water, sleep, steps | Fitbit: yes, from its devices | Entered by hand, with trends and averages; optional Home cards | Partial: manual entry only |
 | Lifting log and plans | — | Plans for 3 to 7 days, 700+ exercises, automatic weight progression | Done |
-| Friends and leaderboards | Strava: social feed, kudos, segments | Friends by phone contact, leaderboards for run, ride, swim; personal cardio records | Partial: no feed, kudos or comments |
+| Friends and leaderboards | Strava: social feed, kudos, segments | Friends by phone contact, friend profiles with chosen cardio, lifting and food stats, leaderboards for run, ride, swim; personal cardio records | Partial: no feed, kudos or comments |
 | Connect a watch or phone health data | Fitbit: its own devices; Strava: syncs from most | Not yet | Not done |
 | Privacy controls | Strava: privacy zones, visibility settings | Routes are never shared. Plain-language "where your data lives" panel. Delete account | Partial: see below |
 | Price | Both have paid tiers for the features above | Free to use | n/a |
@@ -28,7 +28,7 @@ Competitor details come from the public sources listed at the end and were check
 
 - **Nothing important is behind a paywall.** Training plans, the fitness trend, exports and stats are all included.
 - **Your data leaves easily.** Everything exports in open formats, and deleting an account removes the stored data, not just the sign-in.
-- **Less is shared.** Friends see a name and cardio totals and bests. Routes, food, weight and lifts stay private. There's no feed to opt out of.
+- **You choose what's shared.** Friends see a name plus whichever summaries you turn on: cardio totals and bests (on by default), lifting counts and top lifts, and 7-day food averages. Routes, meals, weight and notes stay private. There's no feed to opt out of.
 - **No ads or tracking code** in the app, and the app says in plain words which third-party services it calls: OpenStreetMap for map tiles, Open Food Facts for branded food searches, and GitHub for exercise pictures. The USDA food data is built in.
 
 ### What this app does not do (be honest about it)

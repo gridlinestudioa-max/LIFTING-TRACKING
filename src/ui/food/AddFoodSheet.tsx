@@ -630,7 +630,7 @@ function AmountView({
       <Button label={submitLabel} primary onPress={() => onSubmit(q)} style={{ marginTop: space.xl, opacity: qOk && timeOk ? 1 : 0.4 }} />
       {onTally && !byWeight ? (
         <View style={{ marginTop: space.md, gap: 6 }}>
-          <Button label="Add to Tally list" onPress={() => qOk && onTally(q)} style={{ opacity: qOk && timeOk ? 1 : 0.4 }} />
+          <Button label="Add to today’s Tally" onPress={() => qOk && onTally(q)} style={{ opacity: qOk && timeOk ? 1 : 0.4 }} />
         </View>
       ) : null}
       {onRemove ? <Button label="Remove from log" danger onPress={onRemove} style={{ marginTop: space.md }} /> : null}

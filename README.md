@@ -120,7 +120,7 @@ The publishable (anon) key is safe to ship in the app; the access rules in `sche
 - **Export** (You tab → Your data): `training-tracker-DATE.json` (everything), and CSVs for activities, food and the body log. CSV cells that start with `=`, `+`, `-` or `@` are prefixed so a spreadsheet won't run them as formulas. Distances are in miles and durations in seconds.
 - **Import:** GPX and TCX activity files (Garmin, Strava, most watches). Files over about 20 MB are refused, duplicates of activities already logged are skipped, and FIT files aren't supported yet. The files are read by a small built-in scanner, not an XML library.
 - **Delete:** deleting an account runs `delete_my_account()` (`supabase/privacy.sql`), which removes the sign-in and, through the database's cascade rules, the stored data, friends profile and shared leaderboard stats. Without an account, "Erase everything on this device" resets the app.
-- **What leaves the device:** the account copy (if signed in), the cardio totals shared with friends (if on), map tiles from OpenStreetMap, Open Food Facts searches, and exercise pictures from GitHub. There's no ads or analytics code. Keep the "Where your data lives" text in `src/ui/data/DataSection.tsx` in step with this list when any of it changes.
+- **What leaves the device:** the account copy (if signed in), the summaries you choose to share with friends (cardio, lifting, food; if on), map tiles from OpenStreetMap, Open Food Facts searches, and exercise pictures from GitHub. There's no ads or analytics code. Keep the "Where your data lives" text in `src/ui/data/DataSection.tsx` in step with this list when any of it changes.
 
 ## Name and logo
 

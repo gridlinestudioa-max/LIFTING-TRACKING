@@ -4,6 +4,7 @@ import type { WidgetId } from './home';
 import type { LiftingData } from './lifting';
 import type { Food, FoodEntry } from './nutrition';
 import type { Profile } from './profile';
+import type { Sharing } from './social';
 
 /** Which parts of the app someone uses. Each one is a tab. */
 export interface Sections {
@@ -19,6 +20,8 @@ export interface Settings {
   onboarded: boolean;
   /** Cards on the Home tab, in order. */
   home: WidgetId[];
+  /** What friends can see. */
+  share: Sharing;
 }
 
 /**
