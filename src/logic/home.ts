@@ -14,7 +14,7 @@ export const WIDGETS: { id: WidgetId; label: string; needs?: keyof Sections }[] 
   { id: 'macros', label: 'Macros today', needs: 'food' },
   { id: 'fasting', label: 'Fasting window', needs: 'food' },
   { id: 'tally', label: 'Tally', needs: 'food' },
-  { id: 'week', label: 'This week’s training' },
+  { id: 'week', label: 'Progress this week' },
   { id: 'plan', label: 'Cardio plan progress', needs: 'cardio' },
   { id: 'last', label: 'Last cardio activity', needs: 'cardio' },
   { id: 'streak', label: 'Lifting streak', needs: 'lifting' },
