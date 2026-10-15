@@ -145,6 +145,13 @@ export function AccountProvider({ children }: { children: ReactNode }) {
   const deleteAccount = useCallback(async () => {
     const sb = supabase();
     if (!sb || !user) return 'Accounts aren’t set up yet.';
+    // Profile pictures are files, which the database can't delete for us: remove them first.
+    try {
+      const { data: pics } = await sb.storage.from('avatars').list(user.id, { limit: 100 });
+      if (pics?.length) await sb.storage.from('avatars').remove(pics.map((f) => `${user.id}/${f.name}`));
+    } catch {
+      // No pictures, or no picture storage set up.
+    }
     const { error } = await sb.rpc('delete_my_account');
     if (error) {
       const m = error.message.toLowerCase();

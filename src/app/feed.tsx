@@ -3,11 +3,12 @@ import { useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { feedDay, feedItems, fmt, mondayOf, shortDayLabel, type CardioSession, type FeedFilter, type FeedItem } from '@/logic';
+import { feedDay, feedItems, fmt, mondayOf, shortDayLabel, type CardioSession, type FeedItem } from '@/logic';
 import { LogSheet } from '@/ui/cardio/LogSheet';
 import { RouteMap } from '@/ui/cardio/RouteMap';
 import { Header, Mute, Section } from '@/ui/components';
-import { Button, Pill } from '@/ui/food/kit';
+import { ActivityDetail } from '@/ui/feed/ActivityDetail';
+import { Button } from '@/ui/food/kit';
 import { WorkoutSheet } from '@/ui/lifting/WorkoutSheet';
 import { Avatar } from '@/ui/social/Avatar';
 import { useTracker } from '@/ui/store';
@@ -15,19 +16,18 @@ import { fonts, radius, space, tabular, useColors } from '@/ui/theme';
 
 const PAGE = 20;
 
-type Open = { kind: 'cardio'; session: CardioSession; n: number } | { kind: 'lift'; id: string; n: number } | null;
+type Open = { kind: 'view'; item: FeedItem } | { kind: 'cardio'; session: CardioSession; n: number } | { kind: 'lift'; id: string; n: number } | null;
 
 /** Every finished run, ride, swim and workout, newest first, like an activity feed. */
 export default function FeedScreen() {
   const c = useColors();
   const { state, today } = useTracker();
   const on = state.settings.sections;
-  const [filter, setFilter] = useState<FeedFilter>('all');
   const [shown, setShown] = useState(PAGE);
   const [open, setOpen] = useState<Open>(null);
   // A fresh key each time, so the sheet starts clean.
   const [n, setN] = useState(0);
-  const items = useMemo(() => feedItems(state, today, filter), [state, today, filter]);
+  const items = useMemo(() => feedItems(state, today), [state, today]);
   const name = state.settings.name.trim() || 'You';
 
   const week = useMemo(() => {
@@ -35,8 +35,6 @@ export default function FeedScreen() {
     const miles = all.reduce((t, i) => t + (i.kind === 'cardio' && i.session.type !== 'swim' ? (i.session.miles ?? 0) : 0), 0);
     return { cardio: all.filter((i) => i.kind === 'cardio').length, lifts: all.filter((i) => i.kind === 'lift').length, miles, prs: all.reduce((t, i) => t + i.prs.length, 0) };
   }, [state, today]);
-
-  const both = on.cardio && on.lifting;
 
   return (
     <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: c.bg }}>
@@ -51,28 +49,6 @@ export default function FeedScreen() {
             <Big value={String(week.prs)} label={week.prs === 1 ? 'Record' : 'Records'} />
           </View>
         </Section>
-
-        {both ? (
-          <View style={st.pills}>
-            {(
-              [
-                ['all', 'All'],
-                ['cardio', 'Cardio'],
-                ['lift', 'Lifting'],
-              ] as const
-            ).map(([id, label]) => (
-              <Pill
-                key={id}
-                label={label}
-                selected={filter === id}
-                onPress={() => {
-                  setFilter(id);
-                  setShown(PAGE);
-                }}
-              />
-            ))}
-          </View>
-        ) : null}
 
         {!items.length ? (
           <Section>
@@ -90,16 +66,26 @@ export default function FeedScreen() {
             key={`${it.kind}-${it.id}`}
             it={it}
             name={name}
+            photo={state.settings.photo}
+            city={state.settings.city.trim()}
             today={today}
-            onPress={() => {
-              setN(n + 1);
-              setOpen(it.kind === 'cardio' ? { kind: 'cardio', session: it.session, n: n + 1 } : { kind: 'lift', id: it.id, n: n + 1 });
-            }}
+            onPress={() => setOpen({ kind: 'view', item: it })}
           />
         ))}
         {items.length > shown ? <Button label="Load more" onPress={() => setShown((n) => n + PAGE)} /> : null}
       </ScrollView>
 
+      {open?.kind === 'view' ? (
+        <ActivityDetail
+          item={open.item}
+          onClose={() => setOpen(null)}
+          onEdit={() => {
+            const it = open.item;
+            setN(n + 1);
+            setOpen(it.kind === 'cardio' ? { kind: 'cardio', session: it.session, n: n + 1 } : { kind: 'lift', id: it.id, n: n + 1 });
+          }}
+        />
+      ) : null}
       {open?.kind === 'cardio' ? <LogSheet key={open.n} visible day={open.session.date} editing={open.session} onClose={() => setOpen(null)} /> : null}
       {open?.kind === 'lift' ? <WorkoutSheet key={open.n} visible id={open.id} onClose={() => setOpen(null)} /> : null}
     </SafeAreaView>
@@ -107,16 +93,16 @@ export default function FeedScreen() {
 }
 
 /** One activity in the feed. */
-function Post({ it, name, today, onPress }: { it: FeedItem; name: string; today: string; onPress: () => void }) {
+function Post({ it, name, photo, city, today, onPress }: { it: FeedItem; name: string; photo: string; city: string; today: string; onPress: () => void }) {
   const c = useColors();
   const kind = it.kind === 'cardio' ? 'Cardio' : 'Lifting';
   return (
-    <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={`${it.title}, ${feedDay(it.date, today, shortDayLabel)}. Open`} style={({ pressed }) => [st.post, { backgroundColor: c.card, opacity: pressed ? 0.85 : 1 }]}>
+    <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={`${it.title}, ${feedDay(it.date, today, shortDayLabel)}. Show details`} style={({ pressed }) => [st.post, { backgroundColor: c.card, opacity: pressed ? 0.85 : 1 }]}>
       <View style={st.who}>
-        <Avatar name={name} size={40} />
+        <Avatar name={name} uri={photo} size={40} />
         <View style={{ flex: 1 }}>
           <Text style={{ color: c.ink, fontSize: 15, fontWeight: '700' }}>{name}</Text>
-          <Text style={{ color: c.mute, fontSize: 13 }}>{`${feedDay(it.date, today, shortDayLabel)} · ${kind}`}</Text>
+          <Text style={{ color: c.mute, fontSize: 13 }}>{[feedDay(it.date, today, shortDayLabel), kind, city || null].filter(Boolean).join(' · ')}</Text>
         </View>
       </View>
       <Text style={[st.title, { color: c.ink }]}>{it.title}</Text>
@@ -156,7 +142,6 @@ function Big({ value, unit, label }: { value: string; unit?: string; label: stri
 }
 
 const st = StyleSheet.create({
-  pills: { flexDirection: 'row', gap: space.sm, marginBottom: space.lg },
   post: { borderRadius: radius.lg, padding: space.lg, marginBottom: space.lg },
   who: { flexDirection: 'row', alignItems: 'center', gap: space.md, marginBottom: space.md },
   title: { fontFamily: fonts.semi, fontSize: 24, lineHeight: 28 },

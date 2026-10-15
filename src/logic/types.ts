@@ -22,6 +22,10 @@ export interface Settings {
   home: WidgetId[];
   /** What friends can see. */
   share: Sharing;
+  /** The city you represent, like "Austin, TX". Shown on your profile and to friends. */
+  city: string;
+  /** Your profile picture's web address (stored with your account), or empty. */
+  photo: string;
 }
 
 /**

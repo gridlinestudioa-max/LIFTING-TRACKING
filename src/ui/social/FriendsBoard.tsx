@@ -6,7 +6,9 @@ import {
   BOARD_METRICS,
   fmt,
   fmtTime,
+  USERNAME_RULE,
   normalizePhone,
+  normalizeUsername,
   rankBoard,
   shareSummary,
   todayString,
@@ -72,7 +74,8 @@ export function FriendsArea() {
   const mates = friends.filter((f) => f.status === 'friends');
   const requests = friends.filter((f) => f.status === 'received').length;
   const person = viewing ? social.board?.find((p) => p.id === viewing) : null;
-  const viewingName = person?.name ?? friends.find((f) => f.id === viewing)?.name ?? '';
+  const viewingFriend = friends.find((f) => f.id === viewing);
+  const viewingName = person?.name ?? viewingFriend?.name ?? '';
 
   return (
     <>
@@ -90,7 +93,7 @@ export function FriendsArea() {
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: space.md, paddingVertical: space.xs }}>
             {mates.map((f) => (
               <Pressable key={f.id} onPress={() => setViewing(f.id)} accessibilityRole="button" accessibilityLabel={`${f.name}'s profile`} style={({ pressed }) => [st.friend, { opacity: pressed ? 0.6 : 1 }]}>
-                <Avatar name={f.name} size={56} />
+                <Avatar name={f.name} uri={f.photo} size={56} />
                 <Text style={{ color: c.ink, fontSize: 13, fontWeight: '600', marginTop: 4 }} numberOfLines={1}>
                   {f.name.split(/\s+/)[0]}
                 </Text>
@@ -122,6 +125,9 @@ export function FriendsArea() {
         <FriendProfile
           name={viewingName}
           summary={person?.summary ?? null}
+          photo={viewingFriend?.photo ?? person?.photo}
+          city={viewingFriend?.city ?? person?.city}
+          username={viewingFriend?.username ?? person?.username}
           onClose={() => setViewing(null)}
           onRemove={async () => {
             await removeFriend(viewing).catch(() => {});
@@ -157,7 +163,7 @@ function Leaderboard() {
         {rows.map((r, i) => (
           <View key={r.p.id} style={[st.row, i > 0 && { borderTopWidth: 1, borderTopColor: c.line }, r.p.me && { backgroundColor: c.soft, borderRadius: radius.sm }]}>
             {r.rank != null ? <Rank n={r.rank} /> : <View style={{ width: 26 }} />}
-            <Avatar name={r.p.name} size={28} />
+            <Avatar name={r.p.name} uri={r.p.photo} size={28} />
             <Text style={{ flex: 1, color: c.ink, fontSize: 16, fontWeight: r.p.me ? '800' : '600' }} numberOfLines={1}>
               {r.p.me ? `${r.p.name} (you)` : r.p.name}
             </Text>
@@ -202,11 +208,20 @@ export function SharingSection() {
           />
         </View>
       ))}
-      <Mute style={{ fontSize: 12.5, marginTop: space.sm }}>Only your friends can see these. Your name always shows to friends and to people who look up your number.</Mute>
+      <Mute style={{ fontSize: 12.5, marginTop: space.sm }}>Only your friends can see these. Your name, picture, city and username show to friends and to people who find you by username or number.</Mute>
       <View style={{ flexDirection: 'row', marginTop: space.sm }}>
         <LinkButton label="Preview your profile as a friend" onPress={() => setPreview(true)} />
       </View>
-      {preview ? <FriendProfile name={state.settings.name || 'You'} summary={shareSummary(state, todayString(), share)} onClose={() => setPreview(false)} /> : null}
+      {preview ? (
+        <FriendProfile
+          name={state.settings.name || 'You'}
+          summary={shareSummary(state, todayString(), share)}
+          photo={state.settings.photo}
+          city={state.settings.city}
+          username={social.profile?.username}
+          onClose={() => setPreview(false)}
+        />
+      ) : null}
     </Section>
   );
 }
@@ -218,17 +233,20 @@ function JoinCard() {
   const social = useSocial();
   const [name, setName] = useState(state.settings.name);
   const [phone, setPhone] = useState('');
+  const [username, setUsername] = useState('');
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   const go = async () => {
     const nm = name.trim();
     if (!nm) return setErr('Add the name friends will see.');
+    const u = username.trim() ? normalizeUsername(username) : null;
+    if (username.trim() && !u) return setErr(`Usernames are ${USERNAME_RULE}, like sam_runs.`);
     const num = phone.trim() ? normalizePhone(phone) : null;
     if (phone.trim() && !num) return setErr('That number doesn’t look right. Include the country code if you’re outside the US, like +44 7700 900123.');
     setBusy(true);
     if (nm !== state.settings.name) setSettings({ name: nm });
-    const e = await social.join(nm, num);
+    const e = await social.join(nm, num, u);
     setBusy(false);
     setErr(e);
   };
@@ -238,7 +256,9 @@ function JoinCard() {
       <Text style={{ color: c.ink, fontSize: 15, lineHeight: 21 }}>Compete with friends on running, riding and swimming: weekly distance, longest and fastest.</Text>
       <Text style={[st.lbl, { color: c.mute, marginTop: space.lg }]}>Name friends see</Text>
       <Field value={name} onChangeText={setName} placeholder="First name" autoCapitalize="words" maxLength={40} accessibilityLabel="Name friends see" />
-      <Text style={[st.lbl, { color: c.mute, marginTop: space.md }]}>Your phone number (so friends can find you)</Text>
+      <Text style={[st.lbl, { color: c.mute, marginTop: space.md }]}>Username (so friends can search for you)</Text>
+      <Field value={username} onChangeText={setUsername} placeholder="e.g. sam_runs" autoCapitalize="none" autoCorrect={false} maxLength={21} accessibilityLabel="Username" />
+      <Text style={[st.lbl, { color: c.mute, marginTop: space.md }]}>Your phone number (so contacts can find you)</Text>
       <Field value={phone} onChangeText={setPhone} placeholder="e.g. (555) 123-4567" keyboardType="phone-pad" autoComplete="tel" accessibilityLabel="Your phone number" />
       <Text style={{ color: c.mute, fontSize: 13, lineHeight: 18, marginTop: space.sm }}>
         Friends see your name and what you choose to share: cardio (on to start), lifting and food summaries. Never your routes, what you ate, your weight or notes. Your number is scrambled (hashed) before it’s stored.

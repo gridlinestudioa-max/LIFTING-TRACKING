@@ -11,6 +11,7 @@ import { Button, LinkButton, Sheet } from '../food/kit';
 import { ProfileForm } from '../food/ProfileForm';
 import { ProfileLines } from '../food/ProfileLines';
 import { SECTION_INFO } from '../Onboarding';
+import { SharingSection } from '../social/FriendsBoard';
 import { useTracker } from '../store';
 import { space, useColors } from '../theme';
 
@@ -84,6 +85,8 @@ export function SettingsSheet({ onClose }: { onClose: () => void }) {
           )}
         </View>
       </Section>
+
+      <SharingSection />
 
       <Section title="Tabs">
         {SECTION_INFO.map((x, i) => (

@@ -8,7 +8,8 @@ A phone app (and website) for tracking **food**, **cardio** and **lifting**. Peo
 - **Body log:** weight (with a smoothed weekly trend), water, sleep and steps, entered by hand. All of them are optional cards on the Home tab.
 - **Your data:** download everything as JSON, or activities, food and the body log as CSV; see in plain words where data lives; delete the account and everything stored with it. See [`docs/FEATURE-PARITY.md`](docs/FEATURE-PARITY.md) for how this compares with Fitbit and Strava and what's still missing.
 - **Progress:** calories, cardio and lifting at a glance, then swipe-through graphs for each (deficit, eaten vs burned, protein, weight; distance, time, run pace, effort, fitness and fatigue; workouts, volume, sets and your top lifts), each by week, month, year or all time.
-- **Feed:** every finished run, ride, swim and lifting workout, newest first, with stats, the route map and any personal records. It's the center tab; Food, Cardio and Lifting share one **Track** tab that opens a menu to pick one.
+- **Feed:** every finished run, ride, swim and lifting workout, newest first, with stats, the route map and any personal records. Tap one for everything about it: all stats, splits, every set. It's the center tab; Food, Cardio and Lifting share one **Track** tab that opens a menu to pick one.
+- **Profile and friends:** a profile picture, the city you represent, and a username friends can search for. Friends can also be found by connecting contacts (people who added their phone number) or by number. Friends see what you choose to share (cardio, lifting, food) and a leaderboard.
 - **Reports:** download a PDF report of any day, week, month or year from the Progress tab.
 - **Lifting:** plans for 3 to 7 days a week (push/pull/legs, upper/lower, full body, body part split, or custom), built from a library of 700+ exercises, or an unplanned workout any day. Each exercise has sets × a rep range; the app raises the weight when you hit the top of the range on every set (double progression).
 
@@ -39,7 +40,7 @@ Data saved by the first version of the app (key `mm_tracker_v1`) is brought forw
 | `src/app/` | Screens (expo-router): `food`, `cardio`, `lifting`, `progress`, `you`. `_layout.tsx` = sign-in, setup, and the tabs. |
 | `src/ui/` | Components, theme (light/dark follows the system), the store (`store.tsx`: saving and syncing), accounts (`account.tsx`, `cloud.ts`), sign-in and setup screens. `food/`, `cardio/`, `lifting/` = each tab's sheets. |
 | `src/brand.ts`, `assets/brand/` | The app's name and logo (see [Name and logo](#name-and-logo)). |
-| `supabase/schema.sql`, `supabase/social.sql`, `supabase/privacy.sql`, `supabase/email-templates/` | The database tables and access rules for accounts and for friends and leaderboards; deleting your own account; branded sign-up and password emails. |
+| `supabase/schema.sql`, `supabase/social.sql`, `supabase/profiles.sql`, `supabase/privacy.sql`, `supabase/email-templates/` | The database tables and access rules for accounts and for friends and leaderboards; deleting your own account; branded sign-up and password emails. |
 
 ## Develop
 
@@ -115,7 +116,7 @@ Accounts use [Supabase](https://supabase.com) (free tier is enough). Until this 
 
 1. Create a project at supabase.com (any name and region). Wait for it to finish setting up.
 2. **SQL Editor** → New query → paste the contents of [`supabase/schema.sql`](supabase/schema.sql) → Run. This creates the table and the rules that let each person read and write only their own data.
-   Then do the same with [`supabase/social.sql`](supabase/social.sql) to switch on friends and the leaderboard, and with [`supabase/privacy.sql`](supabase/privacy.sql) to let people delete their own account from the You tab (both safe to run again). Without `privacy.sql` the delete button explains that it isn't switched on.
+   Then do the same with [`supabase/social.sql`](supabase/social.sql) to switch on friends and the leaderboard, then [`supabase/profiles.sql`](supabase/profiles.sql) for usernames, city and profile pictures, and with [`supabase/privacy.sql`](supabase/privacy.sql) to let people delete their own account from the You tab (both safe to run again). Without `privacy.sql` the delete button explains that it isn't switched on.
 3. Copy the **Project URL** (green **Connect** button, or **Data API**) and the **publishable key** (`sb_publishable_…`, under **Project Settings → API Keys**; older projects call it the **anon / public** key). Never use the secret / `service_role` key.
 4. Put them where the app is built:
    - **Vercel** (the website): Project → Settings → Environment Variables → add `EXPO_PUBLIC_SUPABASE_URL` and `EXPO_PUBLIC_SUPABASE_ANON_KEY`, then redeploy.
@@ -131,7 +132,7 @@ The publishable (anon) key is safe to ship in the app; the access rules in `sche
 - **Export** (You tab → Your data): `training-tracker-DATE.json` (everything), and CSVs for activities, food and the body log. CSV cells that start with `=`, `+`, `-` or `@` are prefixed so a spreadsheet won't run them as formulas. Distances are in miles and durations in seconds.
 - **Import:** GPX and TCX activity files (Garmin, Strava, most watches). Files over about 20 MB are refused, duplicates of activities already logged are skipped, and FIT files aren't supported yet. The files are read by a small built-in scanner, not an XML library.
 - **Delete:** deleting an account runs `delete_my_account()` (`supabase/privacy.sql`), which removes the sign-in and, through the database's cascade rules, the stored data, friends profile and shared leaderboard stats. Without an account, "Erase everything on this device" resets the app.
-- **What leaves the device:** the account copy (if signed in), the summaries you choose to share with friends (cardio, lifting, food; if on), map tiles from OpenStreetMap, Open Food Facts searches, and exercise pictures from GitHub. There's no ads or analytics code. Keep the "Where your data lives" text in `src/ui/data/DataSection.tsx` in step with this list when any of it changes.
+- **What leaves the device:** the account copy (if signed in), your Friends profile (name, username, city, picture, scrambled phone number) and the summaries you choose to share with friends (cardio, lifting, food; if on), map tiles from OpenStreetMap, Open Food Facts searches, and exercise pictures from GitHub. There's no ads or analytics code. Keep the "Where your data lives" text in `src/ui/data/DataSection.tsx` in step with this list when any of it changes.
 
 ## Name and logo
 
